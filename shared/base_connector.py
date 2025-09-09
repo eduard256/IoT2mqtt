@@ -13,7 +13,10 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
 
-from .mqtt_client import MQTTClient
+try:
+    from .mqtt_client import MQTTClient
+except ImportError:
+    from mqtt_client import MQTTClient
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +78,8 @@ class BaseConnector(ABC):
     
     def _load_secrets(self, config: Dict[str, Any]):
         """Load secrets from Docker secrets"""
-        instance_secret = f"/run/secrets/{self.instance_id}_creds"
+        # Use instance_name for secrets since instance_id is not yet loaded
+        instance_secret = f"/run/secrets/{self.instance_name}_creds"
         
         if os.path.exists(instance_secret):
             with open(instance_secret) as f:
@@ -231,10 +235,17 @@ class BaseConnector(ABC):
         # Check timestamp for ordering
         cmd_timestamp = payload.get('timestamp')
         if cmd_timestamp:
-            cmd_time = datetime.fromisoformat(cmd_timestamp)
-            if (datetime.now() - cmd_time).total_seconds() > 30:
-                logger.warning(f"Ignoring outdated command for {device_id}")
-                return
+            try:
+                # Parse timestamp and make it timezone-aware if needed
+                cmd_time = datetime.fromisoformat(cmd_timestamp.replace('Z', '+00:00'))
+                # Convert to naive datetime for comparison
+                if cmd_time.tzinfo:
+                    cmd_time = cmd_time.replace(tzinfo=None)
+                if (datetime.now() - cmd_time).total_seconds() > 30:
+                    logger.warning(f"Ignoring outdated command for {device_id}")
+                    return
+            except Exception as e:
+                logger.debug(f"Error parsing timestamp: {e}")
         
         # Find device configuration
         device_config = None
@@ -249,7 +260,15 @@ class BaseConnector(ABC):
         
         # Apply command
         try:
-            result = self.set_device_state(device_id, device_config, payload.get('values', {}))
+            # Extract command values - support both direct payload and 'values' wrapper
+            if 'values' in payload:
+                command_values = payload['values']
+            else:
+                # Remove metadata fields to get actual command values
+                command_values = {k: v for k, v in payload.items() 
+                                if k not in ['timestamp', 'id', 'timeout']}
+            
+            result = self.set_device_state(device_id, device_config, command_values)
             
             # Send response if requested
             if payload.get('id'):

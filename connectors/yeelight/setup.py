@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Template Connector - Setup wizard
-Interactive CLI for creating a new instance configuration
+Yeelight Connector - Setup wizard
+Interactive CLI for creating Yeelight instance configuration
 """
 
 import os
@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import socket
 import time
-import subprocess
 
 from rich.console import Console
 from rich.panel import Panel
@@ -23,16 +22,24 @@ from rich.columns import Columns
 from rich import box
 from rich.text import Text
 
+# Import yeelight for discovery
+try:
+    from yeelight import discover_bulbs, Bulb
+except ImportError:
+    print("ERROR: yeelight library not installed")
+    print("Please run: pip install yeelight")
+    sys.exit(1)
+
 console = Console()
 
-class ConnectorSetup:
-    """Interactive setup wizard for Template Connector"""
+class YeelightSetup:
+    """Interactive setup wizard for Yeelight Connector"""
     
     def __init__(self):
         self.config = {
             "instance_id": "",
             "instance_type": "device",  # device, account, service
-            "connector_type": "template",
+            "connector_type": "yeelight",
             "friendly_name": "",
             "connection": {},
             "devices": [],
@@ -61,23 +68,26 @@ class ConnectorSetup:
         """Show welcome screen"""
         console.clear()
         
-        # Template-specific ASCII art or logo
+        # Yeelight-specific ASCII art
         logo = """
-        ╔╦╗╔═╗╔╦╗╔═╗╦  ╔═╗╔╦╗╔═╗
-         ║ ║╣ ║║║╠═╝║  ╠═╣ ║ ║╣ 
-         ╩ ╚═╝╩ ╩╩  ╩═╝╩ ╩ ╩ ╚═╝
+        ██╗   ██╗███████╗███████╗██╗     ██╗ ██████╗ ██╗  ██╗████████╗
+        ╚██╗ ██╔╝██╔════╝██╔════╝██║     ██║██╔════╝ ██║  ██║╚══██╔══╝
+         ╚████╔╝ █████╗  █████╗  ██║     ██║██║  ███╗███████║   ██║   
+          ╚██╔╝  ██╔══╝  ██╔══╝  ██║     ██║██║   ██║██╔══██║   ██║   
+           ██║   ███████╗███████╗███████╗██║╚██████╔╝██║  ██║   ██║   
+           ╚═╝   ╚══════╝╚══════╝╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   
         """
         
         console.print(Panel.fit(
             f"[bold cyan]{logo}[/bold cyan]\n\n"
-            "[bold]Template Connector Setup Wizard[/bold]\n"
-            "[dim]This wizard will help you configure a new instance[/dim]",
+            "[bold]Yeelight Smart Bulb Connector Setup[/bold]\n"
+            "[dim]Configure your Yeelight devices for IoT2MQTT[/dim]",
             border_style="cyan",
             box=box.DOUBLE
         ))
         
-        console.print("\n[yellow]This is a template connector.[/yellow]")
-        console.print("You should customize this setup script for your specific device/service.\n")
+        console.print("\n[yellow]This wizard will help you discover and configure Yeelight bulbs.[/yellow]")
+        console.print("Make sure your bulbs are powered on and connected to the same network.\n")
     
     def configure_instance(self):
         """Configure basic instance settings"""
@@ -116,148 +126,114 @@ class ConnectorSetup:
             default=instance_name.replace('_', ' ').title()
         )
         
-        # Instance type
-        console.print("\n[bold]Instance Type[/bold]")
-        console.print("[dim]What type of connection is this?[/dim]")
-        console.print("  [1] Individual devices (local network)")
-        console.print("  [2] Cloud account (multiple devices)")
-        console.print("  [3] Service integration (API)")
-        
-        choice = IntPrompt.ask("  Your choice", choices=["1", "2", "3"], default=1)
-        self.config["instance_type"] = ["device", "account", "service"][choice - 1]
+        # For Yeelight, always use local device type
+        self.config["instance_type"] = "device"
     
     def configure_connection(self):
-        """Configure connection settings"""
+        """Configure Yeelight connection settings"""
         console.print("\n")
         console.print(Panel.fit(
             "[bold cyan]Step 2: Connection Settings[/bold cyan]",
             border_style="cyan"
         ))
         
-        # === CUSTOMIZE THIS SECTION FOR YOUR CONNECTOR ===
+        console.print("\n[bold]Yeelight Connection Settings[/bold]")
         
-        # Example for local device connection
-        if self.config["instance_type"] == "device":
-            console.print("\n[bold]Device Connection[/bold]")
-            
-            # IP Address
-            self.config["connection"]["host"] = Prompt.ask(
-                "  Device IP address",
-                default="192.168.1.100"
-            )
-            
-            # Port
-            self.config["connection"]["port"] = IntPrompt.ask(
-                "  Device port",
-                default=80
-            )
-            
-            # Authentication
-            if Confirm.ask("  Does the device require authentication?", default=False):
-                self.config["connection"]["username"] = Prompt.ask("    Username")
-                self.config["connection"]["password"] = getpass.getpass("    Password: ")
+        # Discovery settings
+        self.config["discovery_enabled"] = Confirm.ask(
+            "  Enable automatic device discovery?",
+            default=True
+        )
         
-        # Example for cloud account
-        elif self.config["instance_type"] == "account":
-            console.print("\n[bold]Account Settings[/bold]")
-            
-            # Server/Region
-            console.print("\n[bold]Server Region[/bold]")
-            console.print("[dim]Select your account region[/dim]")
-            servers = ["us", "eu", "cn", "au"]
-            for i, server in enumerate(servers, 1):
-                console.print(f"  [{i}] {server.upper()}")
-            
-            choice = IntPrompt.ask("  Your choice", default=1, choices=list(map(str, range(1, len(servers)+1))))
-            self.config["connection"]["server"] = servers[choice - 1]
-            
-            # Credentials
-            console.print("\n[bold]Account Credentials[/bold]")
-            self.config["connection"]["email"] = Prompt.ask("  Email/Username")
-            self.config["connection"]["password"] = getpass.getpass("  Password: ")
-            
-            # 2FA
-            if Confirm.ask("  Does your account have 2FA enabled?", default=False):
-                self.config["connection"]["requires_2fa"] = True
-                console.print("[yellow]  Note: You'll need to provide 2FA code when the connector starts[/yellow]")
+        if self.config["discovery_enabled"]:
+            while True:
+                interval = IntPrompt.ask(
+                    "  Discovery interval (seconds)",
+                    default=300
+                )
+                if 60 <= interval <= 3600:
+                    self.config["discovery_interval"] = interval
+                    break
+                else:
+                    console.print("[red]Please enter a value between 60 and 3600[/red]")
         
-        # Example for API service
-        elif self.config["instance_type"] == "service":
-            console.print("\n[bold]API Configuration[/bold]")
-            
-            # API Endpoint
-            self.config["connection"]["api_url"] = Prompt.ask(
-                "  API endpoint URL",
-                default="https://api.example.com/v1"
+        # Effect settings
+        console.print("\n[bold]Effect Settings[/bold]")
+        console.print("[dim]Default transition settings for all devices[/dim]")
+        
+        effect_types = ["smooth", "sudden"]
+        console.print("  Transition effect:")
+        for i, effect in enumerate(effect_types, 1):
+            console.print(f"    [{i}] {effect}")
+        
+        choice = IntPrompt.ask("  Your choice", default=1)
+        if choice not in [1, 2]:
+            console.print("[red]Please enter 1 or 2[/red]")
+            choice = 1
+        self.config["effect_type"] = effect_types[choice - 1]
+        
+        while True:
+            duration = IntPrompt.ask(
+                "  Transition duration (ms)",
+                default=300
             )
-            
-            # API Key
-            self.config["connection"]["api_key"] = getpass.getpass("  API Key: ")
-            
-            # Additional headers
-            if Confirm.ask("  Add custom headers?", default=False):
-                headers = {}
-                while True:
-                    header_name = Prompt.ask("    Header name (empty to finish)")
-                    if not header_name:
-                        break
-                    header_value = Prompt.ask(f"    {header_name} value")
-                    headers[header_name] = header_value
-                
-                self.config["connection"]["headers"] = headers
+            if 30 <= duration <= 10000:
+                self.config["duration"] = duration
+                break
+            else:
+                console.print("[red]Please enter a value between 30 and 10000[/red]")
     
     def discover_devices(self):
-        """Discover and configure devices"""
+        """Discover and configure Yeelight devices"""
         console.print("\n")
         console.print(Panel.fit(
             "[bold cyan]Step 3: Device Discovery[/bold cyan]",
             border_style="cyan"
         ))
         
-        # === CUSTOMIZE THIS SECTION FOR YOUR CONNECTOR ===
+        discovered = []
         
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console
-        ) as progress:
-            task = progress.add_task("[yellow]Searching for devices...[/yellow]", total=None)
-            
-            # Simulate device discovery
-            import time
-            time.sleep(2)  # Replace with actual discovery
-            
-            # Example discovered devices
-            discovered = [
-                {
-                    "id": "device_1",
-                    "name": "Living Room Light",
-                    "model": "Generic Smart Bulb",
-                    "ip": "192.168.1.101",
-                    "capabilities": {
-                        "power": {"settable": True},
-                        "brightness": {"settable": True, "min": 0, "max": 100}
-                    }
-                },
-                {
-                    "id": "device_2",
-                    "name": "Temperature Sensor",
-                    "model": "Generic Sensor",
-                    "ip": "192.168.1.102",
-                    "capabilities": {
-                        "temperature": {"settable": False},
-                        "humidity": {"settable": False}
-                    }
-                }
-            ]
-            
-            progress.update(task, completed=True)
+        if Confirm.ask("\nSearch for Yeelight devices on network?", default=True):
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console
+            ) as progress:
+                task = progress.add_task("[yellow]Searching for Yeelight devices...[/yellow]", total=None)
+                
+                try:
+                    # Actual Yeelight discovery
+                    bulbs = discover_bulbs(timeout=10)
+                    
+                    for bulb_info in bulbs:
+                        ip = bulb_info['ip']
+                        capabilities = bulb_info.get('capabilities', {})
+                        
+                        device = {
+                            "id": capabilities.get('id', ip.replace('.', '_')),
+                            "name": capabilities.get('name', ''),
+                            "model": capabilities.get('model', 'unknown'),
+                            "ip": ip,
+                            "port": bulb_info.get('port', 55443),
+                            "fw_ver": capabilities.get('fw_ver', ''),
+                            "support": capabilities.get('support', []),
+                            "capabilities": self._parse_yeelight_capabilities(capabilities)
+                        }
+                        discovered.append(device)
+                    
+                except Exception as e:
+                    console.print(f"[red]Discovery error: {e}[/red]")
+                
+                progress.update(task, completed=True)
         
         if not discovered:
             console.print("[yellow]No devices discovered.[/yellow]")
             
             if Confirm.ask("Would you like to add devices manually?", default=True):
                 discovered = self.manual_device_config()
+                selected_devices = discovered  # Set selected_devices for manual config
+            else:
+                selected_devices = []  # No devices if user doesn't want to add manually
         else:
             console.print(f"\n[green]Found {len(discovered)} device(s)![/green]\n")
             
@@ -336,30 +312,48 @@ class ConnectorSetup:
         console.print(f"\n[green]Added {len(self.config['devices'])} device(s) to configuration[/green]")
     
     def manual_device_config(self) -> List[Dict[str, Any]]:
-        """Manual device configuration"""
+        """Manual Yeelight device configuration"""
         devices = []
         
         while True:
-            console.print("\n[bold]Add Device Manually[/bold]")
+            console.print("\n[bold]Add Yeelight Device Manually[/bold]")
+            
+            ip = Prompt.ask("  Device IP address")
+            
+            # Test connection
+            console.print(f"Testing connection to {ip}...")
+            test_success = False
+            try:
+                bulb = Bulb(ip)
+                props = bulb.get_properties()
+                if props:
+                    test_success = True
+                    console.print("[green]✓ Connection successful![/green]")
+            except:
+                console.print("[red]✗ Could not connect to device[/red]")
+            
+            if not test_success and not Confirm.ask("  Add anyway?", default=False):
+                continue
             
             device = {
-                "id": Prompt.ask("  Device ID"),
+                "id": Prompt.ask("  Device ID", default=ip.replace('.', '_')),
                 "name": Prompt.ask("  Device name"),
-                "model": Prompt.ask("  Device model", default="Generic Device"),
-                "ip": Prompt.ask("  Device IP (optional)", default="")
+                "model": Prompt.ask("  Device model", default="color"),
+                "ip": ip,
+                "port": IntPrompt.ask("  Device port", default=55443),
+                "capabilities": {
+                    "power": {"settable": True},
+                    "brightness": {"settable": True, "min": 1, "max": 100},
+                    "color_temp": {"settable": True, "min": 1700, "max": 6500}
+                }
             }
             
-            # Basic capabilities
-            device["capabilities"] = {}
+            # Ask about additional capabilities
+            if Confirm.ask("  Supports RGB color?", default=True):
+                device["capabilities"]["rgb"] = {"settable": True}
             
-            if Confirm.ask("  Can control power?", default=True):
-                device["capabilities"]["power"] = {"settable": True}
-            
-            if Confirm.ask("  Has temperature sensor?", default=False):
-                device["capabilities"]["temperature"] = {"settable": False}
-            
-            if Confirm.ask("  Has humidity sensor?", default=False):
-                device["capabilities"]["humidity"] = {"settable": False}
+            if Confirm.ask("  Has background light (ceiling)?", default=False):
+                device["capabilities"]["background"] = {"settable": True}
             
             devices.append(device)
             
@@ -367,6 +361,31 @@ class ConnectorSetup:
                 break
         
         return devices
+    
+    def _parse_yeelight_capabilities(self, caps: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse Yeelight capabilities"""
+        capabilities = {
+            "power": {"settable": True}
+        }
+        
+        support = caps.get('support', [])
+        
+        if 'set_bright' in support:
+            capabilities["brightness"] = {"settable": True, "min": 1, "max": 100}
+        
+        if 'set_ct_abx' in support:
+            capabilities["color_temp"] = {"settable": True, "min": 1700, "max": 6500}
+        
+        if 'set_rgb' in support:
+            capabilities["rgb"] = {"settable": True}
+        
+        if 'set_hsv' in support:
+            capabilities["hsv"] = {"settable": True}
+        
+        if 'bg_set_power' in support:
+            capabilities["background"] = {"settable": True}
+        
+        return capabilities
     
     def configure_groups(self):
         """Configure device groups"""
@@ -441,7 +460,10 @@ class ConnectorSetup:
         console.print("  [1] Individual (each device separately)")
         console.print("  [2] Batch (all devices together)")
         
-        choice = IntPrompt.ask("  Your choice", choices=["1", "2"], default=1)
+        choice = IntPrompt.ask("  Your choice", default=1)
+        if choice not in [1, 2]:
+            console.print("[red]Please enter 1 or 2[/red]")
+            choice = 1
         self.config["mqtt"]["telemetry_mode"] = ["individual", "batch"][choice - 1]
         
         # Home Assistant Discovery
@@ -516,9 +538,9 @@ class ConnectorSetup:
     def update_docker_compose(self):
         """Update docker-compose.yml with new instance"""
         import yaml
+        import subprocess
         
         compose_file = Path(__file__).parent.parent.parent / "docker-compose.yml"
-        connector_name = Path(__file__).parent.name
         
         # Read existing or create new docker-compose.yml
         if compose_file.exists():
@@ -534,14 +556,14 @@ class ConnectorSetup:
             compose_data["networks"]["iot2mqtt"] = {"driver": "bridge"}
         
         # Add service for this instance
-        service_name = f"{connector_name}_{self.config['instance_id']}"
+        service_name = f"yeelight_{self.config['instance_id']}"
         compose_data["services"][service_name] = {
-            "build": f"./connectors/{connector_name}",
+            "build": "./connectors/yeelight",
             "container_name": f"iot2mqtt_{service_name}",
             "restart": "unless-stopped",
             "volumes": [
                 "./shared:/app/shared:ro",
-                f"./connectors/{connector_name}/instances:/app/instances:ro"
+                f"./connectors/yeelight/instances:/app/instances:ro"
             ],
             "environment": [
                 f"INSTANCE_NAME={self.config['instance_id']}",
@@ -701,7 +723,7 @@ CMD ["python", "-u", "main.py"]
 
 def main():
     """Main entry point"""
-    setup = ConnectorSetup()
+    setup = YeelightSetup()
     setup.run()
 
 if __name__ == "__main__":

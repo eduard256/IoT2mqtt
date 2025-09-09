@@ -116,7 +116,15 @@ class MQTTSetup:
             self.config["MQTT_USERNAME"] = Prompt.ask("    Username")
             # For password, we should use a more secure method in production
             import getpass
-            self.config["MQTT_PASSWORD"] = getpass.getpass("    Password: ")
+            while True:
+                password1 = getpass.getpass("    Password: ")
+                password2 = getpass.getpass("    Confirm password: ")
+                if password1 == password2:
+                    self.config["MQTT_PASSWORD"] = password1
+                    console.print("[green]    ✓ Passwords match[/green]")
+                    break
+                else:
+                    console.print("[red]    ✗ Passwords do not match. Please try again.[/red]")
         else:
             self.config["MQTT_USERNAME"] = ""
             self.config["MQTT_PASSWORD"] = ""

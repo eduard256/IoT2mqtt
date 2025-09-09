@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 import json
+import termios
+import tty
 
 from rich.console import Console
 from rich.table import Table
@@ -405,6 +407,22 @@ class IoT2MQTTLauncher:
         
         input("\nPress Enter to continue...")
     
+    def get_single_keypress(self):
+        """Get a single keypress without requiring Enter"""
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(sys.stdin.fileno())
+            key = sys.stdin.read(1)
+            
+            # Check for special keys (arrow keys send escape sequences)
+            if key == '\x1b':  # ESC sequence
+                key += sys.stdin.read(2)
+                
+            return key
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    
     def run(self):
         """Main run loop"""
         # Check initial setup
@@ -418,12 +436,13 @@ class IoT2MQTTLauncher:
             self.scan_connectors()
             self.display_main_menu()
             
-            # Get user input
-            key = console.input()
+            # Get user input - single keypress without Enter
+            key = self.get_single_keypress()
             
             if key.lower() == 'q':
-                if Confirm.ask("\n[yellow]Are you sure you want to quit?[/yellow]"):
-                    console.clear()
+                # For quit, we need to restore terminal first
+                console.clear()
+                if Confirm.ask("[yellow]Are you sure you want to quit?[/yellow]"):
                     console.print("[bold green]Thank you for using IoT2MQTT![/bold green]")
                     break
             elif key.lower() == 's':
@@ -432,12 +451,12 @@ class IoT2MQTTLauncher:
                 self.show_logs()
             elif key.lower() == 'd':
                 self.show_devices()
-            elif key == '\x1b[A' or key == 'k':  # Up arrow or k
+            elif key == '\x1b[A' or key.lower() == 'k':  # Up arrow or k
                 self.selected_index = max(0, self.selected_index - 1)
-            elif key == '\x1b[B' or key == 'j':  # Down arrow or j
+            elif key == '\x1b[B' or key.lower() == 'j':  # Down arrow or j
                 max_index = len(self.connectors)
                 self.selected_index = min(max_index, self.selected_index + 1)
-            elif key == '\r' or key == '\n':  # Enter
+            elif key == '\r' or key == '\n' or key == ' ':  # Enter or Space
                 if self.selected_index < len(self.connectors):
                     self.handle_connector_selection(self.connectors[self.selected_index])
                 else:

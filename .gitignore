@@ -34,12 +34,23 @@ env/
 *~
 .DS_Store
 
-# Project specific
+# Project specific - ВАЖНО: НЕ КОММИТИТЬ!
 .env
+.env.*
 secrets/
 *.secret
-connectors/*/instances/*.json
+
+# ВСЕ конфигурации инстансов/устройств - НИКОГДА не коммитить!
+connectors/*/instances/
+instances/
+**/*.json
+!package.json
+!tsconfig.json
+!composer.json
+
+# Docker compose с настройками
 docker-compose.yml
+docker-compose.*.yml
 *.log
 *.pid
 

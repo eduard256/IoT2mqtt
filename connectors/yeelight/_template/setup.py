@@ -11,8 +11,6 @@ import getpass
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import socket
-import time
-import subprocess
 
 from rich.console import Console
 from rich.panel import Panel
@@ -515,153 +513,13 @@ class ConnectorSetup:
     
     def update_docker_compose(self):
         """Update docker-compose.yml with new instance"""
-        import yaml
-        
         compose_file = Path(__file__).parent.parent.parent / "docker-compose.yml"
-        connector_name = Path(__file__).parent.name
         
-        # Read existing or create new docker-compose.yml
-        if compose_file.exists():
-            with open(compose_file) as f:
-                compose_data = yaml.safe_load(f) or {}
-        else:
-            compose_data = {"version": "3.8", "services": {}, "networks": {}}
-        
-        # Ensure networks section exists
-        if "networks" not in compose_data:
-            compose_data["networks"] = {}
-        if "iot2mqtt" not in compose_data["networks"]:
-            compose_data["networks"]["iot2mqtt"] = {"driver": "bridge"}
-        
-        # Add service for this instance
-        service_name = f"{connector_name}_{self.config['instance_id']}"
-        compose_data["services"][service_name] = {
-            "build": f"./connectors/{connector_name}",
-            "container_name": f"iot2mqtt_{service_name}",
-            "restart": "unless-stopped",
-            "volumes": [
-                "./shared:/app/shared:ro",
-                f"./connectors/{connector_name}/instances:/app/instances:ro"
-            ],
-            "environment": [
-                f"INSTANCE_NAME={self.config['instance_id']}",
-                "MODE=production",
-                "PYTHONUNBUFFERED=1"
-            ],
-            "env_file": [
-                ".env"
-            ],
-            "networks": [
-                "iot2mqtt"
-            ],
-            "depends_on": []
-        }
-        
-        # Save docker-compose.yml
-        with open(compose_file, 'w') as f:
-            yaml.dump(compose_data, f, default_flow_style=False, sort_keys=False)
-        
-        console.print(f"[green]✓ Updated docker-compose.yml[/green]")
-        
-        # Create Dockerfile if not exists
-        self.create_dockerfile()
-        
-        # Build and start container
-        if Confirm.ask("\n[bold]Start the container now?[/bold]", default=True):
-            console.print("\n[yellow]Building Docker image...[/yellow]")
-            result = subprocess.run(
-                ["docker-compose", "build", service_name],
-                cwd=compose_file.parent,
-                capture_output=True,
-                text=True
-            )
-            
-            if result.returncode == 0:
-                console.print("[green]✓ Docker image built successfully[/green]")
-                
-                console.print("\n[yellow]Starting container...[/yellow]")
-                result = subprocess.run(
-                    ["docker-compose", "up", "-d", service_name],
-                    cwd=compose_file.parent,
-                    capture_output=True,
-                    text=True
-                )
-                
-                if result.returncode == 0:
-                    console.print(f"[green]✓ Container {service_name} started successfully[/green]")
-                    
-                    # Wait a moment for container to start
-                    time.sleep(3)
-                    
-                    # Show container logs
-                    console.print("\n[bold]Container Logs:[/bold]")
-                    console.print("[dim]" + "="*60 + "[/dim]")
-                    
-                    log_result = subprocess.run(
-                        ["docker-compose", "logs", "--tail=100", service_name],
-                        cwd=compose_file.parent,
-                        capture_output=True,
-                        text=True
-                    )
-                    
-                    # Display all logs
-                    if log_result.stdout:
-                        # Color code the logs
-                        for line in log_result.stdout.split('\n'):
-                            if line:
-                                if 'error' in line.lower() or 'exception' in line.lower():
-                                    console.print(f"[red]{line}[/red]")
-                                elif 'warning' in line.lower() or 'warn' in line.lower():
-                                    console.print(f"[yellow]{line}[/yellow]")
-                                elif 'connected' in line.lower() or 'success' in line.lower() or '✓' in line:
-                                    console.print(f"[green]{line}[/green]")
-                                elif 'mqtt' in line.lower():
-                                    console.print(f"[cyan]{line}[/cyan]")
-                                else:
-                                    console.print(f"[dim]{line}[/dim]")
-                    
-                    console.print("[dim]" + "="*60 + "[/dim]")
-                    
-                    # Check for errors
-                    if "error" in log_result.stdout.lower() or "exception" in log_result.stdout.lower():
-                        console.print("\n[yellow]⚠ Warnings or errors detected in logs above[/yellow]")
-                        console.print("[dim]Check the logs carefully for any issues[/dim]")
-                    else:
-                        console.print("\n[green]✓ Container is running successfully![/green]")
-                    
-                    console.print(f"\n[dim]Monitor real-time logs with: docker-compose logs -f {service_name}[/dim]")
-                else:
-                    console.print(f"[red]Failed to start container: {result.stderr}[/red]")
-            else:
-                console.print(f"[red]Failed to build image: {result.stderr}[/red]")
-    
-    def create_dockerfile(self):
-        """Create Dockerfile if not exists"""
-        dockerfile = Path(__file__).parent / "Dockerfile"
-        
-        if not dockerfile.exists():
-            dockerfile_content = """FROM python:3.11-slim
-
-WORKDIR /app
-
-# Install requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY *.py ./
-
-# Environment variables
-ENV MODE=production
-ENV PYTHONUNBUFFERED=1
-
-# Run the connector
-CMD ["python", "-u", "main.py"]
-"""
-            with open(dockerfile, 'w') as f:
-                f.write(dockerfile_content)
-            
-            console.print("[green]✓ Created Dockerfile[/green]")
+        # This is a simplified example
+        # In production, you'd properly parse and update the YAML
+        console.print(f"[yellow]Note: Remember to update docker-compose.yml to include this instance[/yellow]")
+        console.print(f"\nTo start this instance, run:")
+        console.print(f"[bold cyan]docker-compose up -d {self.config['instance_id']}[/bold cyan]")
     
     def run(self):
         """Run the setup wizard"""
