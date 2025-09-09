@@ -1,0 +1,13 @@
+# Main requirements for IoT2mqtt launcher and setup
+
+# UI/TUI
+rich==13.7.0
+textual==0.47.1
+
+# Configuration
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Utilities
+click==8.1.7
+validators==0.22.0
