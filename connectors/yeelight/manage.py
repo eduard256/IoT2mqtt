@@ -16,6 +16,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt, Confirm, IntPrompt
+from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 from rich import box
 from rich.text import Text
 from rich.columns import Columns
@@ -106,19 +108,25 @@ class YeelightManager:
         if not self.instances:
             return None
         
-        instance_list = list(self.instances.keys())
+        choices = []
+        for instance_id, config in self.instances.items():
+            status = self.get_instance_status(instance_id)
+            # Remove color codes for inquirer display
+            status_text = status.replace("[green]", "").replace("[/green]", "")
+            status_text = status_text.replace("[yellow]", "").replace("[/yellow]", "")
+            status_text = status_text.replace("[dim]", "").replace("[/dim]", "")
+            
+            name = f"{config.get('friendly_name', instance_id)} ({instance_id}) - {status_text}"
+            choices.append(Choice(value=instance_id, name=name))
+        
+        choices.append(Choice(value=None, name="← Back to main menu"))
         
         console.print("\n[bold]Select instance to manage:[/bold]")
-        choice = IntPrompt.ask(
-            "Instance number (0 to cancel)",
-            min_value=0,
-            max_value=len(instance_list)
-        )
-        
-        if choice == 0:
-            return None
-        
-        return instance_list[choice - 1]
+        return inquirer.select(
+            message="Choose an instance:",
+            choices=choices,
+            default=None
+        ).execute()
     
     def show_instance_menu(self):
         """Show management menu for selected instance"""
@@ -141,19 +149,26 @@ class YeelightManager:
         console.print(info_cols)
         
         # Menu options
-        console.print("\n[bold]Available Actions:[/bold]\n")
-        console.print("  [1] View configuration")
-        console.print("  [2] Edit configuration")
-        console.print("  [3] Sync devices (refresh from source)")
-        console.print("  [4] Add device")
-        console.print("  [5] Remove device")
-        console.print("  [6] Manage groups")
-        console.print("  [7] View logs")
-        console.print("  [8] Restart container")
-        console.print("  [9] Delete instance")
-        console.print("  [0] Back to instance list")
+        console.print("\n[bold]Available Actions:[/bold]")
         
-        return Prompt.ask("\nYour choice", choices=list(map(str, range(10))))
+        choices = [
+            Choice("1", "View configuration"),
+            Choice("2", "Edit configuration"),
+            Choice("3", "Sync devices (refresh from source)"),
+            Choice("4", "Add device"),
+            Choice("5", "Remove device"),
+            Choice("6", "Manage groups"),
+            Choice("7", "View logs"),
+            Choice("8", "Restart container"),
+            Choice("9", "Delete instance"),
+            Choice("0", "← Back to instance list")
+        ]
+        
+        return inquirer.select(
+            message="Choose an action:",
+            choices=choices,
+            default="0"
+        ).execute()
     
     def view_configuration(self):
         """View instance configuration"""
@@ -454,20 +469,25 @@ class YeelightManager:
         
         # List devices
         console.print("\n[bold]Select device to remove:[/bold]")
-        for i, device in enumerate(config["devices"], 1):
-            console.print(f"  [{i}] {device['friendly_name']} ({device['device_id']})")
-        console.print("  [0] Cancel")
         
-        choice = IntPrompt.ask(
-            "\nYour choice",
-            min_value=0,
-            max_value=len(config["devices"])
-        )
+        choices = []
+        for i, device in enumerate(config["devices"]):
+            choices.append(Choice(
+                value=i,
+                name=f"{device['friendly_name']} ({device['device_id']})"
+            ))
+        choices.append(Choice(value=-1, name="← Cancel"))
         
-        if choice == 0:
+        choice = inquirer.select(
+            message="Choose device to remove:",
+            choices=choices,
+            default=-1
+        ).execute()
+        
+        if choice == -1:
             return
         
-        removed = config["devices"].pop(choice - 1)
+        removed = config["devices"].pop(choice)
         
         # Also remove from groups
         for group in config.get("groups", []):

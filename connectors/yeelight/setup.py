@@ -21,6 +21,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.columns import Columns
 from rich import box
 from rich.text import Text
+from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 
 # Import yeelight for discovery
 try:
@@ -162,15 +164,11 @@ class YeelightSetup:
         console.print("[dim]Default transition settings for all devices[/dim]")
         
         effect_types = ["smooth", "sudden"]
-        console.print("  Transition effect:")
-        for i, effect in enumerate(effect_types, 1):
-            console.print(f"    [{i}] {effect}")
-        
-        choice = IntPrompt.ask("  Your choice", default=1)
-        if choice not in [1, 2]:
-            console.print("[red]Please enter 1 or 2[/red]")
-            choice = 1
-        self.config["effect_type"] = effect_types[choice - 1]
+        self.config["effect_type"] = inquirer.select(
+            message="Transition effect:",
+            choices=effect_types,
+            default="smooth"
+        ).execute()
         
         while True:
             duration = IntPrompt.ask(
@@ -408,18 +406,21 @@ class YeelightSetup:
             group_name = Prompt.ask("  Group name", default=group_id.replace('_', ' ').title())
             
             # Show available devices
-            console.print("\n[bold]Available devices:[/bold]")
-            for i, device in enumerate(self.config["devices"], 1):
-                console.print(f"  [{i}] {device['friendly_name']} ({device['device_id']})")
+            console.print("\n[bold]Select devices for this group:[/bold]")
             
-            # Select devices for group
-            selection = Prompt.ask("  Select devices (comma-separated numbers)")
-            indices = [int(s.strip()) - 1 for s in selection.split(",")]
+            device_choices = [
+                Choice(
+                    value=device["device_id"],
+                    name=f"{device['friendly_name']} ({device['device_id']})",
+                    enabled=True
+                )
+                for device in self.config["devices"]
+            ]
             
-            group_devices = []
-            for i in indices:
-                if 0 <= i < len(self.config["devices"]):
-                    group_devices.append(self.config["devices"][i]["device_id"])
+            group_devices = inquirer.checkbox(
+                message="Select devices (use space to select, enter to confirm):",
+                choices=device_choices
+            ).execute()
             
             if group_devices:
                 self.config["groups"].append({
@@ -457,14 +458,17 @@ class YeelightSetup:
         # Telemetry mode
         console.print("\n[bold]Telemetry Mode[/bold]")
         console.print("[dim]How to send telemetry data[/dim]")
-        console.print("  [1] Individual (each device separately)")
-        console.print("  [2] Batch (all devices together)")
         
-        choice = IntPrompt.ask("  Your choice", default=1)
-        if choice not in [1, 2]:
-            console.print("[red]Please enter 1 or 2[/red]")
-            choice = 1
-        self.config["mqtt"]["telemetry_mode"] = ["individual", "batch"][choice - 1]
+        telemetry_modes = [
+            Choice("individual", "Individual (each device separately)"),
+            Choice("batch", "Batch (all devices together)")
+        ]
+        
+        self.config["mqtt"]["telemetry_mode"] = inquirer.select(
+            message="Select telemetry mode:",
+            choices=telemetry_modes,
+            default="individual"
+        ).execute()
         
         # Home Assistant Discovery
         console.print("\n[bold]Home Assistant Discovery[/bold]")
