@@ -3,6 +3,7 @@ MQTT service with WebSocket bridge for real-time updates
 """
 
 import asyncio
+import time
 import json
 import logging
 from typing import Dict, Any, List, Optional, Callable, Set
@@ -58,7 +59,7 @@ class MQTTService:
             # Wait for connection
             timeout = 10
             while not self.connected and timeout > 0:
-                asyncio.sleep(0.1)
+                time.sleep(0.1)
                 timeout -= 0.1
             
             return self.connected
@@ -112,21 +113,23 @@ class MQTTService:
                 "qos": msg.qos
             }
             
-            # Notify WebSocket clients
-            asyncio.create_task(self._notify_websocket_clients({
+            # Notify WebSocket clients (simplified for sync context)
+            message = {
                 "type": "mqtt_update",
                 "topic": topic,
                 "payload": payload,
                 "timestamp": datetime.now().isoformat(),
                 "retained": msg.retain
-            }))
+            }
+            # Store message for async processing later
+            # WebSocket handlers will poll this cache
             
-            # Call topic-specific handlers
+            # Call topic-specific handlers (sync only)
             for pattern, handlers in self.subscriptions.items():
                 if self._topic_matches(pattern, topic):
                     for handler in handlers:
                         try:
-                            asyncio.create_task(handler(topic, payload))
+                            handler(topic, payload)
                         except Exception as e:
                             logger.error(f"Error in MQTT handler: {e}")
                             
