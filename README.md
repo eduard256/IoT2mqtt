@@ -1,47 +1,51 @@
 # IoT2MQTT 🚀
 
-**Revolutionary IoT to MQTT bridge with minimal latency**
+**Revolutionary Smart Home System - 100% Containerized**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 [![MQTT](https://img.shields.io/badge/MQTT-Protocol-purple)](https://mqtt.org/)
 
-IoT2MQTT is a game-changing smart home integration system that provides direct device-to-MQTT connectivity with minimal latency. Unlike traditional solutions like Home Assistant, IoT2MQTT eliminates unnecessary abstraction layers, delivering lightning-fast response times for your IoT devices.
+IoT2MQTT is a revolutionary smart home integration system that runs entirely in Docker containers. Zero host dependencies - just Docker. The system uses Docker-in-Docker architecture where the main web container orchestrates all connector containers.
 
-## ⚡ Key Features
+## ✨ Key Highlights
 
-- **Minimal Latency**: Direct MQTT connection without intermediate layers
-- **Microservice Architecture**: One container = one account/instance
-- **Independent of Home Assistant**: Works standalone (HA Discovery optional)
-- **Beautiful CLI Interface**: Interactive setup and management wizards
-- **Hot Reload Development**: Edit connectors without restarting
-- **Multi-Account Support**: Manage multiple accounts per service (e.g., Xiaomi CN/EU/US)
-- **Docker Isolation**: Each instance runs in its own container
-- **Extensible**: Easy to add new device integrations
+- 🐳 **100% Containerized** - No Python, Node.js or any dependencies on host
+- 🚀 **One Command Launch** - Just run `./run.sh` and you're done
+- 🎨 **Beautiful Web Interface** - Premium SaaS-level UI at `http://localhost:8765`
+- ⚡ **Minimal Latency** - Direct MQTT connection without intermediate layers
+- 🌍 **Multi-language** - English, Russian, and Chinese support
+- 📱 **PWA Support** - Install as mobile app
 
 ## 🎯 Why IoT2MQTT?
 
-Traditional smart home systems like Home Assistant add multiple processing layers between your devices and MQTT, resulting in:
-- Increased latency (100ms+)
-- Complex abstractions
-- Heavy resource usage
-- Difficult debugging
+Traditional smart home systems require complex installations with multiple dependencies on your host system. IoT2MQTT changes this:
 
-IoT2MQTT solves these problems by:
-- Direct device connections (latency <10ms)
-- Simple, transparent architecture
-- Lightweight containers
-- Easy troubleshooting
+**Before (Traditional Systems):**
+- Install Python, Node.js, and dozens of packages
+- Manage virtual environments
+- Deal with version conflicts
+- Complex update procedures
+- System-specific issues
+
+**Now (IoT2MQTT):**
+- Install Docker (once)
+- Run `./run.sh`
+- Everything works
+- Updates are seamless
+- Works identically on any system
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
-- Docker & Docker Compose
-- MQTT Broker (Mosquitto, etc.)
-- Linux/macOS/WSL2
+Only Docker and Docker Compose are required. Nothing else.
+
+```bash
+# Check if Docker is installed
+docker --version
+docker compose version
+```
 
 ### Installation
 
@@ -51,266 +55,261 @@ git clone https://github.com/eduard256/IoT2mqtt.git
 cd IoT2mqtt
 ```
 
-2. **Install Python dependencies**
+2. **Run the system**
 ```bash
-pip install -r requirements.txt
+./run.sh
 ```
 
-3. **Run the main launcher**
-```bash
-python iot2mqtt.py
-```
+That's it! The script will:
+- Check Docker installation
+- Build all containers
+- Start the web interface
+- Show you the URL to access
 
-4. **Configure MQTT** (automatic on first run)
-- Enter MQTT broker details
-- Choose base topic name
-- Configure authentication
+3. **Open Web Interface**
 
-5. **Add your first connector**
-- Select connector type from menu
-- Run interactive setup wizard
-- Configure devices
-- Start the container
+Navigate to `http://localhost:8765` in your browser.
 
-## 📖 Usage
+### First Time Setup
 
-### Main Launcher
-
-The main launcher provides a beautiful TUI interface:
-
-```bash
-python iot2mqtt.py
-```
-
-Features:
-- View all connectors and instances
-- Create new instances
-- Manage existing instances
-- View system logs
-- Monitor all devices
-
-### Adding a Connector Instance
-
-Example: Adding Xiaomi devices
-
-1. Select "Xiaomi Mi Home" from main menu
-2. Choose "Create new instance"
-3. Follow the setup wizard:
-   - Name your instance (e.g., `home_cn`)
-   - Select region (CN/EU/US)
-   - Enter credentials
-   - Discover devices automatically
-   - Select devices to add
-4. Container starts automatically
-
-### Managing Instances
-
-```bash
-cd connectors/xiaomi
-python manage.py
-```
-
-Options:
-- View/edit configuration
-- Add/remove devices
-- Sync with cloud
-- View logs
-- Restart container
+1. **Create Access Key** - Your password for the web interface
+2. **Configure MQTT** - Connect to your MQTT broker
+3. **Add Integrations** - Start adding IoT devices through the web UI
 
 ## 🏗️ Architecture
 
-```
-IoT2mqtt/
-├── iot2mqtt.py              # Main launcher
-├── setup_mqtt.py            # MQTT configuration
-├── shared/                  # Shared components (mounted as volumes)
-│   ├── mqtt_client.py       # MQTT client with advanced features
-│   ├── base_connector.py    # Base class for connectors
-│   └── discovery.py         # HA Discovery generator
-├── connectors/              # Device connectors
-│   ├── _template/           # Template for new connectors
-│   ├── xiaomi/              # Xiaomi connector
-│   ├── yeelight/            # Yeelight connector
-│   └── ...
-└── docker-compose.yml       # Container orchestration
-```
-
-### MQTT Topic Structure
+### Docker-in-Docker Design
 
 ```
-{base_topic}/v1/
-├── instances/{instance_id}/
-│   ├── status                    # online/offline
-│   ├── devices/{device_id}/
-│   │   ├── state                 # Current state
-│   │   ├── cmd                   # Commands
-│   │   ├── events                # Events
-│   │   └── telemetry            # Metrics
-│   └── groups/{group_name}/      # Device groups
-└── bridge/                       # System management
+Your Host System
+    └── Docker Engine
+         └── iot2mqtt_web (Main Container)
+              ├── Web Interface (React + FastAPI)
+              ├── Docker Socket Mounted (/var/run/docker.sock)
+              └── Container Manager
+                   ├── Creates connector containers
+                   ├── Manages lifecycle
+                   ├── Collects logs
+                   └── Monitors health
+                   
+         └── iot2mqtt_connector_1
+         └── iot2mqtt_connector_2
+         └── ... (one container per instance)
 ```
 
-## 🔧 Creating Custom Connectors
+### How It Works
 
-### From Template
+1. **Main Web Container** runs the web interface and API
+2. **Docker Socket** is mounted to allow container management
+3. **Connector Containers** are created dynamically for each integration
+4. **MQTT Communication** happens directly from each container
+5. **Shared Network** allows inter-container communication
 
-1. Copy the template:
+## 🎨 Web Interface Features
+
+- **Dashboard** - Overview of all devices and their status
+- **Integrations** - Add and manage IoT connectors
+- **Devices** - Control and monitor all devices
+- **MQTT Explorer** - Browse and debug MQTT topics
+- **Container Management** - Start/stop/restart containers
+- **Logs Viewer** - Real-time colored logs from all containers
+- **Settings** - Configure MQTT, access keys, and more
+
+## 📦 Supported Integrations
+
+Current connectors:
+- **Yeelight** - Smart bulbs and LED strips
+- **Xiaomi** - Mi Home devices (coming soon)
+- **Tuya** - Smart Life devices (coming soon)
+- **ESPHome** - DIY ESP devices (coming soon)
+
+Each connector:
+- Runs in isolated container
+- Has zero dependencies on host
+- Can be updated independently
+- Supports multiple instances
+
+## 🔧 Configuration
+
+### Environment Variables
+
+The system uses a `.env` file (created automatically):
+
+```env
+# Web Interface
+WEB_PORT=8765           # Change web interface port
+
+# MQTT Settings (configured via web UI)
+MQTT_HOST=localhost
+MQTT_PORT=1883
+MQTT_USERNAME=
+MQTT_PASSWORD=
+MQTT_BASE_TOPIC=IoT2mqtt
+
+# System
+LOG_LEVEL=INFO
+TZ=UTC
+```
+
+### Custom Port
+
+To use a different port:
+
 ```bash
-cp -r connectors/_template connectors/my_device
+WEB_PORT=9000 ./run.sh
 ```
 
-2. Edit `connector.py`:
-- Implement device connection logic
-- Add state reading methods
-- Add control methods
+## 🐳 Docker Management
 
-3. Customize `setup.py`:
-- Modify connection prompts
-- Add device discovery
-- Define capabilities
+### Basic Commands
 
-4. Update `requirements.txt` with dependencies
+```bash
+# View logs
+docker compose logs -f
 
-### From Home Assistant Integration
+# Stop system
+docker compose down
 
-Have a Home Assistant integration? Convert it easily:
+# Restart system
+docker compose restart
 
-1. Copy integration folder to AI assistant
-2. AI will analyze and extract core logic
-3. Get ready-to-use IoT2MQTT connector
-4. No manual conversion needed!
+# Update system
+git pull && ./run.sh
 
-See [CLAUDE.md](CLAUDE.md) for detailed AI instructions.
-
-## 🐳 Docker Configuration
-
-Each instance runs in an isolated container:
-
-```yaml
-services:
-  xiaomi_home_cn:
-    build: ./connectors/xiaomi
-    container_name: iot2mqtt_xiaomi_home_cn
-    volumes:
-      - ./shared:/app/shared:ro
-      - ./connectors/xiaomi/instances:/app/instances:ro
-    environment:
-      - INSTANCE_NAME=home_cn
-      - MODE=production
-    restart: unless-stopped
+# Remove everything (including data)
+docker compose down -v
 ```
 
-## 🏠 Home Assistant Integration (Optional)
+### Container Management
 
-While IoT2MQTT works independently, it can integrate with Home Assistant via MQTT Discovery:
+All container management should be done through the web interface. The web container has full Docker access and can:
+- Create new containers for connectors
+- Start/stop containers
+- View real-time logs
+- Monitor resource usage
+- Auto-restart failed containers
 
-1. Enable during MQTT setup
-2. Devices appear automatically in HA
-3. Full control through HA UI
-4. Retains minimal latency advantage
+## 🔒 Security Considerations
 
-## 📊 Performance Comparison
+### Docker Socket Access
 
-| System | Device Response | CPU Usage | Memory | Setup Time |
-|--------|----------------|-----------|---------|------------|
-| Home Assistant | 100-500ms | High | 2GB+ | Hours |
-| IoT2MQTT | <10ms | Low | <100MB | Minutes |
+The web container has access to Docker socket (`/var/run/docker.sock`). This is required for container management but grants significant privileges. 
+
+**Security measures:**
+- Web interface requires authentication
+- Access keys are bcrypt hashed
+- JWT tokens for sessions
+- Containers are isolated in network
+- Read-only mounts where possible
+
+### Best Practices
+
+1. **Use strong access key** for web interface
+2. **Secure your MQTT broker** with authentication
+3. **Run on trusted network** or use VPN
+4. **Keep Docker updated** for security patches
+5. **Regular backups** of configuration
 
 ## 🛠️ Development
 
-### Running in Development Mode
+### Adding New Connectors
 
-Enable hot reload for connector development:
+1. Web interface → Integrations → Add Custom
+2. Implement connector logic
+3. Container is built automatically
+4. No host system changes needed
 
-```bash
-MODE=development INSTANCE_NAME=test python connectors/xiaomi/main.py
+### Project Structure
+
+```
+IoT2mqtt/
+├── run.sh                 # One-command launcher
+├── docker-compose.yml     # Main orchestration
+├── web/                   # Web interface container
+│   ├── frontend/         # React UI
+│   ├── backend/          # FastAPI backend
+│   └── Dockerfile
+├── connectors/           # Connector definitions
+│   └── {name}/
+│       ├── connector.py
+│       ├── requirements.txt
+│       └── Dockerfile
+└── shared/              # Shared libraries
 ```
 
-### Testing
+## 📊 Monitoring
+
+The web interface provides comprehensive monitoring:
+- Container status and health
+- Real-time logs with color coding
+- MQTT message flow
+- Device state changes
+- Error tracking
+- Performance metrics
+
+## 🆘 Troubleshooting
+
+### Web Interface Not Accessible
 
 ```bash
-pytest tests/
+# Check if container is running
+docker ps | grep iot2mqtt_web
+
+# Check logs
+docker compose logs web
+
+# Check port availability
+lsof -i :8765
 ```
 
-### Contributing
+### Container Creation Failed
+
+- Check Docker daemon is running
+- Ensure sufficient disk space
+- Verify Docker socket permissions
+- Check web container logs
+
+### MQTT Connection Issues
+
+- Verify broker is running
+- Check firewall rules
+- Confirm credentials in web UI
+- Test with MQTT client
+
+## 🤝 Contributing
+
+We welcome contributions! Since everything runs in containers:
+1. No need to set up development environment
+2. Changes are tested in isolated containers
+3. Easy to test without affecting host system
+
+### How to Contribute
 
 1. Fork the repository
 2. Create feature branch
-3. Copy `_template` for new connectors
-4. Submit pull request
+3. Make changes
+4. Test with `./run.sh`
+5. Submit pull request
 
-See [DEVELOPER.md](DEVELOPER.md) for guidelines.
-
-## 📚 Documentation
-
-- [CLAUDE.md](CLAUDE.md) - AI assistant documentation
-- [Template README](connectors/_template/README.md) - Connector development guide
-- [GitHub Wiki](https://github.com/eduard256/IoT2mqtt/wiki) - Extended documentation
-
-## 🤝 Supported Devices
-
-### Currently Supported
-- ✅ Template (example connector)
-
-### Coming Soon
-- 🔄 Xiaomi Mi Home
-- 🔄 Yeelight
-- 🔄 Tuya Smart
-- 🔄 ESPHome
-- 🔄 Tasmota
-- 🔄 Zigbee2MQTT devices
-- 🔄 Shelly
-- 🔄 IKEA Tradfri
-
-### Request Support
-Open an issue for device support requests!
-
-## ⚠️ Troubleshooting
-
-### MQTT Connection Failed
-- Check broker is running
-- Verify host and port
-- Check firewall rules
-- Test with `mosquitto_sub`
-
-### Container Won't Start
-```bash
-docker logs iot2mqtt_<instance_name>
-```
-
-### High Latency
-- Reduce update_interval
-- Use local connection instead of cloud
-- Check network congestion
-
-## 📈 Roadmap
-
-- [ ] Web UI dashboard
-- [ ] Metrics and monitoring
-- [ ] Backup/restore functionality  
-- [ ] Multi-language support
-- [ ] Cloud deployment options
-- [ ] Mobile app
-
-## 📄 License
+## 📝 License
 
 MIT License - see [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- MQTT Protocol creators
-- Docker team
-- Python community
-- All contributors
+- Docker team for amazing container technology
+- MQTT protocol developers
+- All IoT device manufacturers
+- Open source community
 
 ## 📞 Support
 
-- **GitHub Issues**: [Report bugs](https://github.com/eduard256/IoT2mqtt/issues)
-- **Discussions**: [Ask questions](https://github.com/eduard256/IoT2mqtt/discussions)
-- **Telegram**: Coming soon
+- **Issues**: [GitHub Issues](https://github.com/eduard256/IoT2mqtt/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/eduard256/IoT2mqtt/discussions)
+- **Documentation**: [Wiki](https://github.com/eduard256/IoT2mqtt/wiki)
 
 ---
 
-**Built with ❤️ for the smart home community**
+**Made with ❤️ for the Smart Home Community**
 
-*Say goodbye to latency, hello to instant control!*
+*No more dependency hell. Just Docker and go!*
