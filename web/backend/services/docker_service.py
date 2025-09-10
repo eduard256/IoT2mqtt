@@ -22,18 +22,24 @@ class DockerService:
         try:
             # Try to connect to Docker via unix socket
             self.client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-        except:
+            logger.info("Connected to Docker via unix socket")
+        except Exception as e1:
             try:
-                # Fallback to default
-                self.client = docker.from_env()
-            except Exception as e:
-                logger.error(f"Failed to connect to Docker: {e}")
+                # Fallback to default from_env
+                self.client = docker.DockerClient.from_env()
+                logger.info("Connected to Docker via environment")
+            except Exception as e2:
+                logger.error(f"Failed to connect to Docker: {e1}, {e2}")
                 self.client = None
         self.prefix = "iot2mqtt_"
         
     def list_containers(self, all: bool = True) -> List[Dict[str, Any]]:
         """List IoT2MQTT containers"""
         containers = []
+        
+        if not self.client:
+            logger.warning("Docker client not connected")
+            return containers
         
         try:
             for container in self.client.containers.list(all=all):
@@ -364,21 +370,25 @@ CMD ["python", "-u", "main.py"]
     
     def get_system_stats(self) -> Dict[str, Any]:
         """Get Docker system statistics"""
-        try:
-            stats = {
-                "containers": {
-                    "total": 0,
-                    "running": 0,
-                    "stopped": 0
-                },
-                "images": 0,
-                "volumes": 0
-            }
+        stats = {
+            "containers": {
+                "total": 0,
+                "running": 0,
+                "stopped": 0
+            },
+            "images": 0,
+            "volumes": 0
+        }
+        
+        if not self.client:
+            logger.warning("Docker client not connected")
+            return stats
             
+        try:
             # Count IoT2MQTT containers
             containers = self.list_containers()
             stats["containers"]["total"] = len(containers)
-            stats["containers"]["running"] = sum(1 for c in containers if c["state"] == "running")
+            stats["containers"]["running"] = sum(1 for c in containers if c.get("state") == "running")
             stats["containers"]["stopped"] = stats["containers"]["total"] - stats["containers"]["running"]
             
             # Count images

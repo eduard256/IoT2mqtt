@@ -12,6 +12,7 @@ from contextlib import contextmanager
 import shutil
 from datetime import datetime
 import logging
+from .secrets_manager import SecretsManager
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class ConfigService:
         self.env_file = self.base_path / ".env"
         self.connectors_path = self.base_path / "connectors"
         self.secrets_path = self.base_path / "secrets"
+        self.secrets_manager = SecretsManager(str(self.secrets_path))
         
     @contextmanager
     def locked_file(self, filepath: Path, mode: str = 'r+'):
@@ -317,3 +319,49 @@ class ConfigService:
         
         with self.locked_file(compose_file, 'w') as f:
             yaml.dump(compose_data, f, default_flow_style=False, sort_keys=False)
+    
+    def save_instance_with_secrets(self, connector_name: str, instance_id: str, 
+                                  config: Dict[str, Any]) -> Dict[str, Any]:
+        """Save instance configuration with separated secrets"""
+        # Extract sensitive fields
+        clean_config, sensitive_data = self.secrets_manager.extract_sensitive_fields(config)
+        
+        # Save clean config
+        self.save_instance_config(connector_name, instance_id, clean_config)
+        
+        # Save encrypted secrets if any
+        if sensitive_data:
+            self.secrets_manager.save_instance_secret(instance_id, sensitive_data)
+        
+        # Return Docker secret configuration
+        return self.secrets_manager.create_docker_secret(instance_id, sensitive_data) if sensitive_data else {}
+    
+    def load_instance_with_secrets(self, connector_name: str, instance_id: str) -> Optional[Dict[str, Any]]:
+        """Load instance configuration with injected secrets"""
+        # Load clean config
+        config = self.get_instance_config(connector_name, instance_id)
+        if not config:
+            return None
+        
+        # Load and inject secrets
+        secrets = self.secrets_manager.load_instance_secret(instance_id)
+        if secrets:
+            config = self.secrets_manager.inject_secrets(config, secrets)
+        
+        return config
+    
+    def get_connector_branding(self, connector_name: str) -> Dict[str, Any]:
+        """Get connector branding information"""
+        setup = self.get_connector_setup(connector_name)
+        
+        if setup and "branding" in setup:
+            return setup["branding"]
+        
+        # Default branding
+        connector_dir = self.connectors_path / connector_name
+        return {
+            "icon": f"/assets/brands/{connector_name}.svg" if (connector_dir / "icon.svg").exists() else "/assets/default-icon.svg",
+            "color": "#6366F1",  # Default indigo
+            "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            "category": "general"
+        }

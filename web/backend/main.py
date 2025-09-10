@@ -27,6 +27,7 @@ from services.config_service import ConfigService
 from services.docker_service import DockerService
 from services.mqtt_service import MQTTService, MQTTExplorer
 from api import auth, mqtt, connectors, instances, devices, docker
+from services.secrets_manager import SecretsManager
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -96,6 +97,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include API routers
+app.include_router(connectors.router)
+app.include_router(instances.router)
 
 # Static files will be mounted after API routes
 
