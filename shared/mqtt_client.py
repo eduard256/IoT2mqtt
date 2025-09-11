@@ -14,6 +14,16 @@ import paho.mqtt.client as mqtt
 from dataclasses import dataclass
 from queue import Queue, Empty
 
+# Try to load dotenv for .env file support
+try:
+    from dotenv import load_dotenv
+    # Load .env file if it exists
+    if os.path.exists('/app/.env'):
+        load_dotenv('/app/.env')
+except ImportError:
+    # dotenv not installed, will use environment variables only
+    pass
+
 logger = logging.getLogger(__name__)
 
 @dataclass

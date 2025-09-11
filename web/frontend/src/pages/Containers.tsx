@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { getAuthToken } from '@/utils/auth'
 import { 
   Play, Pause, RotateCw, Trash2, Terminal,
   Circle, Download,
@@ -88,133 +89,126 @@ export default function Containers() {
 
   const fetchContainers = async () => {
     try {
-      // Mock data for demonstration
-      const mockContainers: DockerContainer[] = [
-        {
-          id: 'abc123',
-          name: 'iot2mqtt_yeelight_home',
-          image: 'iot2mqtt/yeelight:latest',
-          status: 'running',
-          state: 'running',
-          created: new Date(Date.now() - 86400000).toISOString(),
-          ports: { '8080/tcp': null },
-          labels: { 'iot2mqtt.type': 'connector' },
-          connector_type: 'yeelight',
-          instance_id: 'home',
-          stats: {
-            cpu_percent: 2.5,
-            memory_usage: 45000000,
-            memory_limit: 512000000,
-            network_rx: 1024000,
-            network_tx: 512000
-          }
-        },
-        {
-          id: 'def456',
-          name: 'iot2mqtt_web',
-          image: 'iot2mqtt-web:latest',
-          status: 'running',
-          state: 'running',
-          created: new Date(Date.now() - 3600000).toISOString(),
-          ports: { '8765/tcp': [{ HostPort: '8765' }] },
-          labels: { 'iot2mqtt.type': 'web' },
-          stats: {
-            cpu_percent: 5.2,
-            memory_usage: 128000000,
-            memory_limit: 1024000000,
-            network_rx: 5120000,
-            network_tx: 2048000
-          }
-        },
-        {
-          id: 'ghi789',
-          name: 'iot2mqtt_xiaomi_cn',
-          image: 'iot2mqtt/xiaomi:latest',
-          status: 'exited',
-          state: 'exited',
-          created: new Date(Date.now() - 172800000).toISOString(),
-          ports: {},
-          labels: { 'iot2mqtt.type': 'connector' },
-          connector_type: 'xiaomi',
-          instance_id: 'cn'
+      const token = getAuthToken()
+      if (!token) {
+        throw new Error('No authentication token')
+      }
+
+      const response = await fetch('/api/docker/containers', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      ]
-      
-      setContainers(mockContainers)
-      setLoading(false)
-    } catch (error) {
-      console.error('Error fetching containers:', error)
-      toast({
-        title: t('Error'),
-        description: t('Failed to fetch containers'),
-        variant: 'destructive'
       })
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setContainers(data)
+    } catch (error) {
+      if (error instanceof Error && error.message !== 'No authentication token') {
+        toast({
+          title: t('Error'),
+          description: t('Failed to fetch containers'),
+          variant: 'destructive'
+        })
+      }
+    } finally {
       setLoading(false)
     }
   }
 
-  const connectToLogs = (_containerId: string) => {
-    // Simulate log streaming
-    const mockLogs: LogEntry[] = [
-      {
-        timestamp: new Date(Date.now() - 60000).toISOString(),
-        level: 'info',
-        content: 'Container started successfully'
-      },
-      {
-        timestamp: new Date(Date.now() - 50000).toISOString(),
-        level: 'success',
-        content: 'Connected to MQTT broker at localhost:1883'
-      },
-      {
-        timestamp: new Date(Date.now() - 40000).toISOString(),
-        level: 'info',
-        content: 'Discovering devices on network...'
-      },
-      {
-        timestamp: new Date(Date.now() - 30000).toISOString(),
-        level: 'success',
-        content: 'Found 3 Yeelight devices'
-      },
-      {
-        timestamp: new Date(Date.now() - 20000).toISOString(),
-        level: 'warning',
-        content: 'Device bedroom_light is offline'
-      },
-      {
-        timestamp: new Date(Date.now() - 10000).toISOString(),
-        level: 'info',
-        content: 'Publishing device states to MQTT'
-      },
-      {
-        timestamp: new Date().toISOString(),
-        level: 'debug',
-        content: 'Heartbeat: All systems operational'
-      }
-    ]
+  const connectToLogs = (containerId: string) => {
+    // Clear previous logs
+    setLogs([])
     
-    setLogs(mockLogs)
+    // Close existing WebSocket if any
+    if (wsRef.current) {
+      wsRef.current.close()
+    }
+
+    const token = getAuthToken()
+    if (!token) {
+      toast({
+        title: t('Error'),
+        description: t('No authentication token'),
+        variant: 'destructive'
+      })
+      return
+    }
+
+    // Create WebSocket connection for real-time logs
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    wsRef.current = new WebSocket(`${protocol}//${host}/ws/logs/${containerId}?token=${token}`)
+    
+    wsRef.current.onopen = () => {
+      console.log('WebSocket connected for container logs')
+    }
+    
+    wsRef.current.onmessage = (event) => {
+      try {
+        const log = JSON.parse(event.data)
+        setLogs(prev => [...prev, log])
+      } catch (error) {
+        console.error('Error parsing log:', error)
+      }
+    }
+    
+    wsRef.current.onerror = (error) => {
+      console.error('WebSocket error:', error)
+      toast({
+        title: t('Error'),
+        description: t('Failed to connect to log stream'),
+        variant: 'destructive'
+      })
+    }
+    
+    wsRef.current.onclose = () => {
+      console.log('WebSocket disconnected')
+    }
   }
 
   const handleContainerAction = async (container: DockerContainer, action: 'start' | 'stop' | 'restart') => {
     try {
-      // Simulate container action
+      const token = getAuthToken()
+      if (!token) {
+        throw new Error('No authentication token')
+      }
+
+      const response = await fetch(`/api/docker/containers/${container.id}/${action}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to ${action} container`)
+      }
+
       toast({
         title: t('Success'),
         description: `Container ${action}ed successfully`,
       })
       
-      // Update container state
-      setContainers(prev => prev.map(c => {
-        if (c.id === container.id) {
-          return {
-            ...c,
-            status: action === 'stop' ? 'exited' : 'running',
-            state: action === 'stop' ? 'exited' : 'running'
-          }
-        }
-        return c
-      }))
+      // Refresh container list
+      await fetchContainers()
     } catch (error) {
       toast({
         title: t('Error'),
@@ -228,7 +222,30 @@ export default function Containers() {
     if (!containerToDelete) return
     
     try {
-      // Simulate container deletion
+      const token = getAuthToken()
+      if (!token) {
+        throw new Error('No authentication token')
+      }
+
+      const response = await fetch(`/api/docker/containers/${containerToDelete.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to delete container')
+      }
+
+      // Remove from local state
       setContainers(prev => prev.filter(c => c.id !== containerToDelete.id))
       
       if (selectedContainer?.id === containerToDelete.id) {

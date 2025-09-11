@@ -151,12 +151,13 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
             "volumes": [
                 "./shared:/app/shared:ro",
                 f"./connectors/{request.connector_type}/instances:/app/instances:ro",
-                "./.env:/app/.env:ro"
+                "./.env:/app/.env:ro"  # Mount .env file for dynamic MQTT config
             ],
             "environment": [
                 f"INSTANCE_NAME={request.instance_id}",
                 "MODE=production",
-                "PYTHONUNBUFFERED=1"
+                "PYTHONUNBUFFERED=1",
+                "LOG_LEVEL=${LOG_LEVEL:-INFO}"  # Use LOG_LEVEL from .env with default
             ],
             "networks": ["iot2mqtt"],
             "labels": {

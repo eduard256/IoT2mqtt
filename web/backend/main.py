@@ -5,11 +5,11 @@ IoT2MQTT Web Interface - FastAPI Backend
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -25,8 +25,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from models.schemas import *
 from services.config_service import ConfigService
 from services.docker_service import DockerService
-from services.mqtt_service import MQTTService, MQTTExplorer
-from api import auth, mqtt, connectors, instances, devices, docker
+from services.mqtt_service import MQTTService
+from api import auth, mqtt, connectors, instances, devices, docker, discovery, integrations
 from services.secrets_manager import SecretsManager
 
 import logging
@@ -42,7 +42,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 config_service = ConfigService()
 docker_service = DockerService()
 mqtt_service = None
-mqtt_explorer = None
 
 # Socket.IO
 sio = socketio.AsyncServer(
@@ -62,15 +61,16 @@ security = HTTPBearer()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    global mqtt_service, mqtt_explorer
+    global mqtt_service
     
     # Initialize MQTT if configured
     mqtt_config = config_service.get_mqtt_config()
     if mqtt_config.get("host"):
         mqtt_service = MQTTService(mqtt_config)
         if mqtt_service.connect():
-            mqtt_explorer = MQTTExplorer(mqtt_service)
             logger.info("Connected to MQTT broker")
+            # Share mqtt_service with integrations module
+            integrations.mqtt_service = mqtt_service
         else:
             logger.warning("Failed to connect to MQTT broker")
     
@@ -101,6 +101,8 @@ app.add_middleware(
 # Include API routers
 app.include_router(connectors.router)
 app.include_router(instances.router)
+app.include_router(discovery.router)
+app.include_router(integrations.router)
 
 # Static files will be mounted after API routes
 
@@ -204,6 +206,19 @@ async def setup_status():
     }
 
 
+@app.get("/api/mqtt/status")
+async def get_mqtt_status(token_data=Depends(verify_token)):
+    """Get MQTT connection status"""
+    mqtt_config = config_service.get_mqtt_config()
+    return {
+        "connected": mqtt_service.connected if mqtt_service else False,
+        "broker": mqtt_config.get("host", "Not configured"),
+        "port": mqtt_config.get("port", 1883),
+        "topics_count": len(mqtt_service.topic_cache) if mqtt_service else 0,
+        "base_topic": mqtt_config.get("base_topic", "IoT2mqtt")
+    }
+
+
 @app.get("/api/mqtt/config", response_model=MQTTConfig)
 async def get_mqtt_config(token_data=Depends(verify_token)):
     """Get MQTT configuration"""
@@ -227,13 +242,12 @@ async def save_mqtt_config(config: MQTTConfig, token_data=Depends(verify_token))
     config_service.save_mqtt_config(config_dict)
     
     # Reconnect MQTT with new config
-    global mqtt_service, mqtt_explorer
+    global mqtt_service
     if mqtt_service:
         mqtt_service.disconnect()
     
     mqtt_service = MQTTService(config_dict)
     if mqtt_service.connect():
-        mqtt_explorer = MQTTExplorer(mqtt_service)
         return {"success": True, "message": "MQTT configuration saved and connected"}
     else:
         return {"success": False, "message": "Configuration saved but connection failed"}
@@ -373,11 +387,17 @@ async def get_container_logs(
 
 @app.get("/api/mqtt/topics")
 async def get_mqtt_topics(filter: Optional[str] = None, token_data=Depends(verify_token)):
-    """Get MQTT topics tree"""
-    if not mqtt_explorer:
+    """Get MQTT topics as flat list"""
+    if not mqtt_service:
         raise HTTPException(status_code=503, detail="MQTT not connected")
     
-    return mqtt_explorer.get_tree(filter_pattern=filter)
+    topics = mqtt_service.get_topics_list()
+    
+    # Apply filter if provided
+    if filter:
+        topics = [t for t in topics if filter.lower() in t["topic"].lower()]
+    
+    return topics
 
 
 @app.post("/api/mqtt/publish")
@@ -473,6 +493,92 @@ async def websocket_endpoint(websocket: WebSocket):
             mqtt_service.remove_websocket_handler(mqtt_handler)
 
 
+# WebSocket endpoint for MQTT Explorer with authentication
+@app.websocket("/ws/mqtt")
+async def mqtt_websocket(websocket: WebSocket, token: str = Query(...)):
+    """WebSocket endpoint for MQTT Explorer with authentication"""
+    # Verify token
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    
+    await websocket.accept()
+    logger.info("MQTT WebSocket connected")
+    
+    # Subscribe to all topics for explorer
+    if mqtt_service:
+        mqtt_service.subscribe("#")
+    
+    # Handler for MQTT messages
+    async def mqtt_message_handler(topic: str, payload: Any, retained: bool = False):
+        try:
+            await websocket.send_json({
+                "type": "update",
+                "topic": topic,
+                "value": payload,
+                "timestamp": datetime.now().isoformat(),
+                "retained": retained
+            })
+        except:
+            pass
+    
+    # Add handler if MQTT is connected
+    if mqtt_service:
+        mqtt_service.add_websocket_handler(mqtt_message_handler)
+        
+        # Send initial topics list
+        try:
+            topics = mqtt_service.get_topics_list()
+            await websocket.send_json({
+                "type": "topics",
+                "data": topics
+            })
+        except:
+            pass
+    
+    try:
+        while True:
+            # Receive commands from client
+            data = await websocket.receive_json()
+            
+            if data.get("action") == "subscribe" and mqtt_service:
+                topic = data.get("topic")
+                if topic:
+                    mqtt_service.subscribe(topic)
+                    await websocket.send_json({
+                        "type": "subscribed",
+                        "topic": topic
+                    })
+                    
+            elif data.get("action") == "unsubscribe" and mqtt_service:
+                topic = data.get("topic")
+                if topic:
+                    mqtt_service.unsubscribe(topic)
+                    await websocket.send_json({
+                        "type": "unsubscribed",
+                        "topic": topic
+                    })
+                    
+            elif data.get("action") == "publish" and mqtt_service:
+                topic = data.get("topic")
+                payload = data.get("payload")
+                qos = data.get("qos", 0)
+                retain = data.get("retain", False)
+                if topic is not None and payload is not None:
+                    mqtt_service.publish(topic, payload, qos, retain)
+                    await websocket.send_json({
+                        "type": "published",
+                        "topic": topic
+                    })
+                    
+    except WebSocketDisconnect:
+        logger.info("MQTT WebSocket disconnected")
+        if mqtt_service:
+            mqtt_service.remove_websocket_handler(mqtt_message_handler)
+
+
 # Socket.IO events
 @sio.event
 async def connect(sid, environ):
@@ -505,6 +611,48 @@ if os.path.exists("/app/frontend/dist"):
     # Serve static assets
     if os.path.exists("/app/frontend/dist/assets"):
         app.mount("/assets", StaticFiles(directory="/app/frontend/dist/assets"), name="assets")
+    
+    # Mount icons directory for PWA icons
+    if os.path.exists("/app/frontend/dist/icons"):
+        app.mount("/icons", StaticFiles(directory="/app/frontend/dist/icons"), name="icons")
+    
+    # Serve root-level files (PWA icons, manifest, etc.)
+    @app.get("/pwa-192x192.png")
+    async def serve_pwa_192():
+        return FileResponse("/app/frontend/dist/pwa-192x192.png")
+    
+    @app.get("/pwa-512x512.png")
+    async def serve_pwa_512():
+        return FileResponse("/app/frontend/dist/pwa-512x512.png")
+    
+    @app.get("/manifest.json")
+    async def serve_manifest_json():
+        return FileResponse("/app/frontend/dist/manifest.json")
+    
+    @app.get("/manifest.webmanifest")
+    async def serve_manifest():
+        return FileResponse("/app/frontend/dist/manifest.webmanifest")
+    
+    @app.get("/favicon.ico")
+    async def serve_favicon():
+        return FileResponse("/app/frontend/dist/favicon.ico")
+    
+    @app.get("/robots.txt")
+    async def serve_robots():
+        return FileResponse("/app/frontend/dist/robots.txt")
+    
+    # Service Worker files
+    @app.get("/sw.js")
+    async def serve_sw():
+        return FileResponse("/app/frontend/dist/sw.js", media_type="application/javascript")
+    
+    @app.get("/registerSW.js")
+    async def serve_register_sw():
+        return FileResponse("/app/frontend/dist/registerSW.js", media_type="application/javascript")
+    
+    @app.get("/workbox-{version}.js")
+    async def serve_workbox(version: str):
+        return FileResponse(f"/app/frontend/dist/workbox-{version}.js", media_type="application/javascript")
     
     # Catch-all route for SPA - must be last!
     @app.get("/{full_path:path}")

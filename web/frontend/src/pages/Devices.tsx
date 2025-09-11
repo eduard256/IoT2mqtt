@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { getAuthToken } from '@/utils/auth'
 import { 
   Lightbulb, Thermometer, Lock, Speaker, Camera, Tv, 
   Power, Wifi, WifiOff, Settings, MoreVertical, 
@@ -66,86 +67,39 @@ export default function Devices() {
 
   const fetchDevices = async () => {
     try {
-      // In real implementation, this would fetch from /api/devices
-      // For now, using mock data
-      const mockDevices: Device[] = [
-        {
-          device_id: 'bedroom_light',
-          instance_id: 'yeelight_home',
-          friendly_name: 'Bedroom Light',
-          device_type: 'light',
-          device_class: 'light',
-          state: {
-            power: true,
-            brightness: 75,
-            color_temp: 4000,
-            rgb: '#FFB366'
-          },
-          online: true,
-          last_update: new Date().toISOString(),
-          capabilities: {
-            brightness: true,
-            color_temp: true,
-            rgb: true,
-            effects: ['Sunrise', 'Sunset', 'Movie', 'Date Night']
-          },
-          room: 'Bedroom',
-          model: 'YLDD05YL',
-          manufacturer: 'Yeelight'
-        },
-        {
-          device_id: 'living_room_lamp',
-          instance_id: 'yeelight_home',
-          friendly_name: 'Living Room Lamp',
-          device_type: 'light',
-          device_class: 'light',
-          state: {
-            power: false,
-            brightness: 50,
-            color_temp: 3000
-          },
-          online: true,
-          last_update: new Date().toISOString(),
-          capabilities: {
-            brightness: true,
-            color_temp: true
-          },
-          room: 'Living Room',
-          model: 'YLXD76YL',
-          manufacturer: 'Yeelight'
-        },
-        {
-          device_id: 'kitchen_strip',
-          instance_id: 'yeelight_home',
-          friendly_name: 'Kitchen LED Strip',
-          device_type: 'light',
-          device_class: 'light',
-          state: {
-            power: true,
-            brightness: 100,
-            rgb: '#00FF00'
-          },
-          online: false,
-          last_update: new Date(Date.now() - 3600000).toISOString(),
-          capabilities: {
-            brightness: true,
-            rgb: true,
-            effects: ['Rainbow', 'Pulse', 'Strobe']
-          },
-          room: 'Kitchen',
-          model: 'YLDD04YL',
-          manufacturer: 'Yeelight'
+      const token = getAuthToken()
+      if (!token) {
+        throw new Error('No authentication token')
+      }
+
+      const response = await fetch('/api/devices', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      ]
-      
-      setDevices(mockDevices)
-    } catch (error) {
-      console.error('Error fetching devices:', error)
-      toast({
-        title: t('Error'),
-        description: t('Failed to load devices'),
-        variant: 'destructive'
       })
+
+      if (response.status === 401 || response.status === 403) {
+        // Token expired or invalid, redirect to login
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setDevices(data)
+    } catch (error) {
+      if (error instanceof Error && error.message !== 'No authentication token') {
+        toast({
+          title: t('Error'),
+          description: t('Failed to load devices'),
+          variant: 'destructive'
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -153,25 +107,55 @@ export default function Devices() {
 
   const handleDeviceControl = async (deviceId: string, command: any) => {
     try {
-      // In real implementation, this would call /api/devices/{id}/control
-      console.log('Sending command to device:', deviceId, command)
-      
+      const token = getAuthToken()
+      if (!token) {
+        throw new Error('No authentication token')
+      }
+
+      // Find the device to get instance_id
+      const device = devices.find(d => d.device_id === deviceId)
+      if (!device) {
+        throw new Error('Device not found')
+      }
+
       // Update local state optimistically
-      setDevices(prev => prev.map(device => {
-        if (device.device_id === deviceId) {
+      setDevices(prev => prev.map(d => {
+        if (d.device_id === deviceId) {
           return {
-            ...device,
-            state: { ...device.state, ...command }
+            ...d,
+            state: { ...d.state, ...command }
           }
         }
-        return device
+        return d
       }))
-      
+
+      const response = await fetch(`/api/devices/${device.instance_id}/${deviceId}/command`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ command })
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to send command: ${response.status}`)
+      }
+
       toast({
         title: t('Success'),
         description: t('Command sent to device'),
       })
     } catch (error) {
+      // Revert optimistic update on error
+      await fetchDevices()
+      
       toast({
         title: t('Error'),
         description: t('Failed to control device'),

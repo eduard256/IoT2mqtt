@@ -81,9 +81,8 @@ class MQTTService:
             self.connected = True
             logger.info("Connected to MQTT broker")
             
-            # Subscribe to all IoT2MQTT topics
-            base_topic = self.config.get('base_topic', 'IoT2mqtt')
-            client.subscribe(f"{base_topic}/#", qos=1)
+            # Subscribe to all topics for explorer
+            client.subscribe("#", qos=1)
             
         else:
             logger.error(f"MQTT connection failed with code {rc}")
@@ -113,54 +112,29 @@ class MQTTService:
                 "qos": msg.qos
             }
             
-            # Notify WebSocket clients (simplified for sync context)
-            message = {
-                "type": "mqtt_update",
-                "topic": topic,
-                "payload": payload,
-                "timestamp": datetime.now().isoformat(),
-                "retained": msg.retain
-            }
-            # Store message for async processing later
-            # WebSocket handlers will poll this cache
-            
-            # Call topic-specific handlers (sync only)
-            for pattern, handlers in self.subscriptions.items():
-                if self._topic_matches(pattern, topic):
-                    for handler in handlers:
-                        try:
-                            handler(topic, payload)
-                        except Exception as e:
-                            logger.error(f"Error in MQTT handler: {e}")
+            # Notify WebSocket clients
+            for handler in self.websocket_handlers:
+                try:
+                    # Call handler with update
+                    asyncio.create_task(handler(topic, payload, msg.retain))
+                except:
+                    # If not in async context, skip
+                    pass
                             
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}")
     
-    def _topic_matches(self, pattern: str, topic: str) -> bool:
-        """Check if topic matches pattern (with wildcards)"""
-        # Convert MQTT wildcards to regex
-        pattern = pattern.replace('+', '[^/]+').replace('#', '.*')
-        pattern = f"^{pattern}$"
-        return bool(re.match(pattern, topic))
-    
-    async def _notify_websocket_clients(self, message: Dict[str, Any]):
-        """Notify all WebSocket clients"""
-        for handler in self.websocket_handlers:
-            try:
-                await handler(message)
-            except Exception as e:
-                logger.error(f"Error notifying WebSocket client: {e}")
-    
-    def subscribe(self, pattern: str, handler: Callable):
+    def subscribe(self, pattern: str):
         """Subscribe to MQTT topic pattern"""
-        self.subscriptions[pattern].add(handler)
+        if self.client and self.connected:
+            self.client.subscribe(pattern)
     
-    def unsubscribe(self, pattern: str, handler: Callable):
+    def unsubscribe(self, pattern: str):
         """Unsubscribe from MQTT topic pattern"""
-        if pattern in self.subscriptions:
-            self.subscriptions[pattern].discard(handler)
+        if self.client and self.connected:
+            self.client.unsubscribe(pattern)
     
-    def publish(self, topic: str, payload: Any, retain: bool = False, qos: int = 1):
+    def publish(self, topic: str, payload: Any, qos: int = 1, retain: bool = False):
         """Publish message to MQTT"""
         if not self.connected:
             logger.warning(f"Not connected, cannot publish to {topic}")
@@ -179,27 +153,18 @@ class MQTTService:
             logger.error(f"Error publishing to {topic}: {e}")
             return False
     
-    def get_topics_tree(self) -> Dict[str, Any]:
-        """Get MQTT topics as tree structure"""
-        tree = {}
-        
-        for topic in self.topic_cache:
-            parts = topic.split('/')
-            current = tree
-            
-            for i, part in enumerate(parts):
-                if part not in current:
-                    current[part] = {}
-                
-                # If last part, store value
-                if i == len(parts) - 1:
-                    current[part]["_value"] = self.topic_cache[topic]
-                else:
-                    if "_children" not in current[part]:
-                        current[part]["_children"] = {}
-                    current = current[part]["_children"]
-        
-        return tree
+    def get_topics_list(self) -> List[Dict[str, Any]]:
+        """Get flat list of all topics with their values"""
+        topics = []
+        for topic, data in self.topic_cache.items():
+            topics.append({
+                "topic": topic,
+                "value": data["value"],
+                "timestamp": data["timestamp"],
+                "retained": data.get("retained", False),
+                "qos": data.get("qos", 0)
+            })
+        return topics
     
     def get_topic_value(self, topic: str) -> Optional[Any]:
         """Get cached value for topic"""
@@ -256,92 +221,3 @@ class MQTTService:
     def remove_websocket_handler(self, handler: Callable):
         """Remove WebSocket handler"""
         self.websocket_handlers.discard(handler)
-
-
-class MQTTExplorer:
-    """MQTT topic explorer with search and filtering"""
-    
-    def __init__(self, mqtt_service: MQTTService):
-        self.mqtt = mqtt_service
-    
-    def get_tree(self, filter_pattern: Optional[str] = None) -> Dict[str, Any]:
-        """Get filtered topic tree"""
-        all_topics = self.mqtt.topic_cache
-        
-        if filter_pattern:
-            # Filter topics by pattern
-            filtered = {}
-            for topic, value in all_topics.items():
-                if filter_pattern.lower() in topic.lower():
-                    filtered[topic] = value
-        else:
-            filtered = all_topics
-        
-        return self._build_tree(filtered)
-    
-    def _build_tree(self, topics: Dict[str, Any]) -> Dict[str, Any]:
-        """Build tree structure from flat topics"""
-        tree = {
-            "name": "MQTT",
-            "children": [],
-            "expanded": True
-        }
-        
-        nodes = {}
-        
-        for topic, data in topics.items():
-            parts = topic.split('/')
-            parent = tree
-            path = []
-            
-            for i, part in enumerate(parts):
-                path.append(part)
-                node_path = '/'.join(path)
-                
-                if node_path not in nodes:
-                    node = {
-                        "name": part,
-                        "path": node_path,
-                        "children": [],
-                        "expanded": False
-                    }
-                    
-                    # If last part, add value
-                    if i == len(parts) - 1:
-                        node["value"] = data["value"]
-                        node["timestamp"] = data["timestamp"]
-                        node["retained"] = data.get("retained", False)
-                        node["qos"] = data.get("qos", 0)
-                    
-                    nodes[node_path] = node
-                    parent["children"].append(node)
-                    parent = node
-                else:
-                    parent = nodes[node_path]
-        
-        return tree
-    
-    def search_topics(self, query: str) -> List[Dict[str, Any]]:
-        """Search topics by query"""
-        results = []
-        query_lower = query.lower()
-        
-        for topic, data in self.mqtt.topic_cache.items():
-            # Search in topic name
-            if query_lower in topic.lower():
-                results.append({
-                    "topic": topic,
-                    "value": data["value"],
-                    "timestamp": data["timestamp"],
-                    "match": "topic"
-                })
-            # Search in value (if string)
-            elif isinstance(data["value"], str) and query_lower in data["value"].lower():
-                results.append({
-                    "topic": topic,
-                    "value": data["value"],
-                    "timestamp": data["timestamp"],
-                    "match": "value"
-                })
-        
-        return results

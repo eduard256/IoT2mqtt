@@ -20,18 +20,47 @@ class DockerService:
     def __init__(self, base_path: str = None):
         self.base_path = Path(base_path or os.getenv("IOT2MQTT_PATH", "/app"))
         try:
-            # Try to connect to Docker via unix socket
-            self.client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+            # Connect to Docker via unix socket only
+            self.client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
             logger.info("Connected to Docker via unix socket")
-        except Exception as e1:
-            try:
-                # Fallback to default from_env
-                self.client = docker.DockerClient.from_env()
-                logger.info("Connected to Docker via environment")
-            except Exception as e2:
-                logger.error(f"Failed to connect to Docker: {e1}, {e2}")
-                self.client = None
+            # Get host path from current container's mounts
+            self.host_base_path = self._get_host_base_path()
+            logger.info(f"Host base path: {self.host_base_path}")
+        except Exception as e:
+            logger.error(f"Failed to connect to Docker: {e}")
+            self.client = None
+            self.host_base_path = self.base_path
         self.prefix = "iot2mqtt_"
+    
+    def _get_host_base_path(self) -> Path:
+        """Get host base path from current container's mounts"""
+        try:
+            # Try to get current container info
+            import socket
+            hostname = socket.gethostname()
+            container = self.client.containers.get(hostname)
+            
+            # Look for /app/connectors mount to determine host path
+            for mount in container.attrs.get('Mounts', []):
+                if mount.get('Destination') == '/app/connectors':
+                    source = mount.get('Source', '')
+                    # Source is like /home/eduard/IoT2mqtt/connectors
+                    # We need /home/eduard/IoT2mqtt
+                    if source.endswith('/connectors'):
+                        host_path = Path(source).parent
+                        return host_path
+            
+            # Fallback - try to get from environment
+            # If we're in container, PWD won't help, but we can try HOST_PATH if set
+            host_path = os.getenv("HOST_IOT2MQTT_PATH")
+            if host_path:
+                return Path(host_path)
+                
+        except Exception as e:
+            logger.warning(f"Could not determine host base path: {e}")
+        
+        # Fallback to base_path
+        return self.base_path
         
     def list_containers(self, all: bool = True) -> List[Dict[str, Any]]:
         """List IoT2MQTT containers"""
@@ -215,6 +244,26 @@ class DockerService:
             logger.error(f"Error building image for {connector_name}: {e}")
             return False
     
+    def create_or_update_container(self, connector_name: str, instance_id: str, 
+                                   config: Dict[str, Any]) -> Optional[str]:
+        """Create or update a container for an instance"""
+        container_name = f"{self.prefix}{connector_name}_{instance_id}"
+        
+        # Check if container already exists
+        existing = self.get_container(container_name)
+        if existing:
+            logger.info(f"Updating container {container_name}")
+            # Stop and remove existing container
+            try:
+                existing.stop(timeout=10)
+                existing.remove()
+            except Exception as e:
+                logger.error(f"Error removing existing container: {e}")
+                return None
+        
+        # Create new container using existing method
+        return self.create_container(connector_name, instance_id, config)
+    
     def create_container(self, connector_name: str, instance_id: str, 
                         config: Dict[str, Any]) -> Optional[str]:
         """Create and start a container for an instance"""
@@ -245,17 +294,17 @@ class DockerService:
                 f"INSTANCE_NAME={instance_id}",
                 "MODE=production",
                 "PYTHONUNBUFFERED=1",
-                f"IOT2MQTT_PATH={self.base_path}"
+                f"IOT2MQTT_PATH=/app"
             ],
             "volumes": {
-                str(self.base_path / "shared"): {"bind": "/app/shared", "mode": "ro"},
-                str(self.base_path / "connectors" / connector_name / "instances"): {
+                str(self.host_base_path / "shared"): {"bind": "/app/shared", "mode": "ro"},
+                str(self.host_base_path / "connectors" / connector_name / "instances"): {
                     "bind": "/app/instances",
                     "mode": "ro"
                 },
-                str(self.base_path / ".env"): {"bind": "/app/.env", "mode": "ro"}
+                str(self.host_base_path / ".env"): {"bind": "/app/.env", "mode": "ro"}
             },
-            "network": "iot2mqtt",
+            "network_mode": "host",
             "labels": {
                 "iot2mqtt.type": "connector",
                 "iot2mqtt.connector": connector_name,

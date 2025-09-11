@@ -312,3 +312,56 @@ async def validate_configuration(name: str, request: ValidateRequest):
     except Exception as e:
         logger.error(f"Failed to validate configuration: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/connectors/available")
+async def get_available_connectors():
+    """Get list of available connectors with manifest data"""
+    connectors = []
+    
+    # Scan connectors directory
+    connectors_path = Path("/app/connectors")
+    if not connectors_path.exists():
+        return []
+    
+    for connector_dir in connectors_path.iterdir():
+        if connector_dir.is_dir() and not connector_dir.name.startswith('_'):
+            # Check for manifest.json (new format)
+            manifest_file = connector_dir / "manifest.json"
+            if manifest_file.exists():
+                with open(manifest_file, 'r') as f:
+                    manifest = json.load(f)
+                    
+                connectors.append({
+                    "name": connector_dir.name,
+                    "display_name": manifest.get("name", connector_dir.name),
+                    "version": manifest.get("version", "1.0.0"),
+                    "author": manifest.get("author", "Unknown"),
+                    "description": f"Integration for {manifest.get('name', connector_dir.name)} devices",
+                    "branding": manifest.get("branding"),
+                    "discovery": manifest.get("discovery"),
+                    "manual_config": manifest.get("manual_config"),
+                    "capabilities": manifest.get("capabilities", [])
+                })
+            # Fallback to old setup.json format
+            elif (connector_dir / "setup.json").exists():
+                setup_file = connector_dir / "setup.json"
+                with open(setup_file, 'r') as f:
+                    setup_data = json.load(f)
+                    
+                connectors.append({
+                    "name": connector_dir.name,
+                    "display_name": setup_data.get("display_name", connector_dir.name),
+                    "version": setup_data.get("version", "1.0.0"),
+                    "author": setup_data.get("author", "Unknown"),
+                    "description": setup_data.get("description", ""),
+                    "branding": {
+                        "icon": "📦",
+                        "category": "general"
+                    },
+                    "discovery": {
+                        "supported": False
+                    }
+                })
+    
+    return connectors

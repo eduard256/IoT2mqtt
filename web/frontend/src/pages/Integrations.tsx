@@ -1,61 +1,147 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, Search, Sparkles, Wifi, Shield, Gauge, ChevronRight, Loader2 } from 'lucide-react'
+import { getAuthToken } from '@/utils/auth'
+import { Search, Plus, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { toast } from '@/hooks/use-toast'
-import IntegrationWizard from '@/components/integrations/IntegrationWizard'
-import DiscoveryModal from '@/components/integrations/DiscoveryModal'
+import IntegrationCard from '@/components/integrations/IntegrationCard'
+import DiscoveredDeviceCard from '@/components/integrations/DiscoveredDeviceCard'
+import AddIntegrationModal from '@/components/integrations/AddIntegrationModal'
+import IntegrationInstancesPage from '@/components/integrations/IntegrationInstancesPage'
 
-interface Integration {
+interface DiscoveredDevice {
+  id: string
+  name: string
+  integration: string
+  ip?: string
+  port?: number
+  model?: string
+  manufacturer?: string
+  capabilities?: Record<string, any>
+  discovered_at: string
+  added?: boolean
+}
+
+interface ConfiguredIntegration {
   name: string
   display_name: string
-  description?: string
-  instances: string[]
-  has_setup: boolean
-  branding?: {
-    icon: string
-    color: string
-    background: string
-    category: string
-  }
+  instances_count: number
+  status: 'connected' | 'error' | 'offline' | 'configuring'
+  last_seen?: string
 }
 
 export default function Integrations() {
   const { t } = useTranslation()
-  const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
-  const [showWizard, setShowWizard] = useState(false)
-  const [showDiscovery, setShowDiscovery] = useState(false)
-  const [wizardMode, setWizardMode] = useState<'create' | 'edit'>('create')
+  const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDevice[]>([])
+  const [configuredIntegrations, setConfiguredIntegrations] = useState<ConfiguredIntegration[]>([])
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
 
-  // Fetch integrations
+  // Initialize WebSocket for real-time discovery updates
   useEffect(() => {
-    fetchIntegrations()
+    const token = getAuthToken()
+    if (!token) return
+
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const wsUrl = `${protocol}://${window.location.host}/api/discovery/ws`
+    const ws = new WebSocket(wsUrl)
+    
+    ws.onopen = () => {
+      console.log('Discovery WebSocket connected')
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.devices) {
+          setDiscoveredDevices(data.devices.filter((d: DiscoveredDevice) => !d.added))
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error)
+      }
+    }
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+    }
+
+    ws.onclose = () => {
+      console.log('Discovery WebSocket disconnected')
+      // Reconnect after 5 seconds
+      setTimeout(() => {
+        if (wsRef.current === ws) {
+          initializeWebSocket()
+        }
+      }, 5000)
+    }
+
+    wsRef.current = ws
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
   }, [])
 
-  const fetchIntegrations = async () => {
+  const initializeWebSocket = () => {
+    const token = getAuthToken()
+    if (!token) return
+
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const wsUrl = `${protocol}://${window.location.host}/api/discovery/ws`
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+  }
+
+  // Fetch initial data
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const fetchData = async () => {
     try {
-      const response = await fetch('/api/integrations')
-      if (response.ok) {
-        const data = await response.json()
-        setIntegrations(data)
-      } else {
-        toast({
-          title: t('error'),
-          description: t('Failed to load integrations'),
-          variant: 'destructive'
-        })
+      const token = getAuthToken()
+      if (!token) {
+        throw new Error('No authentication token')
       }
+
+      // Fetch discovered devices (only non-added ones)
+      const devicesResponse = await fetch('/api/discovery/devices', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (devicesResponse.ok) {
+        const devices = await devicesResponse.json()
+        setDiscoveredDevices(devices.filter((d: DiscoveredDevice) => !d.added))
+      }
+
+      // Fetch configured integrations
+      const integrationsResponse = await fetch('/api/integrations/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (integrationsResponse.ok) {
+        const integrations = await integrationsResponse.json()
+        setConfiguredIntegrations(integrations)
+      }
+
     } catch (error) {
-      console.error('Error fetching integrations:', error)
       toast({
-        title: t('error'),
-        description: t('Failed to connect to server'),
+        title: t('Error'),
+        description: t('Failed to load data'),
         variant: 'destructive'
       })
     } finally {
@@ -63,42 +149,82 @@ export default function Integrations() {
     }
   }
 
-  const handleIntegrationClick = (integration: Integration) => {
-    if (integration.instances.length > 0) {
-      // Has existing instances, ask what to do
-      const action = confirm(
-        `${integration.display_name} already has ${integration.instances.length} instance(s).\n\n` +
-        `Would you like to create a new instance?\n` +
-        `Click Cancel to edit existing instances.`
-      )
-      
-      if (action) {
-        setWizardMode('create')
+  const handleAddDevice = async (device: DiscoveredDevice) => {
+    const instanceId = prompt(t('Enter instance ID (e.g., living_room):'))
+    if (!instanceId) return
+
+    const friendlyName = prompt(t('Enter friendly name:'), device.name)
+    if (!friendlyName) return
+
+    try {
+      const token = getAuthToken()
+      const response = await fetch(`/api/discovery/devices/${device.id}/add`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          device_id: device.id,
+          instance_id: instanceId,
+          friendly_name: friendlyName
+        })
+      })
+
+      if (response.ok) {
+        toast({
+          title: t('Device added'),
+          description: t('Device has been successfully added')
+        })
+        fetchData() // Refresh data
       } else {
-        setWizardMode('edit')
+        throw new Error('Failed to add device')
       }
-    } else {
-      setWizardMode('create')
+    } catch (error) {
+      toast({
+        title: t('Error'),
+        description: t('Failed to add device'),
+        variant: 'destructive'
+      })
     }
-    
-    setSelectedIntegration(integration)
-    setShowWizard(true)
   }
 
-  const filteredIntegrations = integrations.filter(integration =>
+  const handleIgnoreDevice = async (deviceId: string) => {
+    try {
+      const token = getAuthToken()
+      const response = await fetch(`/api/discovery/devices/${deviceId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        toast({
+          title: t('Device ignored'),
+          description: t('Device has been removed from discovered list')
+        })
+        fetchData()
+      }
+    } catch (error) {
+      toast({
+        title: t('Error'),
+        description: t('Failed to ignore device'),
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleIntegrationClick = (integration: ConfiguredIntegration) => {
+    setSelectedIntegration(integration.name)
+  }
+
+  // Filter configured integrations based on search
+  const filteredIntegrations = configuredIntegrations.filter(integration =>
     integration.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    integration.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     integration.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
-
-  const categories = {
-    lighting: { icon: '💡', label: t('Lighting') },
-    climate: { icon: '🌡️', label: t('Climate') },
-    security: { icon: '🔒', label: t('Security') },
-    sensor: { icon: '📡', label: t('Sensors') },
-    media: { icon: '🎵', label: t('Media') },
-    general: { icon: '⚙️', label: t('General') }
-  }
 
   if (loading) {
     return (
@@ -108,214 +234,96 @@ export default function Integrations() {
     )
   }
 
+  // Show integration instances page if integration is selected
+  if (selectedIntegration) {
+    return (
+      <IntegrationInstancesPage
+        integrationName={selectedIntegration}
+        onBack={() => setSelectedIntegration(null)}
+      />
+    )
+  }
+
   return (
-    <div className="space-y-8">
-      {/* Header */}
+    <div className="space-y-6">
+      {/* Header with Search */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-            {t('integrations.title')}
-          </h1>
+          <h1 className="text-3xl font-bold">{t('Integrations')}</h1>
           <p className="text-muted-foreground mt-1">
-            {t('Add and manage your device integrations')}
+            {t('Manage your device integrations')}
           </p>
         </div>
-        
-        <Button 
-          size="lg"
-          className="bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90"
-          onClick={() => setShowDiscovery(true)}
-        >
-          <Sparkles className="mr-2 h-5 w-5" />
-          {t('Discover Devices')}
-        </Button>
       </div>
 
       {/* Search Bar */}
-      <div className="relative">
+      <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
         <Input
           type="text"
-          placeholder={t('Search integrations...')}
+          placeholder={t('Search configured integrations...')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 h-12 text-lg"
+          className="pl-10"
         />
       </div>
 
-      {/* Integration Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {filteredIntegrations.map((integration) => {
-          const category = integration.branding?.category || 'general'
-          const categoryInfo = categories[category as keyof typeof categories] || categories.general
-          
-          return (
-            <Card
-              key={integration.name}
-              className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl"
-              onClick={() => handleIntegrationClick(integration)}
-              style={{
-                background: integration.branding?.background || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-              }}
-            >
-              {/* Gradient Overlay for better text readability */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-              
-              {/* Content */}
-              <div className="relative p-6 h-full flex flex-col">
-                {/* Icon and Category */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="text-4xl">
-                    {integration.branding?.icon || categoryInfo.icon}
-                  </div>
-                  <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                    {categoryInfo.label}
-                  </Badge>
-                </div>
-
-                {/* Title and Description */}
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold text-white mb-2">
-                    {integration.display_name}
-                  </h3>
-                  <p className="text-white/80 text-sm line-clamp-2">
-                    {integration.description || `Connect your ${integration.display_name} devices`}
-                  </p>
-                </div>
-
-                {/* Footer */}
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {integration.instances.length > 0 && (
-                      <Badge className="bg-white/20 text-white border-white/30">
-                        {integration.instances.length} {t('active')}
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  <ChevronRight className="h-5 w-5 text-white/60 group-hover:text-white transition-colors" />
-                </div>
-
-                {/* Status Icons */}
-                <div className="absolute top-4 right-4 flex gap-2">
-                  {integration.has_setup && (
-                    <div className="p-1.5 bg-white/20 rounded-full" title="Setup available">
-                      <Shield className="h-3 w-3 text-white" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          )
-        })}
-
-        {/* Add Integration Card */}
-        <Card
-          className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl border-2 border-dashed"
-          onClick={() => {
-            toast({
-              title: t('Coming Soon'),
-              description: t('Custom integration support is coming soon!'),
-            })
-          }}
-        >
-          <div className="p-6 h-full flex flex-col items-center justify-center text-center">
-            <div className="p-4 bg-muted rounded-full mb-4">
-              <Plus className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">{t('Add Custom')}</h3>
-            <p className="text-sm text-muted-foreground">
-              {t('Create your own integration')}
-            </p>
+      {/* Discovered Devices Section */}
+      {discoveredDevices.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">{t('Discovered')}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {discoveredDevices.map((device) => (
+              <DiscoveredDeviceCard
+                key={device.id}
+                device={device}
+                onAdd={handleAddDevice}
+                onIgnore={handleIgnoreDevice}
+              />
+            ))}
           </div>
-        </Card>
-      </div>
-
-      {/* Empty State */}
-      {filteredIntegrations.length === 0 && searchQuery && (
-        <div className="text-center py-12">
-          <p className="text-lg text-muted-foreground">
-            {t('No integrations found matching')} "{searchQuery}"
-          </p>
         </div>
       )}
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Wifi className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t('Total Integrations')}</p>
-              <p className="text-2xl font-bold">{integrations.length}</p>
-            </div>
-          </div>
-        </Card>
+      {/* Configured Integrations Section */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">{t('Configured')}</h2>
         
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-500/10 rounded-lg">
-              <Shield className="h-5 w-5 text-green-500" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t('Active Instances')}</p>
-              <p className="text-2xl font-bold">
-                {integrations.reduce((acc, int) => acc + int.instances.length, 0)}
-              </p>
-            </div>
+        {filteredIntegrations.length === 0 ? (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {searchQuery 
+                ? t('No integrations found matching your search')
+                : t('No integrations configured yet. Click "Add Integration" to get started.')}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredIntegrations.map((integration) => (
+              <IntegrationCard
+                key={integration.name}
+                integration={integration}
+                onClick={() => handleIntegrationClick(integration)}
+              />
+            ))}
           </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-500/10 rounded-lg">
-              <Gauge className="h-5 w-5 text-blue-500" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t('Categories')}</p>
-              <p className="text-2xl font-bold">{Object.keys(categories).length}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-500/10 rounded-lg">
-              <Sparkles className="h-5 w-5 text-purple-500" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t('Available')}</p>
-              <p className="text-2xl font-bold">
-                {integrations.filter(i => i.instances.length === 0).length}
-              </p>
-            </div>
-          </div>
-        </Card>
+        )}
       </div>
 
-      {/* Integration Wizard Modal */}
-      {showWizard && selectedIntegration && (
-        <IntegrationWizard
-          integration={selectedIntegration}
-          mode={wizardMode}
-          onClose={() => {
-            setShowWizard(false)
-            setSelectedIntegration(null)
-            fetchIntegrations() // Refresh list
-          }}
-        />
-      )}
+      {/* Floating Action Button */}
+      <Button
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:shadow-xl"
+        onClick={() => setShowAddModal(true)}
+      >
+        <Plus className="h-6 w-6" />
+      </Button>
 
-      {/* Discovery Modal */}
-      {showDiscovery && (
-        <DiscoveryModal
-          onClose={() => setShowDiscovery(false)}
-          onIntegrationFound={(integration) => {
-            setShowDiscovery(false)
-            handleIntegrationClick(integration)
-          }}
+      {/* Add Integration Modal */}
+      {showAddModal && (
+        <AddIntegrationModal
+          onClose={() => setShowAddModal(false)}
+          onIntegrationAdded={fetchData}
         />
       )}
     </div>
