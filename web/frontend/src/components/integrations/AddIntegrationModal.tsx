@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { toast } from '@/hooks/use-toast'
 import BrandIcon from './BrandIcon'
 import DeviceSetupForm from './DeviceSetupForm'
+import FlowSetupForm from './FlowSetupForm'
 
 interface Integration {
   name: string
@@ -109,6 +110,7 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
   }
 
   if (selectedIntegration) {
+    // We will try to use FlowSetupForm when setup.json exists. We detect it lazily inside form.
     return (
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -126,11 +128,14 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
             </DialogTitle>
           </DialogHeader>
           
-          <DeviceSetupForm
-            integration={selectedIntegration}
-            onCancel={handleBackToList}
-            onSuccess={handleDeviceAdded}
-          />
+          {/* Prefer new FlowSetupForm; if setup not defined it will show a warning and user can go back. */}
+          {selectedIntegration && (
+            <FlowSetupForm
+              integration={selectedIntegration}
+              onCancel={handleBackToList}
+              onSuccess={handleDeviceAdded}
+            />
+          )}
         </DialogContent>
       </Dialog>
     )

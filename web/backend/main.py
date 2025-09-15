@@ -26,7 +26,7 @@ from models.schemas import *
 from services.config_service import ConfigService
 from services.docker_service import DockerService
 from services.mqtt_service import MQTTService
-from api import auth, mqtt, connectors, instances, devices, docker, discovery, integrations
+from api import auth, mqtt, connectors, instances, devices, docker, discovery, integrations, tools
 from services.secrets_manager import SecretsManager
 
 import logging
@@ -101,8 +101,11 @@ app.add_middleware(
 # Include API routers
 app.include_router(connectors.router)
 app.include_router(instances.router)
+app.include_router(devices.router)
+app.include_router(docker.router)
 app.include_router(discovery.router)
 app.include_router(integrations.router)
+app.include_router(tools.router)
 
 # Static files will be mounted after API routes
 
@@ -340,51 +343,6 @@ async def delete_instance(connector: str, instance_id: str, token_data=Depends(v
         return {"success": False, "message": "Instance not found"}
 
 
-@app.get("/api/containers", response_model=List[ContainerInfo])
-async def list_containers(all: bool = True, token_data=Depends(verify_token)):
-    """List Docker containers"""
-    containers = docker_service.list_containers(all=all)
-    return [ContainerInfo(**c) for c in containers]
-
-
-@app.post("/api/containers/{container_id}/start")
-async def start_container(container_id: str, token_data=Depends(verify_token)):
-    """Start container"""
-    if docker_service.start_container(container_id):
-        return {"success": True, "message": "Container started"}
-    else:
-        return {"success": False, "message": "Failed to start container"}
-
-
-@app.post("/api/containers/{container_id}/stop")
-async def stop_container(container_id: str, token_data=Depends(verify_token)):
-    """Stop container"""
-    if docker_service.stop_container(container_id):
-        return {"success": True, "message": "Container stopped"}
-    else:
-        return {"success": False, "message": "Failed to stop container"}
-
-
-@app.post("/api/containers/{container_id}/restart")
-async def restart_container(container_id: str, token_data=Depends(verify_token)):
-    """Restart container"""
-    if docker_service.restart_container(container_id):
-        return {"success": True, "message": "Container restarted"}
-    else:
-        return {"success": False, "message": "Failed to restart container"}
-
-
-@app.get("/api/containers/{container_id}/logs")
-async def get_container_logs(
-    container_id: str, 
-    lines: int = 100,
-    token_data=Depends(verify_token)
-):
-    """Get container logs"""
-    logs = list(docker_service.get_container_logs(container_id, lines=lines))
-    return ContainerLogs(container_id=container_id, logs=logs)
-
-
 @app.get("/api/mqtt/topics")
 async def get_mqtt_topics(filter: Optional[str] = None, token_data=Depends(verify_token)):
     """Get MQTT topics as flat list"""
@@ -493,6 +451,98 @@ async def websocket_endpoint(websocket: WebSocket):
             mqtt_service.remove_websocket_handler(mqtt_handler)
 
 
+# WebSocket endpoint for container logs with authentication
+@app.websocket("/ws/logs/{container_id}")
+async def container_logs_websocket(websocket: WebSocket, container_id: str, token: str = Query(...)):
+    """WebSocket endpoint for streaming container logs with authentication using aiodocker"""
+    # Verify token
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    
+    await websocket.accept()
+    logger.info(f"Container logs WebSocket connected for {container_id}")
+    
+    import aiodocker
+    import asyncio
+    
+    docker_client = None
+    container = None
+    
+    try:
+        # Create async docker client
+        docker_client = aiodocker.Docker()
+        
+        # Check if container exists
+        try:
+            container = await docker_client.containers.get(container_id)
+            container_info = await container.show()
+            logger.info(f"Found container: {container_info['Name']}")
+        except aiodocker.exceptions.DockerError:
+            logger.error(f"Container {container_id} not found")
+            await websocket.send_json({
+                "error": f"Container {container_id} not found",
+                "timestamp": datetime.now().isoformat(),
+                "level": "error"
+            })
+            await websocket.close(code=1008, reason="Container not found")
+            return
+        
+        logger.info(f"Starting real-time log stream for container {container_id}")
+        
+        # Stream logs asynchronously
+        log_count = 0
+        async for line in container.log(stdout=True, stderr=True, follow=True, tail=100):
+            # Parse log line
+            log_text = line.decode('utf-8') if isinstance(line, bytes) else str(line)
+            
+            # Determine log level from content
+            log_level = "info"
+            log_lower = log_text.lower()
+            if "error" in log_lower or "exception" in log_lower:
+                log_level = "error"
+            elif "warning" in log_lower or "warn" in log_lower:
+                log_level = "warning"
+            elif "success" in log_lower or "connected" in log_lower:
+                log_level = "success"
+            elif "debug" in log_lower:
+                log_level = "debug"
+            
+            # Send log entry
+            await websocket.send_json({
+                "timestamp": datetime.now().isoformat(),
+                "level": log_level,
+                "content": log_text.strip()
+            })
+            
+            log_count += 1
+            if log_count % 50 == 0:
+                logger.debug(f"Sent {log_count} log entries for {container_id}")
+            
+    except WebSocketDisconnect:
+        logger.info(f"Container logs WebSocket disconnected for {container_id}")
+    except asyncio.CancelledError:
+        logger.info(f"Log streaming cancelled for {container_id}")
+    except Exception as e:
+        logger.error(f"Error streaming logs for {container_id}: {e}", exc_info=True)
+        try:
+            await websocket.send_json({
+                "error": str(e),
+                "timestamp": datetime.now().isoformat(),
+                "level": "error"
+            })
+            await websocket.close(code=1011, reason="Internal error")
+        except:
+            pass
+    finally:
+        # Clean up
+        if docker_client:
+            await docker_client.close()
+        logger.info(f"Cleaned up resources for {container_id}")
+
+
 # WebSocket endpoint for MQTT Explorer with authentication
 @app.websocket("/ws/mqtt")
 async def mqtt_websocket(websocket: WebSocket, token: str = Query(...)):
@@ -514,13 +564,20 @@ async def mqtt_websocket(websocket: WebSocket, token: str = Query(...)):
     # Handler for MQTT messages
     async def mqtt_message_handler(topic: str, payload: Any, retained: bool = False):
         try:
-            await websocket.send_json({
-                "type": "update",
-                "topic": topic,
-                "value": payload,
-                "timestamp": datetime.now().isoformat(),
-                "retained": retained
-            })
+            if payload is None:
+                # Topic deletion
+                await websocket.send_json({
+                    "type": "delete",
+                    "topic": topic
+                })
+            else:
+                await websocket.send_json({
+                    "type": "update",
+                    "topic": topic,
+                    "value": payload,
+                    "timestamp": datetime.now().isoformat(),
+                    "retained": retained
+                })
         except:
             pass
     
