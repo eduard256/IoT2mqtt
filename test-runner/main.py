@@ -239,11 +239,11 @@ async def test_mqtt_connection(host: str, port: int = 1883, username: Optional[s
             
     except Exception as e:
         logger.error(f"MQTT test error: {e}")
-        return TestResult(
-            success=False,
-            error=str(e),
-            details={"host": host, "port": port}
-        )
+    return TestResult(
+        success=False,
+        error=str(e),
+        details={"host": host, "port": port}
+    )
 
 
 @app.post("/discovery/{integration}")
@@ -345,6 +345,97 @@ async def get_discovery_status(integration: str):
             "devices": [],
             "message": "Discovery in progress or not started"
         }
+
+
+# === Tools Executor ===
+
+def _load_setup(integration: str) -> Dict[str, Any]:
+    setup_path = f"/app/connectors/{integration}/setup.json"
+    if not os.path.exists(setup_path):
+        raise HTTPException(status_code=404, detail=f"setup.json not found for {integration}")
+    with open(setup_path, 'r') as f:
+        return json.load(f)
+
+
+def _mask_secrets(text: str, secrets: List[str], input_payload: Dict[str, Any]) -> str:
+    if not text:
+        return text
+    try:
+        for key in secrets or []:
+            val = input_payload.get(key)
+            if isinstance(val, str) and val:
+                text = text.replace(val, "******")
+    except Exception:
+        pass
+    return text
+
+
+@app.post("/actions/{integration}/execute")
+async def execute_action(integration: str, body: Dict[str, Any]):
+    """Execute a declared tool from connector setup.json in a subprocess.
+    Body: { "tool": str, "input": dict }
+    Returns tool stdout JSON as-is, or {ok:false,error} on failure.
+    """
+    tool_id = body.get("tool")
+    input_payload = body.get("input", {})
+    if not tool_id:
+        raise HTTPException(status_code=400, detail="Missing 'tool' field")
+
+    setup = _load_setup(integration)
+    tools = setup.get("tools", [])
+    tool = next((t for t in tools if t.get("id") == tool_id), None)
+    if not tool:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found for {integration}")
+
+    entry = tool.get("entry")
+    if not entry:
+        raise HTTPException(status_code=400, detail=f"Tool '{tool_id}' has no entry")
+
+    timeout = int(tool.get("timeout", 30))
+    connector_path = f"/app/connectors/{integration}"
+    script_path = os.path.join(connector_path, entry)
+    if not os.path.exists(script_path):
+        raise HTTPException(status_code=404, detail=f"Entry script not found: {entry}")
+
+    payload = {"tool": tool_id, "input": input_payload}
+
+    try:
+        proc = subprocess.run(
+            ["python", script_path],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=connector_path
+        )
+
+        stderr = proc.stderr or ""
+        stderr = _mask_secrets(stderr, tool.get("secrets", []), input_payload)
+
+        if proc.returncode != 0:
+            logger.error(f"Tool {integration}/{tool_id} failed: {stderr}")
+            return {"ok": False, "error": {"code": "tool_failed", "message": stderr.strip() or "non-zero exit code", "retriable": False}}
+
+        # Parse stdout
+        try:
+            result = json.loads(proc.stdout or "{}")
+        except json.JSONDecodeError:
+            logger.error(f"Tool {integration}/{tool_id} returned invalid JSON")
+            return {"ok": False, "error": {"code": "invalid_output", "message": "Tool returned invalid JSON", "retriable": False}}
+
+        # Best-effort mask inside message
+        if isinstance(result, dict) and not result.get("ok", True):
+            err = result.get("error", {})
+            if isinstance(err, dict) and isinstance(err.get("message"), str):
+                err["message"] = _mask_secrets(err["message"], tool.get("secrets", []), input_payload)
+        return result
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Tool {integration}/{tool_id} timeout")
+        return {"ok": False, "error": {"code": "timeout", "message": f"Tool '{tool_id}' timed out", "retriable": True}}
+    except Exception as e:
+        logger.error(f"Tool {integration}/{tool_id} exception: {e}")
+        return {"ok": False, "error": {"code": "executor_error", "message": str(e), "retriable": False}}
 
 
 if __name__ == "__main__":
