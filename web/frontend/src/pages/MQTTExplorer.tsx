@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { getAuthToken } from '@/utils/auth'
 import { 
   ChevronRight, ChevronDown, Folder, FolderOpen, FileText, 
-  Send, Copy,
+  Send, Copy, Search,
   Wifi, WifiOff
 } from 'lucide-react'
+import { PayloadEncyclopedia } from '@/components/mqtt/PayloadEncyclopedia'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -33,6 +34,14 @@ interface MQTTMessage {
   retained: boolean
 }
 
+interface Device {
+  instance_id: string
+  device_id: string
+  name?: string
+  model?: string
+  online?: boolean
+}
+
 export default function MQTTExplorer() {
   const { t } = useTranslation()
   const [connected, setConnected] = useState(false)
@@ -45,12 +54,17 @@ export default function MQTTExplorer() {
   const [publishQos, setPublishQos] = useState('0')
   const [publishRetain, setPublishRetain] = useState(false)
   const [messages, setMessages] = useState<MQTTMessage[]>([])
+  const [devices, setDevices] = useState<Device[]>([])
+  const [showDeviceSelector, setShowDeviceSelector] = useState(false)
+  const [deviceSearchQuery, setDeviceSearchQuery] = useState('')
+  const [currentDeviceTopic, setCurrentDeviceTopic] = useState<string | null>(null)
   // const [subscribedTopics, setSubscribedTopics] = useState<Set<string>>(new Set(['#']))
   
   const wsRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
     connectWebSocket()
+    fetchDevices()
     
     return () => {
       if (wsRef.current) {
@@ -58,6 +72,41 @@ export default function MQTTExplorer() {
       }
     }
   }, [])
+
+  // Auto-fill topic when switching to publish tab
+  useEffect(() => {
+    if (selectedTopic && selectedTopic.path.includes('/devices/')) {
+      // Extract device topic pattern
+      const match = selectedTopic.path.match(/(.+\/devices\/[^\/]+)/)
+      if (match) {
+        const deviceBaseTopic = match[1] + '/cmd'
+        setCurrentDeviceTopic(deviceBaseTopic)
+        setPublishTopic(deviceBaseTopic)  // Also set publishTopic for logical binding
+      }
+    }
+  }, [selectedTopic])
+
+  const fetchDevices = async () => {
+    try {
+      const token = getAuthToken()
+      if (!token) return
+
+      // Fetch all devices from all instances
+      const base = window.location.origin
+      const response = await fetch(`${base}/api/devices`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setDevices(data.devices || [])
+      }
+    } catch (error) {
+      console.error('Error fetching devices:', error)
+    }
+  }
 
   const connectWebSocket = () => {
     const token = getAuthToken()
@@ -70,7 +119,8 @@ export default function MQTTExplorer() {
       return
     }
 
-    const wsUrl = `ws://localhost:8765/ws/mqtt?token=${token}`
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const wsUrl = `${protocol}://${window.location.host}/ws/mqtt?token=${token}`
     wsRef.current = new WebSocket(wsUrl)
     
     wsRef.current.onopen = () => {
@@ -98,6 +148,9 @@ export default function MQTTExplorer() {
             retained: message.retained || false
           }
           setMessages(prev => [newMessage, ...prev].slice(0, 100)) // Keep last 100 messages
+        } else if (message.type === 'delete') {
+          // Topic deletion
+          deleteTopicFromTree(message.topic)
         }
       } catch (error) {
         console.error('Error parsing MQTT message:', error)
@@ -187,8 +240,61 @@ export default function MQTTExplorer() {
     })
   }
 
+  const deleteTopicFromTree = (topicPath: string) => {
+    const parts = topicPath.split('/')
+    setTopics(prev => {
+      const newTopics = new Map(prev)
+      
+      // Function to recursively delete empty branches
+      const deleteIfEmpty = (map: Map<string, MQTTTopic>, pathParts: string[], index: number): boolean => {
+        if (index >= pathParts.length) return true
+        
+        const part = pathParts[index]
+        const node = map.get(part)
+        
+        if (!node) return true
+        
+        if (index === pathParts.length - 1) {
+          // Last part - delete the value
+          delete node.value
+          delete node.timestamp
+          delete node.retained
+          
+          // If no children, remove the node entirely
+          if (!node.children || node.children.size === 0) {
+            map.delete(part)
+            return map.size === 0
+          }
+          return false
+        }
+        
+        // Recursively process children
+        if (node.children) {
+          const shouldDelete = deleteIfEmpty(node.children, pathParts, index + 1)
+          
+          // If children are now empty and node has no value, delete it
+          if (shouldDelete && !node.value) {
+            map.delete(part)
+            return map.size === 0
+          }
+        }
+        
+        return false
+      }
+      
+      deleteIfEmpty(newTopics, parts, 0)
+      return newTopics
+    })
+    
+    // Remove from selected topic if it was deleted
+    if (selectedTopic && selectedTopic.path === topicPath) {
+      setSelectedTopic(null)
+    }
+  }
+
   const handlePublish = () => {
-    if (!wsRef.current || !publishTopic) return
+    const topicToPublish = publishTopic || currentDeviceTopic || ''
+    if (!wsRef.current || !topicToPublish) return
     
     try {
       // Parse payload if it's JSON
@@ -201,7 +307,7 @@ export default function MQTTExplorer() {
       
       wsRef.current.send(JSON.stringify({
         action: 'publish',
-        topic: publishTopic,
+        topic: topicToPublish,
         payload: payload,
         qos: parseInt(publishQos),
         retain: publishRetain
@@ -445,24 +551,89 @@ export default function MQTTExplorer() {
               <TabsContent value="publish" className="space-y-4">
                 <div>
                   <Label htmlFor="publish-topic">{t('Topic')}</Label>
-                  <Input
-                    id="publish-topic"
-                    value={publishTopic}
-                    onChange={(e) => setPublishTopic(e.target.value)}
-                    placeholder="home/temperature"
-                    className="font-mono"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="publish-topic"
+                      value={publishTopic || currentDeviceTopic || ''}
+                      onChange={(e) => setPublishTopic(e.target.value)}
+                      placeholder="IoT2mqtt/v1/instances/{instance_id}/devices/{device_id}/cmd"
+                      className="font-mono flex-1"
+                    />
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() => setShowDeviceSelector(!showDeviceSelector)}
+                      title={t('Select device')}
+                    >
+                      <Search className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  
+                  {showDeviceSelector && (
+                    <Card className="mt-2 p-3">
+                      <Input
+                        type="text"
+                        placeholder={t('Search devices...')}
+                        value={deviceSearchQuery}
+                        onChange={(e) => setDeviceSearchQuery(e.target.value)}
+                        className="mb-2"
+                      />
+                      <ScrollArea className="h-[200px]">
+                        <div className="space-y-1">
+                          {devices
+                            .filter(device => 
+                              !deviceSearchQuery || 
+                              device.device_id.toLowerCase().includes(deviceSearchQuery.toLowerCase()) ||
+                              (device.name && device.name.toLowerCase().includes(deviceSearchQuery.toLowerCase()))
+                            )
+                            .map(device => (
+                              <div
+                                key={`${device.instance_id}_${device.device_id}`}
+                                className="flex items-center justify-between p-2 hover:bg-accent rounded cursor-pointer"
+                                onClick={() => {
+                                  const topic = `IoT2mqtt/v1/instances/${device.instance_id}/devices/${device.device_id}/cmd`
+                                  setPublishTopic(topic)
+                                  setShowDeviceSelector(false)
+                                  setDeviceSearchQuery('')
+                                }}
+                              >
+                                <div>
+                                  <div className="font-medium text-sm">
+                                    {device.name || device.device_id}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {device.instance_id} • {device.model || 'Unknown'}
+                                  </div>
+                                </div>
+                                {device.online && (
+                                  <Badge variant="default" className="text-xs">Online</Badge>
+                                )}
+                              </div>
+                            ))
+                          }
+                        </div>
+                      </ScrollArea>
+                    </Card>
+                  )}
                 </div>
                 
-                <div>
-                  <Label htmlFor="publish-payload">{t('Payload')}</Label>
-                  <textarea
-                    id="publish-payload"
-                    value={publishPayload}
-                    onChange={(e) => setPublishPayload(e.target.value)}
-                    placeholder='{"value": 22.5}'
-                    className="w-full min-h-[100px] p-3 rounded-md border bg-background font-mono text-sm"
-                  />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="publish-payload">{t('Payload')}</Label>
+                    <textarea
+                      id="publish-payload"
+                      value={publishPayload}
+                      onChange={(e) => setPublishPayload(e.target.value)}
+                      placeholder='{\n  "id": "cmd_123",\n  "timestamp": "2024-01-15T10:30:00.123Z",\n  "values": {\n    "power": true\n  }\n}'
+                      className="w-full min-h-[300px] p-3 rounded-md border bg-background font-mono text-sm"
+                    />
+                  </div>
+                  
+                  <div>
+                    <PayloadEncyclopedia 
+                      onSelectPayload={(payload) => setPublishPayload(payload)}
+                    />
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
