@@ -82,6 +82,15 @@ show_cursor() { [ "$USE_TPUT" -eq 1 ] && tput cnorm 2>/dev/null || true; }
 move_to() { [ "$USE_TPUT" -eq 1 ] && tput cup "$1" "$2" 2>/dev/null || true; }
 clear_screen() { [ "$USE_TPUT" -eq 1 ] && tput clear 2>/dev/null || printf "\n%.0s" {1..3}; }
 
+can_use_game() {
+  # Need a real TTY and working termios on /dev/tty
+  if [ "$USE_TPUT" -ne 1 ]; then return 1; fi
+  if ! tty -s 2>/dev/null; then return 1; fi
+  if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then return 1; fi
+  if ! stty -F /dev/tty -g >/dev/null 2>&1; then return 1; fi
+  return 0
+}
+
 draw_logo() {
   local cols=$(term_cols)
   local logo
@@ -296,38 +305,26 @@ start_snake_game() {
     return 0
   }
 
-  tick(){
-    tput cup "$top_off" "$left_off"
-    handle_input "$key"; game; local rc=$?
-    if [ $rc -ne 0 ]; then
-      # Restart game gracefully
-      score=0; vel_x=1; vel_y=0
-      snakebod_x=( $((cols/2)) ); snakebod_y=( $((rows/2)) )
-      clear_game_area_screen; print_screen; set_food
-    fi
-    ( sleep "$REFRESH_TIME"; kill -s ALRM $$ &>/dev/null )&
-    return 0
-  }
-  trap tick ALRM
-
   while :; do
     # init new game
     score=0; vel_x=1; vel_y=0
     snakebod_x=( $((cols/2)) ); snakebod_y=( $((rows/2)) )
     clear_game_area_screen; print_screen; set_food
-    kill -s ALRM $$ &>/dev/null
-    # input loop
+    # loop: step game + poll key
     while :; do
-      # try to read from /dev/tty if stdin is not a tty (curl | bash case)
-      if [ -t 0 ]; then
-        IFS= read -rsn1 -t 0.02 key || key=""
-      elif [ -r /dev/tty ]; then
+      # non-blocking key read from controlling tty
+      if [ -r /dev/tty ]; then
         IFS= read -rsn1 -t 0.02 key </dev/tty || key=""
       else
-        sleep 0.02
         key=""
+        sleep 0.02
       fi
-      :
+      tput cup "$top_off" "$left_off"
+      handle_input "$key"; game; rc=$?
+      if [ "$rc" -ne 0 ]; then
+        break
+      fi
+      sleep "$REFRESH_TIME"
     done
   done
 )
@@ -471,7 +468,7 @@ else
 fi
 
 # Start snake game in background (non-blocking)
-if [ "$USE_TPUT" -eq 1 ]; then
+if [ "$USE_TPUT" -eq 1 ] && can_use_game; then
   start_snake_game &
   SNAKE_PID=$!
 fi
