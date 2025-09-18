@@ -37,6 +37,19 @@ Traditional smart home systems require complex installations with multiple depen
 
 ## 🚀 Quick Start
 
+### One‑Line Install (any Linux)
+
+Runs a beautiful CLI with a live progress bar and snake mini‑game while installing everything (Docker, Compose, app, and services). When done, it prints your LAN URL.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh | bash
+```
+
+Notes:
+- Run as root or with passwordless sudo for a fully non‑interactive setup.
+- The installer supports most Linux distros (Debian/Ubuntu, RHEL/CentOS/Fedora, openSUSE, Arch, Alpine). It uses Docker’s convenience script or native packages.
+- On completion, you’ll see the URL like `http://<your_lan_ip>:8765`.
+
 ### Prerequisites
 
 Only Docker and Docker Compose are required. Nothing else.
@@ -69,6 +82,8 @@ That's it! The script will:
 3. **Open Web Interface**
 
 Navigate to `http://localhost:8765` in your browser.
+
+Or, if you used the one‑liner installer above, open the LAN URL it prints (for example, `http://192.168.1.50:8765`).
 
 ### First Time Setup
 
