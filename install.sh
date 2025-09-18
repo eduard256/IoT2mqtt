@@ -27,12 +27,6 @@ REPO_URL="https://github.com/eduard256/IoT2mqtt.git"
 BRANCH="main"
 LOG_FILE="/var/log/iot2mqtt-install.log"
 
-# Determine if stdout is a terminal to decide fancy UI
-USE_TPUT=0
-if command -v tput >/dev/null 2>&1 && [ -t 1 ]; then
-  USE_TPUT=1
-fi
-
 # Setup sudo if not root
 SUDO=""
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
@@ -46,7 +40,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   fi
 fi
 
-# Ensure log file directory exists
+# Ensure log file directory exists as the VERY first side-effect
 if [ -n "$SUDO" ]; then
   $SUDO mkdir -p "$(dirname "$LOG_FILE")" || true
   $SUDO touch "$LOG_FILE" || true
@@ -55,14 +49,38 @@ else
   : > "$LOG_FILE" || true
 fi
 
+echo "[installer] starting at $(date -Is)" >>"$LOG_FILE" 2>&1 || true
+
+# -------------- Error handling hooks --------------
+cleanup() {
+  [ ${CLEANED:-0} -eq 1 ] && return || true
+  CLEANED=1
+  show_cursor || true
+  printf "\n\n%bInstallation log:%b %s\n" "$DIM" "$RESET" "$LOG_FILE"
+}
+trap cleanup EXIT
+
+on_error() {
+  local line=$1; local cmd=$2
+  printf "\n%s\n" "ERROR: line ${line}: ${cmd}" >>"$LOG_FILE" 2>&1 || true
+  printf "\nInstallation failed. See log: %s\n" "$LOG_FILE" 1>&2
+}
+trap 'on_error $LINENO "$BASH_COMMAND"' ERR
+
+# Determine if stdout is a terminal to decide fancy UI
+USE_TPUT=0
+if command -v tput >/dev/null 2>&1 && [ -t 1 ]; then
+  USE_TPUT=1
+fi
+
 # -------------- UI Helpers --------------
 term_rows() { if [ "$USE_TPUT" -eq 1 ]; then tput lines; else echo 24; fi; }
 term_cols() { if [ "$USE_TPUT" -eq 1 ]; then tput cols; else echo 80; fi; }
 
-hide_cursor() { [ "$USE_TPUT" -eq 1 ] && tput civis || true; }
-show_cursor() { [ "$USE_TPUT" -eq 1 ] && tput cnorm || true; }
-move_to() { [ "$USE_TPUT" -eq 1 ] && tput cup "$1" "$2" || true; }
-clear_screen() { [ "$USE_TPUT" -eq 1 ] && tput clear || printf "\n%.0s" {1..3}; }
+hide_cursor() { [ "$USE_TPUT" -eq 1 ] && tput civis 2>/dev/null || true; }
+show_cursor() { [ "$USE_TPUT" -eq 1 ] && tput cnorm 2>/dev/null || true; }
+move_to() { [ "$USE_TPUT" -eq 1 ] && tput cup "$1" "$2" 2>/dev/null || true; }
+clear_screen() { [ "$USE_TPUT" -eq 1 ] && tput clear 2>/dev/null || printf "\n%.0s" {1..3}; }
 
 draw_logo() {
   local cols=$(term_cols)
@@ -141,13 +159,11 @@ finalize_progress() {
 start_snake_game() {
 (
   set +Eeuo pipefail
-  if [[ -z $BASH_VERSION ]]; then exec bash "$0"; fi
-
   # visuals
   [ "$USE_TPUT" -eq 1 ] || exit 0
 
-  trap 'tput cnorm; exit 0' EXIT
-  trap 'tput cnorm; exit 0' INT
+  trap 'tput cnorm 2>/dev/null; exit 0' EXIT
+  trap 'tput cnorm 2>/dev/null; exit 0' INT
 
   local cols=28
   local rows=12
@@ -302,9 +318,16 @@ start_snake_game() {
     kill -s ALRM $$ &>/dev/null
     # input loop
     while :; do
-      if ! IFS= read -rsn1 -t 0.02 key; then key=""; fi
-      # game loop driven by ALRM; check if lost (tick returned 1)
-      : # no-op here
+      # try to read from /dev/tty if stdin is not a tty (curl | bash case)
+      if [ -t 0 ]; then
+        IFS= read -rsn1 -t 0.02 key || key=""
+      elif [ -r /dev/tty ]; then
+        IFS= read -rsn1 -t 0.02 key </dev/tty || key=""
+      else
+        sleep 0.02
+        key=""
+      fi
+      :
     done
   done
 )
@@ -429,60 +452,54 @@ compose_cmd() {
 
 # -------------- Cleanup traps --------------
 CLEANED=0
-cleanup() {
-  [ $CLEANED -eq 1 ] && return || true
-  CLEANED=1
-  finalize_progress || true
-  show_cursor || true
+finalize_cleanup() {
+  # Final tidy and terminate snake if running
   if [ -n "${SNAKE_PID:-}" ] && kill -0 "$SNAKE_PID" >/dev/null 2>&1; then
     kill "$SNAKE_PID" >/dev/null 2>&1 || true
   fi
-  printf "\n\n%bInstallation log:%b %s\n" "$DIM" "$RESET" "$LOG_FILE"
 }
-trap cleanup EXIT
-
-on_error() {
-  local line=$1; local cmd=$2
-  move_to $(( $(progress_row)+4 )) 0
-  printf "%bError at line %s:%b %s\nSee log: %s\n" "$FG_RED$BOLD" "$line" "$RESET" "$cmd" "$LOG_FILE"
-}
-trap 'on_error $LINENO "$BASH_COMMAND"' ERR
 
 # -------------- Begin --------------
-clear_screen
-hide_cursor
+clear_screen || true
+hide_cursor || true
 
-draw_logo
-draw_progress 1 "Starting installer"
+if [ "$USE_TPUT" -eq 1 ]; then
+  draw_logo || true
+  draw_progress 1 "Starting installer" || true
+else
+  printf "IoT2MQTT installer starting...\n" | tee -a "$LOG_FILE" >/dev/null 2>&1 || true
+fi
 
 # Start snake game in background (non-blocking)
-start_snake_game &
-SNAKE_PID=$!
+if [ "$USE_TPUT" -eq 1 ]; then
+  start_snake_game &
+  SNAKE_PID=$!
+fi
 
 # Step 1: Preflight
-increment_progress 1 "Checking system"
+if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Checking system"; fi
 
 # Ensure curl exists (it does, because we used curl), git may be missing
 PM=$(detect_pkg_manager)
 if ! command -v git >/dev/null 2>&1; then
-  increment_progress 1 "Installing git"
+  if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Installing git"; fi
   pkg_install "$PM" git || true
 fi
 
 # Step 2: Install Docker
 if ! command -v docker >/dev/null 2>&1; then
-  increment_progress 1 "Installing Docker"
+  if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Installing Docker"; fi
   ensure_docker || {
     move_to $(( $(progress_row)+3 )) 0
     printf "%bError:%b failed to install Docker. See %s\n" "$FG_RED$BOLD" "$RESET" "$LOG_FILE"
     exit 1
   }
 else
-  increment_progress 1 "Docker found"
+  if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Docker found"; fi
 fi
 
 # Step 3: Start Docker
-increment_progress 1 "Starting Docker"
+if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Starting Docker"; fi
 start_docker_service
 
 # Wait for Docker up
@@ -494,11 +511,11 @@ if ! docker info >>"$LOG_FILE" 2>&1; then
 fi
 
 # Step 4: Ensure Compose
-increment_progress 1 "Installing Compose"
+if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Installing Compose"; fi
 ensure_compose || true
 
 # Step 5: Clone/Update repo
-increment_progress 1 "Preparing files"
+if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Preparing files"; fi
 if [ -d "$INSTALL_DIR/.git" ]; then
   ( cd "$INSTALL_DIR" && git fetch --depth 1 origin "$BRANCH" >>"$LOG_FILE" 2>&1 && git reset --hard "origin/$BRANCH" >>"$LOG_FILE" 2>&1 ) || true
 else
@@ -508,7 +525,7 @@ else
 fi
 
 # Step 6: .env and dirs
-increment_progress 1 "Configuring"
+if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Configuring"; fi
 mkdir -p "$INSTALL_DIR/secrets" "$INSTALL_DIR/connectors" "$INSTALL_DIR/shared" || true
 if [ ! -f "$INSTALL_DIR/.env" ]; then
   WEB_PORT=${WEB_PORT:-$WEB_PORT_DEFAULT}
@@ -534,12 +551,12 @@ EOF
 fi
 
 # Step 7: Build images
-increment_progress 1 "Building containers"
+if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Building containers"; fi
 COMPOSE_CMD=$(compose_cmd)
 ( cd "$INSTALL_DIR" && $COMPOSE_CMD build >>"$LOG_FILE" 2>&1 ) || true
 
 # Step 8: Up
-increment_progress 1 "Starting services"
+if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Starting services"; fi
 ( cd "$INSTALL_DIR" && $COMPOSE_CMD up -d >>"$LOG_FILE" 2>&1 ) || {
   move_to $(( $(progress_row)+3 )) 0
   printf "%bError:%b failed to start services. See %s\n" "$FG_RED$BOLD" "$RESET" "$LOG_FILE"
@@ -547,7 +564,7 @@ increment_progress 1 "Starting services"
 }
 
 # Step 9: Healthcheck
-increment_progress 1 "Warming up"
+if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Warming up"; fi
 WEB_PORT="$(grep -E '^WEB_PORT=' "$INSTALL_DIR/.env" | head -n1 | cut -d= -f2 | tr -d '\r' | tr -d ' ')"
 [ -n "$WEB_PORT" ] || WEB_PORT=$WEB_PORT_DEFAULT
 HEALTH_URL="http://127.0.0.1:${WEB_PORT}/api/health"
@@ -556,23 +573,26 @@ for i in $(seq 1 120); do
   sleep 1
 done
 
-finalize_progress
+if [ "$USE_TPUT" -eq 1 ]; then finalize_progress; fi
 
 # -------------- Success Output --------------
 APP_IP=$(lan_ip)
 URL="http://${APP_IP}:${WEB_PORT}"
 
-move_to $(( $(game_top_row) - 2 )) 0
-printf "\n%b══════════════════════════════════════════════════════════════%b\n" "$FG_GREEN$BOLD" "$RESET"
-printf "%b IoT2MQTT is up and running! %b\n" "$FG_GREEN$BOLD" "$RESET"
-printf "%b Web: %b%s%b\n" "$FG_BR_WHITE$BOLD" "$FG_BR_CYAN$UNDERLINE" "$URL" "$RESET"
-printf "%b Containers restart automatically on boot. %b\n" "$FG_BR_WHITE$DIM" "$RESET"
-printf "%b══════════════════════════════════════════════════════════════%b\n" "$FG_GREEN$BOLD" "$RESET"
+if [ "$USE_TPUT" -eq 1 ]; then
+  move_to $(( $(game_top_row) - 2 )) 0
+  printf "\n%b══════════════════════════════════════════════════════════════%b\n" "$FG_GREEN$BOLD" "$RESET"
+  printf "%b IoT2MQTT is up and running! %b\n" "$FG_GREEN$BOLD" "$RESET"
+  printf "%b Web: %b%s%b\n" "$FG_BR_WHITE$BOLD" "$FG_BR_CYAN$UNDERLINE" "$URL" "$RESET"
+  printf "%b Containers restart automatically on boot. %b\n" "$FG_BR_WHITE$DIM" "$RESET"
+  printf "%b══════════════════════════════════════════════════════════════%b\n" "$FG_GREEN$BOLD" "$RESET"
+else
+  printf "IoT2MQTT is up. Web: %s\n" "$URL"
+fi
 
 # Keep the snake running for a bit so user can play; then exit.
-sleep 3
-if kill -0 "$SNAKE_PID" >/dev/null 2>&1; then
-  # Let the user enjoy for a short time more, then stop gracefully
+sleep 1
+if [ -n "${SNAKE_PID:-}" ] && kill -0 "$SNAKE_PID" >/dev/null 2>&1; then
   sleep 5 || true
   kill "$SNAKE_PID" >/dev/null 2>&1 || true
 fi
