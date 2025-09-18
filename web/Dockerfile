@@ -12,7 +12,7 @@ RUN npm install
 # Copy the rest of the frontend source
 COPY frontend/ .
 
-# Ensure TS/Vite configs exist even if missing in context
+# Ensure TS/Vite configs and critical assets exist even if missing in context
 RUN set -eux; \
     if [ ! -f tsconfig.json ]; then \
       printf '%s\n' '{' \
@@ -51,6 +51,16 @@ RUN set -eux; \
       printf '%s\n' "import { defineConfig } from 'vite'" \
         "import react from '@vitejs/plugin-react'" \
         "export default defineConfig({ plugins: [react()] })" > vite.config.ts; \
+    fi; \
+    mkdir -p src/i18n/locales src/lib; \
+    if [ ! -f src/i18n/locales/en.json ]; then echo '{"app":"IoT2MQTT","welcome":"Welcome"}' > src/i18n/locales/en.json; fi; \
+    if [ ! -f src/i18n/locales/ru.json ]; then echo '{"app":"IoT2MQTT","welcome":"Добро пожаловать"}' > src/i18n/locales/ru.json; fi; \
+    if [ ! -f src/i18n/locales/zh.json ]; then echo '{"app":"IoT2MQTT","welcome":"欢迎"}' > src/i18n/locales/zh.json; fi; \
+    if [ ! -f src/lib/utils.ts ]; then \
+      printf '%s\n' "import { type ClassValue, clsx } from 'clsx'" \
+        "import { twMerge } from 'tailwind-merge'" \
+        "export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }" \
+        > src/lib/utils.ts; \
     fi
 
 # Build frontend (fallback to vite if local script runs tsc and fails)
