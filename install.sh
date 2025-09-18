@@ -5,6 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh | bash
 
 set -Eeuo pipefail
+set -o errtrace
 
 # -------------- Styling --------------
 ESC="\033"
@@ -48,13 +49,15 @@ fi
 # Ensure log file directory exists
 if [ -n "$SUDO" ]; then
   $SUDO mkdir -p "$(dirname "$LOG_FILE")" || true
+  $SUDO touch "$LOG_FILE" || true
 else
   mkdir -p "$(dirname "$LOG_FILE")" || true
+  : > "$LOG_FILE" || true
 fi
 
 # -------------- UI Helpers --------------
-term_rows() { ${USE_TPUT:+tput lines} || echo 24; }
-term_cols() { ${USE_TPUT:+tput cols} || echo 80; }
+term_rows() { if [ "$USE_TPUT" -eq 1 ]; then tput lines; else echo 24; fi; }
+term_cols() { if [ "$USE_TPUT" -eq 1 ]; then tput cols; else echo 80; fi; }
 
 hide_cursor() { [ "$USE_TPUT" -eq 1 ] && tput civis || true; }
 show_cursor() { [ "$USE_TPUT" -eq 1 ] && tput cnorm || true; }
@@ -63,8 +66,8 @@ clear_screen() { [ "$USE_TPUT" -eq 1 ] && tput clear || printf "\n%.0s" {1..3}; 
 
 draw_logo() {
   local cols=$(term_cols)
-  local logo=""
-  read -r -d '' logo <<'EOF'
+  local logo
+  logo=$(cat <<'EOF'
 ██╗ ██████╗ ████████╗    ██████╗     ███╗   ███╗ ██████╗
 ██║██╔═══██╗╚══██╔══╝    ╚════██╗    ████╗ ████║██╔═══██╗
 ██║██║   ██║   ██║         █████╔╝    ██╔████╔██║██║   ██║
@@ -72,6 +75,7 @@ draw_logo() {
 ██║╚██████╔╝   ██║        ███████╗    ██║ ╚═╝ ██║╚██████╔╝
 ╚═╝ ╚═════╝    ╚═╝        ╚══════╝    ╚═╝     ╚═╝ ╚══▀▀═╝
 EOF
+)
   # Center the logo
   local line
   local row=1
@@ -436,6 +440,13 @@ cleanup() {
   printf "\n\n%bInstallation log:%b %s\n" "$DIM" "$RESET" "$LOG_FILE"
 }
 trap cleanup EXIT
+
+on_error() {
+  local line=$1; local cmd=$2
+  move_to $(( $(progress_row)+4 )) 0
+  printf "%bError at line %s:%b %s\nSee log: %s\n" "$FG_RED$BOLD" "$line" "$RESET" "$cmd" "$LOG_FILE"
+}
+trap 'on_error $LINENO "$BASH_COMMAND"' ERR
 
 # -------------- Begin --------------
 clear_screen
