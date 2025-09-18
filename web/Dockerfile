@@ -5,11 +5,16 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy frontend package files
+# Copy frontend package files and install deps
 COPY frontend/package.json ./
 RUN npm install
 
-# Copy frontend source
+# Ensure TS/Vite configs exist (some build contexts may miss globbed files)
+COPY frontend/tsconfig.json ./
+COPY frontend/tsconfig.node.json ./
+COPY frontend/vite.config.ts ./
+
+# Copy the rest of the frontend source
 COPY frontend/ .
 
 # Build frontend
