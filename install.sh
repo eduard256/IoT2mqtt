@@ -73,7 +73,7 @@ is_lxc_env() {
   fi
   grep -qa 'container=lxc' /proc/1/environ 2>/dev/null && return 0
   grep -qa '/lxc/' /proc/1/cgroup 2>/dev/null && return 0
-  return 0
+  return 1
 }
 
 # Detect piped stdin (curl | bash) and LXC to decide on UI/game usage
@@ -540,6 +540,12 @@ else
   git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" >>"$LOG_FILE" 2>&1
 fi
 
+# Log directory content for troubleshooting
+{
+  echo "[debug] INSTALL_DIR=$INSTALL_DIR"
+  ls -la "$INSTALL_DIR"
+} >>"$LOG_FILE" 2>&1 || true
+
 # Step 6: .env and dirs
 if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Configuring"; fi
 mkdir -p "$INSTALL_DIR/secrets" "$INSTALL_DIR/connectors" "$INSTALL_DIR/shared" || true
@@ -569,11 +575,20 @@ fi
 # Step 7: Build images
 if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Building containers"; fi
 COMPOSE_CMD=$(compose_cmd)
-( cd "$INSTALL_DIR" && $COMPOSE_CMD build >>"$LOG_FILE" 2>&1 ) || true
+# Determine compose file explicitly
+COMPOSE_FILE=""
+for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+  if [ -f "$INSTALL_DIR/$f" ]; then COMPOSE_FILE="$f"; break; fi
+done
+if [ -z "$COMPOSE_FILE" ]; then
+  echo "[error] no compose file found in $INSTALL_DIR" >>"$LOG_FILE"
+else
+  ( cd "$INSTALL_DIR" && $COMPOSE_CMD -f "$COMPOSE_FILE" build >>"$LOG_FILE" 2>&1 ) || true
+fi
 
 # Step 8: Up
 if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Starting services"; fi
-( cd "$INSTALL_DIR" && $COMPOSE_CMD up -d >>"$LOG_FILE" 2>&1 ) || {
+( cd "$INSTALL_DIR" && $COMPOSE_CMD ${COMPOSE_FILE:+-f "$COMPOSE_FILE"} up -d >>"$LOG_FILE" 2>&1 ) || {
   move_to $(( $(progress_row)+3 )) 0
   printf "%bError:%b failed to start services. See %s\n" "$FG_RED$BOLD" "$RESET" "$LOG_FILE"
   exit 1
