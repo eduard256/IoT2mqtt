@@ -575,6 +575,14 @@ fi
 # Step 7: Build images
 if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Building containers"; fi
 COMPOSE_CMD=$(compose_cmd)
+# Detect rootless Docker socket path
+if [ -n "${DOCKER_HOST:-}" ] && echo "$DOCKER_HOST" | grep -q '^unix://'; then
+  export DOCKER_SOCK_PATH="${DOCKER_HOST#unix://}"
+elif [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "${XDG_RUNTIME_DIR}/docker.sock" ]; then
+  export DOCKER_SOCK_PATH="${XDG_RUNTIME_DIR}/docker.sock"
+else
+  export DOCKER_SOCK_PATH="/var/run/docker.sock"
+fi
 # Determine compose file explicitly
 COMPOSE_FILE=""
 for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
@@ -583,12 +591,12 @@ done
 if [ -z "$COMPOSE_FILE" ]; then
   echo "[error] no compose file found in $INSTALL_DIR" >>"$LOG_FILE"
 else
-  ( cd "$INSTALL_DIR" && $COMPOSE_CMD -f "$COMPOSE_FILE" build >>"$LOG_FILE" 2>&1 ) || true
+  ( cd "$INSTALL_DIR" && env DOCKER_SOCK_PATH="$DOCKER_SOCK_PATH" $COMPOSE_CMD -f "$COMPOSE_FILE" build >>"$LOG_FILE" 2>&1 ) || true
 fi
 
 # Step 8: Up
 if [ "$USE_TPUT" -eq 1 ]; then increment_progress 1 "Starting services"; fi
-( cd "$INSTALL_DIR" && $COMPOSE_CMD ${COMPOSE_FILE:+-f "$COMPOSE_FILE"} up -d >>"$LOG_FILE" 2>&1 ) || {
+( cd "$INSTALL_DIR" && env DOCKER_SOCK_PATH="$DOCKER_SOCK_PATH" $COMPOSE_CMD ${COMPOSE_FILE:+-f "$COMPOSE_FILE"} up -d >>"$LOG_FILE" 2>&1 ) || {
   move_to $(( $(progress_row)+3 )) 0
   printf "%bError:%b failed to start services. See %s\n" "$FG_RED$BOLD" "$RESET" "$LOG_FILE"
   exit 1

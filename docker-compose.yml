@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  web:
+    build: ./web
+    container_name: iot2mqtt_web
+    ports:
+      - "${WEB_PORT:-8765}:8765"
+    volumes:
+      - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock:rw  # Docker access (rootless compatible)
+      - ./connectors:/app/connectors:rw               # Connector definitions
+      - ./secrets:/app/secrets:rw                     # Secrets storage
+      - ./.env:/app/.env:rw                          # Environment config
+      - ./shared:/app/shared:ro                       # Shared libraries
+    environment:
+      - WEB_PORT=8765
+      - IOT2MQTT_PATH=/app
+      - NODE_ENV=production
+      - PYTHONUNBUFFERED=1
+      - TEST_RUNNER_URL=http://test-runner:8001      # Test runner service URL (service discovery)
+    networks:
+      - iot2mqtt
+    depends_on:
+      - test-runner
+    restart: unless-stopped
+    labels:
+      - "iot2mqtt.type=orchestrator"
+      - "iot2mqtt.version=2.0"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  test-runner:
+    build: ./test-runner
+    container_name: iot2mqtt_test_runner
+    # Use the same Docker network as web for service discovery
+    networks:
+      - iot2mqtt
+    volumes:
+      - ./connectors:/app/connectors:ro              # Read-only access to connectors
+      - ./shared:/app/shared:ro                      # Shared libraries
+    environment:
+      - TEST_RUNNER_PORT=8001
+      - PYTHONUNBUFFERED=1
+    restart: always                                  # Always running for tests
+    labels:
+      - "iot2mqtt.type=test-runner"
+      - "iot2mqtt.version=1.0"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  iot2mqtt:
+    driver: bridge
+    name: iot2mqtt_network
+
+# Volumes for persistent data (optional, uncomment if needed)
+# volumes:
+#   iot2mqtt_data:
+#     driver: local
