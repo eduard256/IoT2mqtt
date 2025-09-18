@@ -1,25 +1,21 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
+import HttpBackend from 'i18next-http-backend'
 
-import enTranslations from './locales/en.json'
-import ruTranslations from './locales/ru.json'
-import zhTranslations from './locales/zh.json'
-
+// Load translations from static files served from /locales/{{lng}}.json
+// Files are copied from web/frontend/public/locales into dist/locales by Vite.
 i18n
+  .use(HttpBackend)
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    resources: {
-      en: { translation: enTranslations },
-      ru: { translation: ruTranslations },
-      zh: { translation: zhTranslations }
+    backend: {
+      loadPath: '/locales/{{lng}}.json'
     },
     fallbackLng: 'en',
     debug: false,
-    interpolation: {
-      escapeValue: false
-    }
+    interpolation: { escapeValue: false }
   })
 
 export default i18n

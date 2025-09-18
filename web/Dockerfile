@@ -66,6 +66,11 @@ RUN set -eux; \
 # Build frontend (fallback to vite if local script runs tsc and fails)
 RUN npm run build || npx vite build
 
+# Ensure real i18n locales are available at runtime
+RUN set -eux; \
+    mkdir -p dist/locales; \
+    if [ -d src/i18n/locales ]; then cp -r src/i18n/locales/* dist/locales/; fi
+
 # Stage 2: Build backend
 FROM python:3.11-slim AS backend
 
