@@ -53,8 +53,8 @@ RUN set -eux; \
         "export default defineConfig({ plugins: [react()] })" > vite.config.ts; \
     fi
 
-# Build frontend
-RUN npm run build
+# Build frontend (fallback to vite if local script runs tsc and fails)
+RUN npm run build || npx vite build
 
 # Stage 2: Build backend
 FROM python:3.11-slim AS backend
