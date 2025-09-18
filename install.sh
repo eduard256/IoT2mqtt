@@ -67,10 +67,29 @@ on_error() {
 }
 trap 'on_error $LINENO "$BASH_COMMAND"' ERR
 
+is_lxc_env() {
+  if command -v systemd-detect-virt >/dev/null 2>&1; then
+    systemd-detect-virt -c 2>/dev/null | grep -qi "lxc" && return 0
+  fi
+  grep -qa 'container=lxc' /proc/1/environ 2>/dev/null && return 0
+  grep -qa '/lxc/' /proc/1/cgroup 2>/dev/null && return 0
+  return 0
+}
+
+# Detect piped stdin (curl | bash) and LXC to decide on UI/game usage
+PIPE_STDIN=0
+[ -p /dev/stdin ] && PIPE_STDIN=1
+
 # Determine if stdout is a terminal to decide fancy UI
 USE_TPUT=0
 if command -v tput >/dev/null 2>&1 && [ -t 1 ]; then
   USE_TPUT=1
+fi
+
+# Decide if we should run the game
+IOT2MQTT_NO_GAME=${IOT2MQTT_NO_GAME:-0}
+if [ "$PIPE_STDIN" -eq 1 ] || is_lxc_env; then
+  IOT2MQTT_NO_GAME=1
 fi
 
 # -------------- UI Helpers --------------
@@ -468,7 +487,7 @@ else
 fi
 
 # Start snake game in background (non-blocking)
-if [ "$USE_TPUT" -eq 1 ] && can_use_game; then
+if [ "$USE_TPUT" -eq 1 ] && [ "${IOT2MQTT_NO_GAME}" != "1" ] && can_use_game; then
   start_snake_game &
   SNAKE_PID=$!
 fi
