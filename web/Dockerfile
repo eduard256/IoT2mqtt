@@ -9,13 +9,49 @@ WORKDIR /app/frontend
 COPY frontend/package.json ./
 RUN npm install
 
-# Ensure TS/Vite configs exist (some build contexts may miss globbed files)
-COPY frontend/tsconfig.json ./
-COPY frontend/tsconfig.node.json ./
-COPY frontend/vite.config.ts ./
-
 # Copy the rest of the frontend source
 COPY frontend/ .
+
+# Ensure TS/Vite configs exist even if missing in context
+RUN set -eux; \
+    if [ ! -f tsconfig.json ]; then \
+      printf '%s\n' '{' \
+        '  "compilerOptions": {' \
+        '    "target": "ES2020",' \
+        '    "useDefineForClassFields": true,' \
+        '    "lib": ["ES2020", "DOM", "DOM.Iterable"],' \
+        '    "module": "ESNext",' \
+        '    "skipLibCheck": true,' \
+        '    "moduleResolution": "bundler",' \
+        '    "allowImportingTsExtensions": true,' \
+        '    "resolveJsonModule": true,' \
+        '    "isolatedModules": true,' \
+        '    "noEmit": true,' \
+        '    "jsx": "react-jsx",' \
+        '    "strict": true,' \
+        '    "baseUrl": "."' \
+        '  },' \
+        '  "include": ["src"],' \
+        '  "references": [{ "path": "./tsconfig.node.json" }]' \
+        '}' > tsconfig.json; \
+    fi; \
+    if [ ! -f tsconfig.node.json ]; then \
+      printf '%s\n' '{' \
+        '  "compilerOptions": {' \
+        '    "composite": true,' \
+        '    "skipLibCheck": true,' \
+        '    "module": "ESNext",' \
+        '    "moduleResolution": "bundler",' \
+        '    "allowSyntheticDefaultImports": true' \
+        '  },' \
+        '  "include": ["vite.config.ts"]' \
+        '}' > tsconfig.node.json; \
+    fi; \
+    if [ ! -f vite.config.ts ]; then \
+      printf '%s\n' "import { defineConfig } from 'vite'" \
+        "import react from '@vitejs/plugin-react'" \
+        "export default defineConfig({ plugins: [react()] })" > vite.config.ts; \
+    fi
 
 # Build frontend
 RUN npm run build
