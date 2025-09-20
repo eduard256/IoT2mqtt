@@ -72,6 +72,10 @@ class DockerService:
         
         try:
             for container in self.client.containers.list(all=all):
+                # Skip the web container itself to prevent recursive log viewing
+                if container.name == "iot2mqtt_web":
+                    continue
+                    
                 # Filter by IoT2MQTT containers
                 if container.name.startswith(self.prefix) or "iot2mqtt" in container.labels.get("com.docker.compose.project", ""):
                     info = {
@@ -108,7 +112,27 @@ class DockerService:
         except Exception as e:
             logger.error(f"Error getting container {container_id}: {e}")
             return None
-    
+
+    def get_container_info(self, container_id: str) -> Optional[Dict[str, Any]]:
+        """Get lightweight container status information"""
+        container = self.get_container(container_id)
+        if not container:
+            return None
+
+        try:
+            container.reload()
+            state = container.attrs.get('State', {})
+            return {
+                "id": container.short_id,
+                "name": container.name,
+                "status": state.get('Status', container.status),
+                "created": container.attrs.get('Created'),
+                "labels": container.labels
+            }
+        except Exception as e:
+            logger.error(f"Error inspecting container {container_id}: {e}")
+            return None
+
     def start_container(self, container_id: str) -> bool:
         """Start a container"""
         container = self.get_container(container_id)

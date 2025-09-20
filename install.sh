@@ -114,12 +114,13 @@ draw_logo() {
   local cols=$(term_cols)
   local logo
   logo=$(cat <<'EOF'
-██╗ ██████╗ ████████╗    ██████╗     ███╗   ███╗ ██████╗
-██║██╔═══██╗╚══██╔══╝    ╚════██╗    ████╗ ████║██╔═══██╗
-██║██║   ██║   ██║         █████╔╝    ██╔████╔██║██║   ██║
-██║██║   ██║   ██║        ██╔═══╝     ██║╚██╔╝██║██║▄▄ ██║
-██║╚██████╔╝   ██║        ███████╗    ██║ ╚═╝ ██║╚██████╔╝
-╚═╝ ╚═════╝    ╚═╝        ╚══════╝    ╚═╝     ╚═╝ ╚══▀▀═╝
+ ######     ####     ######    ######   ##    ##    ####     ######    ######  
+   ##      ##  ##      ##     ##   ##   ###  ###   ##  ##      ##        ##    
+   ##      ##  ##      ##         ##    ########   ##  ##      ##        ##    
+   ##      ##  ##      ##        ##     ## ## ##   ##  ##      ##        ##    
+   ##      ##  ##      ##       ##      ##    ##   ## ##       ##        ##    
+   ##      ##  ##      ##      ##       ##    ##    ####       ##        ##    
+ ######     ####       ##     ######    ##    ##       ##      ##        ##    
 EOF
 )
   # Center the logo
@@ -144,7 +145,8 @@ game_top_row() {
   # Leave space for logo and progress, then center game vertically
   local rows=$(term_rows)
   local game_rows=14
-  local top=$(( ($(progress_row) + 3) + (rows - (progress_row + 3) - game_rows) / 2 ))
+  local progress_line=$(progress_row)
+  local top=$(( (progress_line + 3) + (rows - (progress_line + 3) - game_rows) / 2 ))
   [ $top -lt 10 ] && top=10
   echo $top
 }
@@ -590,8 +592,15 @@ for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
 done
 if [ -z "$COMPOSE_FILE" ]; then
   echo "[error] no compose file found in $INSTALL_DIR" >>"$LOG_FILE"
-else
-  ( cd "$INSTALL_DIR" && env DOCKER_SOCK_PATH="$DOCKER_SOCK_PATH" $COMPOSE_CMD -f "$COMPOSE_FILE" build >>"$LOG_FILE" 2>&1 ) || true
+  move_to $(( $(progress_row)+3 )) 0
+  printf "%bError:%b compose file not found in %s\n" "$FG_RED$BOLD" "$RESET" "$INSTALL_DIR"
+  exit 1
+fi
+
+if ! ( cd "$INSTALL_DIR" && env DOCKER_SOCK_PATH="$DOCKER_SOCK_PATH" $COMPOSE_CMD -f "$COMPOSE_FILE" build >>"$LOG_FILE" 2>&1 ); then
+  move_to $(( $(progress_row)+3 )) 0
+  printf "%bError:%b failed to build Docker images. See %s\n" "$FG_RED$BOLD" "$RESET" "$LOG_FILE"
+  exit 1
 fi
 
 # Step 8: Up

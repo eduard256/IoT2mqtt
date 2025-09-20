@@ -51,6 +51,99 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "copied": "Copied"
+  },
+  "auth": {
+    "title": "Welcome to IoT2MQTT",
+    "subtitle": "Enter your access key to continue",
+    "access_key": "Access Key",
+    "login": "Login",
+    "invalid_key": "Invalid access key",
+    "first_time": "First time setup - this key will be saved"
+  },
+  "setup": {
+    "mqtt": {
+      "title": "MQTT Configuration",
+      "description": "Configure connection to your MQTT broker",
+      "host": "Host",
+      "port": "Port",
+      "username": "Username",
+      "password": "Password",
+      "base_topic": "Base Topic",
+      "test_connection": "Test Connection",
+      "testing": "Testing...",
+      "connection_success": "Connection successful",
+      "connection_failed": "Connection failed"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "integrations": "Integrations",
+    "devices": "Devices",
+    "add_integration": "Add Integration",
+    "system_status": "System Status",
+    "mqtt_status": "MQTT Status",
+    "containers_running": "Containers Running",
+    "total_devices": "Total Devices"
+  },
+  "integrations": {
+    "title": "Integrations",
+    "search_placeholder": "Search integrations...",
+    "add_new": "Add New Integration",
+    "configure": "Configure",
+    "instances": "{{count}} instance",
+    "instances_plural": "{{count}} instances",
+    "no_instances": "No instances",
+    "setup": "Setup",
+    "manage": "Manage"
+  },
+  "devices": {
+    "title": "Devices",
+    "control": "Device Control",
+    "state": "State",
+    "commands": "Commands",
+    "telemetry": "Telemetry",
+    "brightness": "Brightness",
+    "color_temp": "Color Temperature",
+    "rgb_color": "RGB Color",
+    "power": "Power",
+    "on": "On",
+    "off": "Off"
+  },
+  "mqtt_explorer": {
+    "title": "MQTT Explorer",
+    "topics": "Topics",
+    "publish": "Publish",
+    "subscribe": "Subscribe",
+    "retained": "Retained",
+    "qos": "QoS",
+    "payload": "Payload",
+    "topic": "Topic",
+    "value": "Value",
+    "timestamp": "Timestamp",
+    "command_encyclopedia": "Command Encyclopedia",
+    "payload_copied": "Payload copied to clipboard",
+    "insert_hint": "Click any command to insert it into the payload field"
+  },
+  "containers": {
+    "title": "Containers",
+    "logs": "Logs",
+    "status": "Status",
+    "running": "Running",
+    "stopped": "Stopped",
+    "actions": "Actions",
+    "view_logs": "View Logs",
+    "clear_logs": "Clear",
+    "follow_logs": "Follow",
+    "filter_level": "Filter by level"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "language": "Language",
+    "dark_mode": "Dark Mode",
+    "light_mode": "Light Mode",
+    "system": "System"
   }
 }

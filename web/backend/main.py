@@ -668,7 +668,11 @@ if os.path.exists("/app/frontend/dist"):
     # Serve static assets
     if os.path.exists("/app/frontend/dist/assets"):
         app.mount("/assets", StaticFiles(directory="/app/frontend/dist/assets"), name="assets")
-    
+
+    # Serve localization files for i18next
+    if os.path.exists("/app/frontend/dist/locales"):
+        app.mount("/locales", StaticFiles(directory="/app/frontend/dist/locales"), name="locales")
+
     # Mount icons directory for PWA icons
     if os.path.exists("/app/frontend/dist/icons"):
         app.mount("/icons", StaticFiles(directory="/app/frontend/dist/icons"), name="icons")

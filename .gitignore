@@ -40,13 +40,11 @@ env/
 secrets/
 *.secret
 
-# ВСЕ конфигурации инстансов/устройств - НИКОГДА не коммитить!
+# Конфигурации инстансов/устройств генерируются на хосте
 connectors/*/instances/
 instances/
-**/*.json
-!package.json
-!tsconfig.json
-!composer.json
+discovered_devices.json
+discovery_config.json
 
 # Docker compose с настройками
 docker-compose.yml

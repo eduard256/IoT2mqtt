@@ -11,9 +11,14 @@ i18n
   .use(initReactI18next)
   .init({
     backend: {
-      loadPath: '/locales/{{lng}}.json'
+      loadPath: '/locales/{{lng}}.json',
+      requestOptions: {
+        cache: 'no-store'
+      }
     },
+    supportedLngs: ['en', 'ru', 'zh'],
     fallbackLng: 'en',
+    load: 'currentOnly',
     debug: false,
     interpolation: { escapeValue: false }
   })
