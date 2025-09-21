@@ -1,0 +1,199 @@
+{
+  "version": "1.0.0",
+  "display_name": "Yeelight",
+  "description": "Control Yeelight smart bulbs and ceiling lights",
+  "icon": "💡",
+  "author": "IoT2MQTT",
+  "branding": {
+    "icon": "/assets/brands/yeelight.svg",
+    "color": "#FFA500",
+    "background": "linear-gradient(135deg, #FFA500 0%, #FF6B6B 100%)",
+    "category": "lighting"
+  },
+  "wizard_steps": [
+    {
+      "id": "basic",
+      "title": "Basic Configuration",
+      "description": "Configure instance name and discovery settings"
+    },
+    {
+      "id": "discovery",
+      "title": "Device Discovery",
+      "description": "Search for Yeelight devices on your network"
+    },
+    {
+      "id": "advanced",
+      "title": "Advanced Settings",
+      "description": "Optional advanced configuration"
+    }
+  ],
+  "fields": [
+    {
+      "step": "basic",
+      "type": "text",
+      "name": "instance_id",
+      "label": "Instance ID",
+      "description": "Unique identifier for this instance (e.g., 'home', 'office')",
+      "required": true,
+      "placeholder": "home",
+      "validation": {
+        "pattern": "^[a-z0-9_-]+$",
+        "message": "Only lowercase letters, numbers, underscore and dash allowed"
+      }
+    },
+    {
+      "step": "basic",
+      "type": "text",
+      "name": "friendly_name",
+      "label": "Friendly Name",
+      "description": "Human-readable name for this instance",
+      "required": true,
+      "placeholder": "My Home",
+      "default": ""
+    },
+    {
+      "step": "basic",
+      "type": "checkbox",
+      "name": "discovery_enabled",
+      "label": "Enable automatic device discovery",
+      "description": "Automatically discover new Yeelight devices on your network",
+      "default": true
+    },
+    {
+      "step": "basic",
+      "type": "number",
+      "name": "discovery_interval",
+      "label": "Discovery interval (seconds)",
+      "description": "How often to search for new devices",
+      "default": 300,
+      "min": 60,
+      "max": 3600,
+      "step": 60,
+      "depends_on": {
+        "discovery_enabled": true
+      }
+    },
+    {
+      "step": "basic",
+      "type": "select",
+      "name": "effect_type",
+      "label": "Default transition effect",
+      "description": "How lights transition between states",
+      "default": "smooth",
+      "options": [
+        { "value": "smooth", "label": "Smooth" },
+        { "value": "sudden", "label": "Sudden" }
+      ]
+    },
+    {
+      "step": "basic",
+      "type": "number",
+      "name": "duration",
+      "label": "Transition duration (ms)",
+      "description": "Time for transitions between states",
+      "default": 300,
+      "min": 30,
+      "max": 10000,
+      "step": 50
+    },
+    {
+      "step": "advanced",
+      "type": "number",
+      "name": "update_interval",
+      "label": "Update interval (seconds)",
+      "description": "How often to poll devices for state updates",
+      "default": 10,
+      "min": 1,
+      "max": 60,
+      "step": 1
+    },
+    {
+      "step": "advanced",
+      "type": "select",
+      "name": "telemetry_mode",
+      "label": "Telemetry mode",
+      "description": "How to send telemetry data to MQTT",
+      "default": "individual",
+      "options": [
+        { "value": "individual", "label": "Individual (each device separately)" },
+        { "value": "batch", "label": "Batch (all devices together)" }
+      ]
+    },
+    {
+      "step": "advanced",
+      "type": "checkbox",
+      "name": "ha_discovery",
+      "label": "Enable Home Assistant discovery",
+      "description": "Automatically configure devices in Home Assistant",
+      "default": false
+    },
+    {
+      "step": "advanced",
+      "type": "number",
+      "name": "max_retries",
+      "label": "Max retry attempts",
+      "description": "Maximum number of retries for failed commands",
+      "default": 3,
+      "min": 0,
+      "max": 10
+    },
+    {
+      "step": "advanced",
+      "type": "number",
+      "name": "retry_interval",
+      "label": "Retry interval (ms)",
+      "description": "Time to wait between retry attempts",
+      "default": 5000,
+      "min": 1000,
+      "max": 30000,
+      "step": 1000
+    }
+  ],
+  "discovery": {
+    "type": "network_scan",
+    "protocol": "tcp",
+    "port": 55443,
+    "timeout": 10,
+    "device_fields": [
+      {
+        "type": "text",
+        "name": "device_id",
+        "label": "Device ID",
+        "required": true,
+        "from_discovery": "id"
+      },
+      {
+        "type": "text",
+        "name": "friendly_name",
+        "label": "Device Name",
+        "required": true,
+        "from_discovery": "name"
+      },
+      {
+        "type": "ip",
+        "name": "ip",
+        "label": "IP Address",
+        "required": true,
+        "from_discovery": "ip"
+      },
+      {
+        "type": "text",
+        "name": "area",
+        "label": "Room/Area",
+        "required": false,
+        "placeholder": "Living Room"
+      }
+    ]
+  },
+  "requirements": {
+    "docker": true,
+    "network": "host",
+    "python": "3.11",
+    "libraries": ["yeelight"]
+  },
+  "secrets": [
+    "api_key",
+    "password",
+    "token"
+  ]
+}

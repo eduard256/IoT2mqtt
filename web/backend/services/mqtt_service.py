@@ -25,14 +25,19 @@ class MQTTService:
         self.subscriptions: Dict[str, Set[Callable]] = defaultdict(set)
         self.topic_cache: Dict[str, Any] = {}  # Cache latest values
         self.websocket_handlers: Set[Callable] = set()
-        self.loop = None
-        
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def attach_loop(self, loop: asyncio.AbstractEventLoop):
+        """Attach asyncio loop used for coroutine dispatch from MQTT thread"""
+        self.loop = loop
+
     def connect(self) -> bool:
         """Connect to MQTT broker"""
         try:
             # Create MQTT client
             client_id = f"{self.config['client_prefix']}_web"
             self.client = mqtt.Client(client_id=client_id)
+            self.client.reconnect_delay_set(min_delay=1, max_delay=30)
             
             # Set callbacks
             self.client.on_connect = self._on_connect
@@ -92,11 +97,23 @@ class MQTTService:
         self.connected = False
         if rc != 0:
             logger.warning(f"Unexpected MQTT disconnection (code {rc})")
+            if self.client:
+                try:
+                    self.client.reconnect()
+                except Exception as exc:
+                    logger.error(f"Failed to reconnect to MQTT broker: {exc}")
     
     def _on_message(self, client, userdata, msg):
         """Callback for incoming messages"""
         try:
             topic = msg.topic
+            
+            # Check if message is empty (topic deletion)
+            if len(msg.payload) == 0:
+                # Remove from cache
+                self.topic_cache.pop(topic, None)
+                self._dispatch_to_handlers(topic, None, msg.retain)
+                return
             
             # Parse payload
             try:
@@ -113,13 +130,7 @@ class MQTTService:
             }
             
             # Notify WebSocket clients
-            for handler in self.websocket_handlers:
-                try:
-                    # Call handler with update
-                    asyncio.create_task(handler(topic, payload, msg.retain))
-                except:
-                    # If not in async context, skip
-                    pass
+            self._dispatch_to_handlers(topic, payload, msg.retain)
                             
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}")
@@ -221,3 +232,113 @@ class MQTTService:
     def remove_websocket_handler(self, handler: Callable):
         """Remove WebSocket handler"""
         self.websocket_handlers.discard(handler)
+
+    def _dispatch_to_handlers(self, topic: str, payload: Any, retained: bool):
+        """Dispatch MQTT updates to registered async handlers"""
+        if not self.loop:
+            return
+
+        for handler in list(self.websocket_handlers):
+            try:
+                asyncio.run_coroutine_threadsafe(handler(topic, payload, retained), self.loop)
+            except Exception as exc:
+                logger.debug(f"Failed to dispatch MQTT message to handler: {exc}")
+    
+    def clear_instance_topics(self, instance_id: str):
+        """
+        Completely clear all MQTT topics for an instance.
+        Publishes empty retained messages to remove them from broker.
+        """
+        if not self.connected:
+            logger.warning(f"Not connected, cannot clear topics for {instance_id}")
+            return False
+        
+        try:
+            base_topic = self.config.get('base_topic', 'IoT2mqtt')
+            instance_base = f"{base_topic}/v1/instances/{instance_id}"
+            
+            # Find all topics for this instance in cache
+            topics_to_clear = []
+            for topic in self.topic_cache.keys():
+                if topic.startswith(instance_base):
+                    topics_to_clear.append(topic)
+            
+            # Clear each topic by publishing empty retained message
+            for topic in topics_to_clear:
+                self.client.publish(topic, "", retain=True, qos=0)
+                # Remove from cache
+                self.topic_cache.pop(topic, None)
+            
+            # Also clear common subtopics that might not be in cache
+            common_topics = [
+                f"{instance_base}/status",
+                f"{instance_base}/discovered",
+                f"{instance_base}/meta/info",
+                f"{instance_base}/meta/devices_list",
+                f"{instance_base}/groups",
+            ]
+            
+            for topic in common_topics:
+                self.client.publish(topic, "", retain=True, qos=0)
+            
+            # Clear all possible device topics (use wildcard pattern)
+            # We need to clear each device individually since MQTT doesn't support wildcard deletion
+            devices = self.get_instance_devices(instance_id)
+            for device_id in devices:
+                device_base = f"{instance_base}/devices/{device_id}"
+                device_topics = [
+                    f"{device_base}/state",
+                    f"{device_base}/availability",
+                    f"{device_base}/cmd",
+                    f"{device_base}/cmd/response",
+                    f"{device_base}/events",
+                    f"{device_base}/telemetry",
+                    f"{device_base}/error"
+                ]
+                for topic in device_topics:
+                    self.client.publish(topic, "", retain=True, qos=0)
+                
+                # Clear individual state properties
+                for topic in self.topic_cache.keys():
+                    if topic.startswith(f"{device_base}/state/"):
+                        self.client.publish(topic, "", retain=True, qos=0)
+            
+            logger.info(f"Cleared all MQTT topics for instance {instance_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error clearing topics for {instance_id}: {e}")
+            return False
+    
+    def clear_all_iot2mqtt_topics(self):
+        """
+        Clear ALL IoT2MQTT topics from the broker.
+        USE WITH CAUTION - this removes all data!
+        """
+        if not self.connected:
+            logger.warning("Not connected, cannot clear all topics")
+            return False
+        
+        try:
+            base_topic = self.config.get('base_topic', 'IoT2mqtt')
+            base_prefix = f"{base_topic}/"
+            
+            # Find all IoT2MQTT topics in cache
+            topics_to_clear = []
+            for topic in self.topic_cache.keys():
+                if topic.startswith(base_prefix):
+                    topics_to_clear.append(topic)
+            
+            # Clear each topic
+            cleared_count = 0
+            for topic in topics_to_clear:
+                self.client.publish(topic, "", retain=True, qos=0)
+                self.topic_cache.pop(topic, None)
+                cleared_count += 1
+            
+            logger.info(f"Cleared {cleared_count} IoT2MQTT topics from broker")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error clearing all topics: {e}")
+            return False

@@ -1,0 +1,25 @@
+# Xiaomi MiIO Connector Requirements
+
+# Core MiIO library
+python-miio>=0.5.12
+
+# Cloud integration (optional but recommended)
+micloud>=0.5
+
+# Network discovery
+zeroconf>=0.39.0
+
+# Async support
+asyncio>=3.4.3
+
+# Data classes (for older Python versions)
+dataclasses>=0.6 ; python_version < '3.7'
+
+# Cryptography for MiIO protocol
+cryptography>=3.4.8
+
+# Network utilities
+netifaces>=0.11.0
+
+# JSON handling
+jsonschema>=4.0.0

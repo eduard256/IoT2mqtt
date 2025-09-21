@@ -281,50 +281,101 @@ class Connector(BaseConnector):
         bulb = connection['bulb']
         
         try:
+            # Extract transition if present (applies to all changes)
+            transition = state.pop('transition', self.default_duration) if 'transition' in state else self.default_duration
+            
             # Process commands
             for key, value in state.items():
                 if key == 'power':
-                    if value:
-                        bulb.turn_on()
+                    if value == 'toggle':
+                        bulb.toggle()
+                        logger.info(f"Toggled {device_id} power")
+                    elif value:
+                        bulb.turn_on(duration=transition)
+                        logger.info(f"Set {device_id} power: on")
                     else:
-                        bulb.turn_off()
-                    logger.info(f"Set {device_id} power: {value}")
+                        bulb.turn_off(duration=transition)
+                        logger.info(f"Set {device_id} power: off")
                 
                 elif key == 'brightness':
-                    brightness = max(1, min(100, int(value)))
-                    bulb.set_brightness(brightness)
+                    # Handle relative changes
+                    if isinstance(value, str) and (value.startswith('+') or value.startswith('-')):
+                        current = self._get_current_brightness(device_id)
+                        brightness = current + int(value)
+                    else:
+                        brightness = int(value) if isinstance(value, str) else value
+                    
+                    brightness = max(1, min(100, brightness))
+                    bulb.set_brightness(brightness, duration=transition)
                     logger.info(f"Set {device_id} brightness: {brightness}")
                 
+                elif key == 'brightness_step':
+                    # Alternative relative brightness
+                    current = self._get_current_brightness(device_id)
+                    brightness = max(1, min(100, current + int(value)))
+                    bulb.set_brightness(brightness, duration=transition)
+                    logger.info(f"Adjusted {device_id} brightness by {value} to {brightness}")
+                
                 elif key == 'color_temp':
+                    # Handle relative changes
+                    if isinstance(value, str) and (value.startswith('+') or value.startswith('-')):
+                        current = self._get_current_color_temp(device_id)
+                        ct = current + int(value)
+                    else:
+                        ct = int(value) if isinstance(value, str) else value
+                    
                     # Yeelight expects kelvin (1700-6500)
-                    ct = max(1700, min(6500, int(value)))
-                    bulb.set_color_temp(ct)
+                    ct = max(1700, min(6500, ct))
+                    bulb.set_color_temp(ct, duration=transition)
                     logger.info(f"Set {device_id} color_temp: {ct}K")
                 
+                elif key == 'color':
+                    # New unified color handling
+                    color_data = self._parse_color_value(value)
+                    if color_data:
+                        if color_data[0] == 'rgb':
+                            r, g, b = color_data[1], color_data[2], color_data[3]
+                            bulb.set_rgb(r, g, b, duration=transition)
+                            logger.info(f"Set {device_id} RGB: ({r}, {g}, {b})")
+                        elif color_data[0] == 'hsv':
+                            h, s, v = color_data[1], color_data[2], color_data[3]
+                            # Note: Yeelight set_hsv doesn't use v, it uses current brightness
+                            if v != 100:
+                                bulb.set_brightness(v, duration=transition)
+                            bulb.set_hsv(h, s, duration=transition)
+                            logger.info(f"Set {device_id} HSV: ({h}, {s}, {v})")
+                    else:
+                        logger.warning(f"Invalid color format for {device_id}: {value}")
+                
                 elif key == 'rgb':
+                    # Keep backward compatibility
                     if isinstance(value, dict):
                         r, g, b = value['r'], value['g'], value['b']
                     else:
                         r, g, b = value
-                    bulb.set_rgb(r, g, b)
+                    bulb.set_rgb(r, g, b, duration=transition)
                     logger.info(f"Set {device_id} RGB: ({r}, {g}, {b})")
                 
                 elif key == 'hsv':
+                    # Keep backward compatibility
                     h = max(0, min(359, int(value['h'])))
                     s = max(0, min(100, int(value['s'])))
-                    bulb.set_hsv(h, s)
-                    logger.info(f"Set {device_id} HSV: ({h}, {s})")
+                    v = value.get('v', 100)
+                    if v != 100:
+                        bulb.set_brightness(v, duration=transition)
+                    bulb.set_hsv(h, s, duration=transition)
+                    logger.info(f"Set {device_id} HSV: ({h}, {s}, {v})")
                 
                 elif key == 'scene':
-                    self._apply_scene(bulb, value)
+                    self._apply_scene(bulb, value, transition)
                     logger.info(f"Applied scene '{value}' to {device_id}")
                 
                 elif key == 'effect':
-                    self._apply_effect(bulb, value)
+                    self._apply_effect(bulb, value, transition)
                     logger.info(f"Applied effect '{value}' to {device_id}")
                 
                 elif key == 'toggle':
-                    bulb.toggle()
+                    bulb.toggle(duration=transition)
                     logger.info(f"Toggled {device_id}")
                 
                 elif key == 'music_mode':
@@ -460,7 +511,58 @@ class Connector(BaseConnector):
         
         return capabilities
     
-    def _apply_scene(self, bulb: Bulb, scene: str):
+    def _parse_color_value(self, color_value):
+        """
+        Parse color from different formats (RGB dict, HEX string, HSV dict)
+        Returns tuple: (format, val1, val2, val3) or None
+        """
+        if isinstance(color_value, str) and color_value.startswith('#'):
+            # HEX to RGB
+            hex_color = color_value.lstrip('#')
+            if len(hex_color) == 6:
+                try:
+                    r = int(hex_color[0:2], 16)
+                    g = int(hex_color[2:4], 16)
+                    b = int(hex_color[4:6], 16)
+                    return ('rgb', r, g, b)
+                except ValueError:
+                    return None
+        elif isinstance(color_value, dict):
+            if 'r' in color_value and 'g' in color_value and 'b' in color_value:
+                # RGB format
+                return ('rgb', 
+                        max(0, min(255, int(color_value['r']))),
+                        max(0, min(255, int(color_value['g']))),
+                        max(0, min(255, int(color_value['b']))))
+            elif 'h' in color_value and 's' in color_value:
+                # HSV format
+                return ('hsv',
+                        max(0, min(359, int(color_value['h']))),
+                        max(0, min(100, int(color_value['s']))),
+                        max(0, min(100, int(color_value.get('v', 100)))))
+        return None
+    
+    def _get_current_brightness(self, device_id: str) -> int:
+        """
+        Get current brightness from cached state or device
+        """
+        if device_id in self.device_connections:
+            last_state = self.device_connections[device_id].get('last_state')
+            if last_state:
+                return last_state.get('brightness', 50)
+        return 50  # default
+    
+    def _get_current_color_temp(self, device_id: str) -> int:
+        """
+        Get current color temperature from cached state or device
+        """
+        if device_id in self.device_connections:
+            last_state = self.device_connections[device_id].get('last_state')
+            if last_state:
+                return last_state.get('color_temp', 4000)
+        return 4000  # default
+    
+    def _apply_scene(self, bulb: Bulb, scene: str, transition: int = 300):
         """
         Apply a predefined scene to the bulb
         """
@@ -485,7 +587,7 @@ class Connector(BaseConnector):
         else:
             logger.warning(f"Unknown scene: {scene}")
     
-    def _apply_effect(self, bulb: Bulb, effect: str):
+    def _apply_effect(self, bulb: Bulb, effect: str, transition: int = 300):
         """
         Apply a flow effect to the bulb
         """

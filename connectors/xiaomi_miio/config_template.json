@@ -1,0 +1,121 @@
+{
+  "instance_id": "xiaomi_home",
+  "connector_type": "xiaomi_miio",
+  "name": "Xiaomi MiIO Devices",
+  "description": "Complete Xiaomi MiIO device integration",
+  
+  "mqtt": {
+    "qos": 1,
+    "retain_state": true
+  },
+  
+  "discovery_enabled": true,
+  "discovery_interval": 300,
+  "update_interval": 15,
+  
+  "cloud_credentials": {
+    "username": "",
+    "password": "",
+    "country": "cn"
+  },
+  
+  "devices": [
+    {
+      "device_id": "vacuum_living",
+      "name": "Living Room Vacuum",
+      "enabled": true,
+      "host": "192.168.1.100",
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "roborock.vacuum.s5",
+      "update_interval": 15
+    },
+    {
+      "device_id": "purifier_bedroom",
+      "name": "Bedroom Air Purifier",
+      "enabled": true,
+      "host": "192.168.1.101",
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "zhimi.airpurifier.ma4",
+      "update_interval": 30
+    },
+    {
+      "device_id": "humidifier_office",
+      "name": "Office Humidifier",
+      "enabled": true,
+      "host": "192.168.1.102",
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "zhimi.humidifier.ca4",
+      "update_interval": 30
+    },
+    {
+      "device_id": "fan_bedroom",
+      "name": "Bedroom Fan",
+      "enabled": true,
+      "host": "192.168.1.103",
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "dmaker.fan.p10",
+      "update_interval": 30
+    },
+    {
+      "device_id": "light_desk",
+      "name": "Desk Light",
+      "enabled": true,
+      "host": "192.168.1.104",
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "philips.light.sread1",
+      "update_interval": 30
+    },
+    {
+      "device_id": "plug_tv",
+      "name": "TV Smart Plug",
+      "enabled": true,
+      "host": "192.168.1.105",
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "chuangmi.plug.v3",
+      "update_interval": 60
+    },
+    {
+      "device_id": "gateway_main",
+      "name": "Main Gateway",
+      "enabled": true,
+      "host": "192.168.1.106",
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "lumi.gateway.v3",
+      "update_interval": 30,
+      "use_cloud_subdevices": false
+    }
+  ],
+  
+  "groups": [
+    {
+      "group_id": "bedroom",
+      "name": "Bedroom Devices",
+      "devices": ["purifier_bedroom", "fan_bedroom"]
+    },
+    {
+      "group_id": "cleaning",
+      "name": "Cleaning Devices",
+      "devices": ["vacuum_living"]
+    }
+  ],
+  
+  "automations": [
+    {
+      "id": "auto_purifier",
+      "name": "Auto Purifier Control",
+      "enabled": true,
+      "trigger": {
+        "type": "air_quality",
+        "device": "purifier_bedroom",
+        "threshold": 100
+      },
+      "action": {
+        "device": "purifier_bedroom",
+        "command": {
+          "power": true,
+          "mode": "auto"
+        }
+      }
+    }
+  ]
+}

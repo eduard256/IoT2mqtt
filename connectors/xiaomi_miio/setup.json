@@ -24,6 +24,22 @@
       }
     },
     {
+      "id": "autogen",
+      "entry": "actions/autogen.py",
+      "timeout": 5,
+      "network": "none",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "integration": {"type": "string"},
+          "display_name": {"type": "string"},
+          "host": {"type": "string"},
+          "model": {"type": "string"}
+        },
+        "required": ["integration", "display_name", "host"]
+      }
+    },
+    {
       "id": "device_token_fetch",
       "entry": "actions/gettoken.py",
       "timeout": 30,
@@ -88,7 +104,8 @@
                 {"value": "ru", "label": "Russia"},
                 {"value": "sg", "label": "Singapore"},
                 {"value": "i2", "label": "India"}
-              ], "default": "cn"}
+              ], "default": "cn"},
+              {"name": "goto_manual", "type": "button", "label": "Manual Token", "placement": "footer", "variant": "ghost", "action": {"type": "goto_setup", "flow_id": "manual_setup"}}
             ]
           }
         },
@@ -170,12 +187,9 @@
           "title": "Manual Device Details",
           "schema": {
             "fields": [
-              {"name": "instance_id", "type": "text", "label": "Instance ID", "required": true, "validation": {"pattern": "^[a-z0-9_-]+$"}},
-              {"name": "friendly_name", "type": "text", "label": "Friendly Name", "required": true},
               {"name": "host", "type": "text", "label": "IP Address", "required": true},
               {"name": "token", "type": "password", "label": "Token (32 hex)", "required": true},
-              {"name": "model", "type": "text", "label": "Model", "required": false},
-              {"name": "name", "type": "text", "label": "Device Name", "required": true}
+              {"name": "goto_cloud", "type": "button", "label": "Cloud Setup", "placement": "footer", "variant": "ghost", "action": {"type": "goto_setup", "flow_id": "cloud_setup"}}
             ]
           }
         },
@@ -190,17 +204,28 @@
           "optional": true
         },
         {
+          "type": "run_tool",
+          "tool": "autogen",
+          "input": {
+            "integration": "xiaomi_miio",
+            "display_name": "Xiaomi MiIO",
+            "host": "{{ form.manual.host }}",
+            "model": "{{ tools.validation.result.model }}"
+          },
+          "output_key": "autogen"
+        },
+        {
           "type": "create_instance",
           "connector_type": "xiaomi_miio",
-          "instance_id": "{{ form.manual.instance_id }}",
-          "friendly_name": "{{ form.manual.friendly_name }}",
+          "instance_id": "{{ tools.autogen.result.instance_id }}",
+          "friendly_name": "{{ tools.autogen.result.friendly_name }}",
           "devices": [
             {
-              "device_id": "{{ form.manual.instance_id + '_' + form.manual.host.replace('.', '_') }}",
+              "device_id": "{{ tools.autogen.result.device_id }}",
               "host": "{{ form.manual.host }}",
               "token": "{{ form.manual.token }}",
-              "model": "{{ form.manual.model }}",
-              "name": "{{ form.manual.name }}",
+              "model": "{{ tools.autogen.result.model }}",
+              "name": "{{ tools.autogen.result.device_name }}",
               "enabled": true
             }
           ]

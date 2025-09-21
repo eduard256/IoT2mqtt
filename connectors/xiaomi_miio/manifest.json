@@ -1,0 +1,271 @@
+{
+  "domain": "xiaomi_miio",
+  "name": "Xiaomi MiIO",
+  "version": "1.0.0",
+  "author": "IoT2MQTT",
+  "documentation": "https://github.com/eduard256/IoT2mqtt/wiki/xiaomi-miio",
+  "requirements": ["python-miio>=0.5.12", "micloud>=0.5", "zeroconf>=0.39.0"],
+  "iot_class": "local_polling",
+  "integration_type": "device",
+  "supported_brands": ["Xiaomi", "Roborock", "Mijia", "Aqara", "Yeelight", "Deerma", "Smartmi", "Dreame", "Viomi"],
+  
+  "discovery": {
+    "supported": true,
+    "timeout": 30,
+    "network_mode": "host",
+    "cloud_support": true
+  },
+  
+  "manual_config": {
+    "fields": [
+      {
+        "name": "device_type",
+        "type": "select",
+        "label": "Device Type",
+        "required": true,
+        "options": [
+          {"value": "vacuum", "label": "Vacuum Cleaner"},
+          {"value": "airpurifier", "label": "Air Purifier"},
+          {"value": "fan", "label": "Fan"},
+          {"value": "humidifier", "label": "Humidifier"},
+          {"value": "light", "label": "Light"},
+          {"value": "switch", "label": "Smart Plug/Switch"},
+          {"value": "gateway", "label": "Gateway"},
+          {"value": "airfresh", "label": "Air Fresh"},
+          {"value": "airmonitor", "label": "Air Quality Monitor"}
+        ]
+      },
+      {
+        "name": "host",
+        "type": "ip",
+        "label": "IP Address",
+        "required": true,
+        "placeholder": "192.168.1.100",
+        "validation": {
+          "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$",
+          "message": "Please enter a valid IP address"
+        }
+      },
+      {
+        "name": "token",
+        "type": "password",
+        "label": "Device Token",
+        "required": true,
+        "placeholder": "32 character token",
+        "maxLength": 32,
+        "minLength": 32,
+        "validation": {
+          "pattern": "^[a-fA-F0-9]{32}$",
+          "message": "Token must be 32 hexadecimal characters"
+        }
+      },
+      {
+        "name": "model",
+        "type": "text",
+        "label": "Device Model",
+        "required": true,
+        "placeholder": "e.g., roborock.vacuum.s5",
+        "description": "Exact model identifier (e.g., roborock.vacuum.s5, zhimi.airpurifier.ma4)"
+      },
+      {
+        "name": "name",
+        "type": "text",
+        "label": "Device Name",
+        "required": true,
+        "placeholder": "Living Room Vacuum",
+        "maxLength": 50
+      },
+      {
+        "name": "update_interval",
+        "type": "number",
+        "label": "Update Interval (seconds)",
+        "default": 15,
+        "min": 5,
+        "max": 300,
+        "required": false
+      }
+    ]
+  },
+  
+  "cloud_config": {
+    "enabled": true,
+    "fields": [
+      {
+        "name": "cloud_username",
+        "type": "email",
+        "label": "Xiaomi Account Email",
+        "required": false,
+        "placeholder": "your@email.com"
+      },
+      {
+        "name": "cloud_password",
+        "type": "password",
+        "label": "Xiaomi Account Password",
+        "required": false
+      },
+      {
+        "name": "cloud_country",
+        "type": "select",
+        "label": "Server Region",
+        "options": [
+          {"value": "cn", "label": "China"},
+          {"value": "de", "label": "Germany"},
+          {"value": "us", "label": "USA"},
+          {"value": "ru", "label": "Russia"},
+          {"value": "sg", "label": "Singapore"},
+          {"value": "i2", "label": "India"}
+        ],
+        "default": "cn",
+        "required": false
+      }
+    ]
+  },
+  
+  "instance_config": {
+    "fields": [
+      {
+        "name": "instance_id",
+        "type": "text",
+        "label": "Instance ID",
+        "required": true,
+        "placeholder": "xiaomi_home",
+        "validation": {
+          "pattern": "^[a-z0-9_-]+$",
+          "message": "Only lowercase letters, numbers, underscore and dash allowed"
+        }
+      },
+      {
+        "name": "friendly_name",
+        "type": "text",
+        "label": "Friendly Name",
+        "required": true,
+        "placeholder": "Xiaomi Home Devices"
+      },
+      {
+        "name": "discovery_enabled",
+        "type": "checkbox",
+        "label": "Enable automatic device discovery",
+        "default": true,
+        "required": false
+      },
+      {
+        "name": "discovery_interval",
+        "type": "number",
+        "label": "Discovery Interval (seconds)",
+        "default": 300,
+        "min": 60,
+        "max": 3600,
+        "required": false,
+        "depends_on": {
+          "discovery_enabled": true
+        }
+      }
+    ]
+  },
+  
+  "branding": {
+    "icon": "🏠",
+    "color": "#FF6900",
+    "background": "linear-gradient(135deg, #FF6900 0%, #FCB900 100%)",
+    "category": "smart_home"
+  },
+  
+  "capabilities": [
+    "power",
+    "brightness",
+    "color_temp",
+    "rgb_color",
+    "fan_speed",
+    "modes",
+    "humidity",
+    "temperature",
+    "air_quality",
+    "battery",
+    "consumables",
+    "zones",
+    "segments",
+    "remote_control"
+  ],
+  
+  "device_types": [
+    {
+      "category": "vacuum",
+      "name": "Vacuum Cleaners",
+      "models": [
+        "roborock.vacuum.s5",
+        "roborock.vacuum.s6",
+        "roborock.vacuum.s7",
+        "rockrobo.vacuum.v1",
+        "dreame.vacuum.p2009"
+      ],
+      "capabilities": ["start", "stop", "pause", "dock", "locate", "fan_speed", "zones", "segments", "consumables", "remote_control"]
+    },
+    {
+      "category": "airpurifier",
+      "name": "Air Purifiers",
+      "models": [
+        "zhimi.airpurifier.ma4",
+        "zhimi.airpurifier.mb3",
+        "zhimi.airpurifier.v6",
+        "zhimi.airpurifier.v7",
+        "zhimi.airp.vb4"
+      ],
+      "capabilities": ["power", "mode", "fan_speed", "child_lock", "led", "buzzer", "filter_life", "air_quality"]
+    },
+    {
+      "category": "fan",
+      "name": "Fans",
+      "models": [
+        "dmaker.fan.p10",
+        "dmaker.fan.p11",
+        "zhimi.fan.za5",
+        "dmaker.fan.1c",
+        "zhimi.fan.sa1"
+      ],
+      "capabilities": ["power", "speed", "oscillation", "angle", "natural_mode", "timer", "ionizer"]
+    },
+    {
+      "category": "humidifier",
+      "name": "Humidifiers",
+      "models": [
+        "zhimi.humidifier.ca4",
+        "zhimi.humidifier.ca1",
+        "deerma.humidifier.mjjsq",
+        "deerma.humidifier.jsq1"
+      ],
+      "capabilities": ["power", "mode", "target_humidity", "water_level", "dry_mode", "child_lock"]
+    },
+    {
+      "category": "light",
+      "name": "Lights",
+      "models": [
+        "philips.light.sread1",
+        "philips.light.ceiling",
+        "philips.light.bulb",
+        "philips.light.moonlight",
+        "yeelink.light.ceiling10"
+      ],
+      "capabilities": ["power", "brightness", "color_temp", "rgb_color", "scenes", "timer"]
+    },
+    {
+      "category": "switch",
+      "name": "Smart Plugs & Switches",
+      "models": [
+        "chuangmi.plug.v3",
+        "chuangmi.plug.m3",
+        "zimi.powerstrip.v2",
+        "qmi.powerstrip.v1"
+      ],
+      "capabilities": ["power", "led", "power_monitoring", "usb_power"]
+    },
+    {
+      "category": "gateway",
+      "name": "Gateways",
+      "models": [
+        "lumi.gateway.v3",
+        "lumi.acpartner.v3"
+      ],
+      "capabilities": ["alarm", "illumination", "radio", "sub_devices"]
+    }
+  ]
+}

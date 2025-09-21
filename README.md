@@ -323,6 +323,9 @@ MIT License - see [LICENSE](LICENSE) file
 - **Discussions**: [GitHub Discussions](https://github.com/eduard256/IoT2mqtt/discussions)
 - **Documentation**: [Wiki](https://github.com/eduard256/IoT2mqtt/wiki)
 - **Runtime paths & storage**: [docs/runtime-storage.md](docs/runtime-storage.md)
+- **Backend services**: [docs/backend-services.md](docs/backend-services.md)
+- **REST API reference**: [docs/api-reference.md](docs/api-reference.md)
+- **Connector guide**: [docs/connectors.md](docs/connectors.md)
 
 ---
 

@@ -4,6 +4,7 @@ IoT2MQTT Web Interface - FastAPI Backend
 
 import os
 import sys
+import asyncio
 from pathlib import Path
 from typing import Optional, Any
 from datetime import datetime, timedelta
@@ -67,6 +68,11 @@ async def lifespan(app: FastAPI):
     mqtt_config = config_service.get_mqtt_config()
     if mqtt_config.get("host"):
         mqtt_service = MQTTService(mqtt_config)
+        try:
+            mqtt_service.attach_loop(asyncio.get_running_loop())
+        except RuntimeError:
+            # Should not happen inside lifespan, but guard just in case
+            pass
         if mqtt_service.connect():
             logger.info("Connected to MQTT broker")
             # Share mqtt_service with integrations module
@@ -102,7 +108,7 @@ app.add_middleware(
 app.include_router(connectors.router)
 app.include_router(instances.router)
 app.include_router(devices.router)
-app.include_router(docker.router)
+app.include_router(docker.router, prefix="/api/docker")
 app.include_router(discovery.router)
 app.include_router(integrations.router)
 app.include_router(tools.router)
@@ -556,10 +562,6 @@ async def mqtt_websocket(websocket: WebSocket, token: str = Query(...)):
     
     await websocket.accept()
     logger.info("MQTT WebSocket connected")
-    
-    # Subscribe to all topics for explorer
-    if mqtt_service:
-        mqtt_service.subscribe("#")
     
     # Handler for MQTT messages
     async def mqtt_message_handler(topic: str, payload: Any, retained: bool = False):
