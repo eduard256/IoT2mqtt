@@ -322,6 +322,7 @@ MIT License - see [LICENSE](LICENSE) file
 - **Issues**: [GitHub Issues](https://github.com/eduard256/IoT2mqtt/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/eduard256/IoT2mqtt/discussions)
 - **Documentation**: [Wiki](https://github.com/eduard256/IoT2mqtt/wiki)
+- **Runtime paths & storage**: [docs/runtime-storage.md](docs/runtime-storage.md)
 
 ---
 
