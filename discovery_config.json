@@ -1,0 +1,24 @@
+{
+  "auto_discovery": {
+    "enabled": true,
+    "interval": 300,
+    "on_startup": true,
+    "startup_delay": 10,
+    "integrations": [
+      "yeelight"
+    ],
+    "parallel": true,
+    "timeout_per_integration": 30
+  },
+  "retention": {
+    "discovered_devices_ttl": 86400,
+    "cleanup_interval": 3600
+  },
+  "docker": {
+    "network_mode": "host",
+    "memory_limit": "50m",
+    "cpu_shares": 256,
+    "read_only": true,
+    "no_new_privileges": true
+  }
+}
