@@ -101,7 +101,12 @@ export default function MQTTExplorer() {
 
       if (response.ok) {
         const data = await response.json()
-        setDevices(data.devices || [])
+        const normalized = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.devices)
+            ? data.devices
+            : []
+        setDevices(normalized)
       }
     } catch (error) {
       console.error('Error fetching devices:', error)

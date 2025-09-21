@@ -7,7 +7,6 @@ import asyncio
 import json
 import docker
 import logging
-from pathlib import Path
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.responses import FileResponse
@@ -85,14 +84,18 @@ async def get_integration_meta(name: str):
 async def get_integration_icon(name: str):
     """Get integration icon"""
     icon_path = config_service.connectors_path / name / "icon.svg"
-    
+
     if not icon_path.exists():
-        # Return default icon
-        default_icon = Path("/app/frontend/dist/assets/default-icon.svg")
-        if default_icon.exists():
-            return FileResponse(default_icon, media_type="image/svg+xml")
+        # Fallback to built-in default icon inside compiled frontend assets
+        default_icon_candidates = [
+            config_service.frontend_dist_path / "icons" / "default.svg",
+            config_service.frontend_dist_path / "assets" / "default-icon.svg"
+        ]
+        for fallback in default_icon_candidates:
+            if fallback.exists():
+                return FileResponse(fallback, media_type="image/svg+xml")
         raise HTTPException(status_code=404, detail="Icon not found")
-    
+
     return FileResponse(icon_path, media_type="image/svg+xml")
 
 
@@ -318,9 +321,9 @@ async def validate_configuration(name: str, request: ValidateRequest):
 async def get_available_connectors():
     """Get list of available connectors with manifest data"""
     connectors = []
-    
+
     # Scan connectors directory
-    connectors_path = Path("/app/connectors")
+    connectors_path = config_service.connectors_path
     if not connectors_path.exists():
         return []
     

@@ -9,7 +9,6 @@ import docker
 import logging
 import requests
 import os
-from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
@@ -71,7 +70,7 @@ class ScanRequest(BaseModel):
 async def get_discovered_devices():
     """Get all discovered devices"""
     try:
-        discovered_path = Path("/app") / "discovered_devices.json"
+        discovered_path = config_service.discovered_devices_path
         
         if not discovered_path.exists():
             return []
@@ -94,7 +93,7 @@ async def add_discovered_device(device_id: str, request: AddDeviceRequest):
     """Add a discovered device to the system"""
     try:
         # Load discovered devices
-        discovered_path = Path("/app") / "discovered_devices.json"
+        discovered_path = config_service.discovered_devices_path
         
         if not discovered_path.exists():
             raise HTTPException(status_code=404, detail="No discovered devices found")
@@ -341,7 +340,7 @@ async def run_discovery_for_integration(integration: str):
                             device["added"] = False
                         
                         # Save discovered devices
-                        discovered_path = Path("/app") / "discovered_devices.json"
+                        discovered_path = config_service.discovered_devices_path
                         
                         if discovered_path.exists():
                             with open(discovered_path, 'r') as f:
@@ -379,7 +378,7 @@ async def run_discovery_for_integration(integration: str):
 async def get_discovery_status():
     """Get current discovery status"""
     try:
-        discovered_path = Path("/app") / "discovered_devices.json"
+        discovered_path = config_service.discovered_devices_path
         
         if not discovered_path.exists():
             return {
@@ -419,7 +418,7 @@ async def discovery_websocket(websocket: WebSocket):
     
     try:
         # Send initial state
-        discovered_path = Path("/app") / "discovered_devices.json"
+        discovered_path = config_service.discovered_devices_path
         
         if discovered_path.exists():
             with open(discovered_path, 'r') as f:
@@ -452,7 +451,7 @@ async def discovery_websocket(websocket: WebSocket):
 async def remove_discovered_device(device_id: str):
     """Remove a device from discovered list"""
     try:
-        discovered_path = Path("/app") / "discovered_devices.json"
+        discovered_path = config_service.discovered_devices_path
         
         if not discovered_path.exists():
             raise HTTPException(status_code=404, detail="No discovered devices")

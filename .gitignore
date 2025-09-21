@@ -41,10 +41,10 @@ secrets/
 *.secret
 
 # Конфигурации инстансов/устройств генерируются на хосте
-connectors/*/instances/
-instances/
-discovered_devices.json
-discovery_config.json
+connectors/*/instances/**
+!connectors/*/instances/
+!connectors/*/instances/.gitkeep
+/instances/
 
 # Docker compose с настройками
 docker-compose.yml

@@ -91,7 +91,12 @@ export default function Devices() {
       }
 
       const data = await response.json()
-      setDevices(data)
+      const normalized = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.devices)
+          ? data.devices
+          : []
+      setDevices(normalized)
     } catch (error) {
       if (error instanceof Error && error.message !== 'No authentication token') {
         toast({

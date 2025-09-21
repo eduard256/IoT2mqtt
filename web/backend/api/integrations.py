@@ -6,7 +6,6 @@ Integrations API endpoints
 import json
 import logging
 import docker
-from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
@@ -55,7 +54,7 @@ async def get_configured_integrations():
         configured_integrations = {}
         
         # Scan all connector directories for instances
-        connectors_path = Path("/app/connectors")
+        connectors_path = config_service.connectors_path
         if not connectors_path.exists():
             return []
         
@@ -136,7 +135,7 @@ async def get_configured_integrations():
 async def get_integration_instances(integration_name: str):
     """Get all instances for a specific integration"""
     try:
-        instances_path = Path(f"/app/connectors/{integration_name}/instances")
+        instances_path = config_service.connectors_path / integration_name / "instances"
         if not instances_path.exists():
             return []
         
@@ -177,7 +176,7 @@ async def get_instance_details(instance_id: str):
     """Get detailed information about a specific instance"""
     try:
         # Find the instance file across all connectors
-        connectors_path = Path("/app/connectors")
+        connectors_path = config_service.connectors_path
         
         for connector_dir in connectors_path.iterdir():
             if not connector_dir.is_dir() or connector_dir.name.startswith('_'):
@@ -284,6 +283,59 @@ async def restart_instance(instance_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/mqtt/clear-all")
+async def clear_all_mqtt_topics():
+    """
+    Clear ALL IoT2MQTT topics from MQTT broker.
+    WARNING: This removes all data and cannot be undone!
+    """
+    try:
+        if not mqtt_service or not mqtt_service.connected:
+            raise HTTPException(status_code=503, detail="MQTT service not available")
+        
+        # Clear all topics
+        success = mqtt_service.clear_all_iot2mqtt_topics()
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "All IoT2MQTT topics cleared from MQTT broker"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to clear MQTT topics")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to clear all MQTT topics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/mqtt/clear-instance/{instance_id}")
+async def clear_instance_mqtt_topics(instance_id: str):
+    """Clear all MQTT topics for a specific instance"""
+    try:
+        if not mqtt_service or not mqtt_service.connected:
+            raise HTTPException(status_code=503, detail="MQTT service not available")
+        
+        # Clear instance topics
+        success = mqtt_service.clear_instance_topics(instance_id)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"All MQTT topics cleared for instance {instance_id}"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to clear MQTT topics")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to clear MQTT topics for {instance_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/instances/{instance_id}")
 async def delete_instance(instance_id: str):
     """Delete an instance completely (container, config, MQTT topics)"""
@@ -305,7 +357,7 @@ async def delete_instance(instance_id: str):
             pass
         
         # 2. Delete configuration file
-        config_file = Path(f"/app/connectors/{integration_name}/instances/{instance_id}.json")
+        config_file = config_service.connectors_path / integration_name / "instances" / f"{instance_id}.json"
         if config_file.exists():
             config_file.unlink()
             logger.info(f"Deleted config file {config_file}")
@@ -313,16 +365,9 @@ async def delete_instance(instance_id: str):
         # 3. Clear MQTT topics for this instance
         if mqtt_service and mqtt_service.connected:
             try:
-                base_topic = f"IoT2mqtt/v1/instances/{instance_id}"
-                # Publish empty retained messages to clear topics
-                mqtt_service.client.publish(f"{base_topic}/status", "", retain=True)
-                mqtt_service.client.publish(f"{base_topic}/devices", "", retain=True) 
-                mqtt_service.client.publish(f"{base_topic}/meta", "", retain=True)
-                mqtt_service.client.publish(f"{base_topic}/discovered", "", retain=True)
-                # Clear all device topics
-                mqtt_service.client.publish(f"{base_topic}/devices/+/state", "", retain=True)
-                mqtt_service.client.publish(f"{base_topic}/devices/+/availability", "", retain=True)
-                logger.info(f"Cleared MQTT topics for instance {instance_id}")
+                # Use the comprehensive cleanup method
+                mqtt_service.clear_instance_topics(instance_id)
+                logger.info(f"Cleared all MQTT topics for instance {instance_id}")
             except Exception as e:
                 logger.warning(f"Failed to clear MQTT topics for {instance_id}: {e}")
         else:
@@ -369,7 +414,7 @@ async def get_container_status(integration_name: str, instance_id: str) -> str:
 
 async def find_integration_for_instance(instance_id: str) -> Optional[str]:
     """Find which integration an instance belongs to"""
-    connectors_path = Path("/app/connectors")
+    connectors_path = config_service.connectors_path
     
     for connector_dir in connectors_path.iterdir():
         if not connector_dir.is_dir() or connector_dir.name.startswith('_'):
@@ -386,7 +431,7 @@ async def create_container_for_instance(integration_name: str, instance_id: str)
     """Create and start a container for an instance"""
     try:
         # Load instance configuration
-        config_file = Path(f"/app/connectors/{integration_name}/instances/{instance_id}.json")
+        config_file = config_service.connectors_path / integration_name / "instances" / f"{instance_id}.json"
         if not config_file.exists():
             raise HTTPException(status_code=404, detail="Instance configuration not found")
         

@@ -664,72 +664,69 @@ async def subscribe_logs(sid, data):
 
 # Mount static files for React app (in production)
 # Important: Mount static files AFTER all API routes to avoid conflicts
-if os.path.exists("/app/frontend/dist"):
-    # Serve static assets
-    if os.path.exists("/app/frontend/dist/assets"):
-        app.mount("/assets", StaticFiles(directory="/app/frontend/dist/assets"), name="assets")
+frontend_dist_path = config_service.frontend_dist_path
+if frontend_dist_path.exists():
+    assets_path = frontend_dist_path / "assets"
+    locales_path = frontend_dist_path / "locales"
+    icons_path = frontend_dist_path / "icons"
 
-    # Serve localization files for i18next
-    if os.path.exists("/app/frontend/dist/locales"):
-        app.mount("/locales", StaticFiles(directory="/app/frontend/dist/locales"), name="locales")
+    if assets_path.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
 
-    # Mount icons directory for PWA icons
-    if os.path.exists("/app/frontend/dist/icons"):
-        app.mount("/icons", StaticFiles(directory="/app/frontend/dist/icons"), name="icons")
-    
+    if locales_path.exists():
+        app.mount("/locales", StaticFiles(directory=str(locales_path)), name="locales")
+
+    if icons_path.exists():
+        app.mount("/icons", StaticFiles(directory=str(icons_path)), name="icons")
+
     # Serve root-level files (PWA icons, manifest, etc.)
     @app.get("/pwa-192x192.png")
     async def serve_pwa_192():
-        return FileResponse("/app/frontend/dist/pwa-192x192.png")
-    
+        return FileResponse(str(frontend_dist_path / "pwa-192x192.png"))
+
     @app.get("/pwa-512x512.png")
     async def serve_pwa_512():
-        return FileResponse("/app/frontend/dist/pwa-512x512.png")
-    
+        return FileResponse(str(frontend_dist_path / "pwa-512x512.png"))
+
     @app.get("/manifest.json")
     async def serve_manifest_json():
-        return FileResponse("/app/frontend/dist/manifest.json")
-    
+        return FileResponse(str(frontend_dist_path / "manifest.json"))
+
     @app.get("/manifest.webmanifest")
     async def serve_manifest():
-        return FileResponse("/app/frontend/dist/manifest.webmanifest")
-    
+        return FileResponse(str(frontend_dist_path / "manifest.webmanifest"))
+
     @app.get("/favicon.ico")
     async def serve_favicon():
-        return FileResponse("/app/frontend/dist/favicon.ico")
-    
+        return FileResponse(str(frontend_dist_path / "favicon.ico"))
+
     @app.get("/robots.txt")
     async def serve_robots():
-        return FileResponse("/app/frontend/dist/robots.txt")
-    
-    # Service Worker files
+        return FileResponse(str(frontend_dist_path / "robots.txt"))
+
     @app.get("/sw.js")
     async def serve_sw():
-        return FileResponse("/app/frontend/dist/sw.js", media_type="application/javascript")
-    
+        return FileResponse(str(frontend_dist_path / "sw.js"), media_type="application/javascript")
+
     @app.get("/registerSW.js")
     async def serve_register_sw():
-        return FileResponse("/app/frontend/dist/registerSW.js", media_type="application/javascript")
-    
+        return FileResponse(str(frontend_dist_path / "registerSW.js"), media_type="application/javascript")
+
     @app.get("/workbox-{version}.js")
     async def serve_workbox(version: str):
-        return FileResponse(f"/app/frontend/dist/workbox-{version}.js", media_type="application/javascript")
-    
-    # Catch-all route for SPA - must be last!
+        return FileResponse(str(frontend_dist_path / f"workbox-{version}.js"), media_type="application/javascript")
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve React SPA for all non-API routes"""
-        # Allow API and WebSocket routes to pass through
         if full_path.startswith("api/") or full_path.startswith("ws/") or full_path.startswith("socket.io/"):
             raise HTTPException(status_code=404, detail="Not found")
-        
-        # Serve actual files if they exist
-        file_path = f"/app/frontend/dist/{full_path}"
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        
-        # Otherwise serve index.html for client-side routing
-        return FileResponse("/app/frontend/dist/index.html")
+
+        requested_file = frontend_dist_path / full_path
+        if requested_file.exists() and requested_file.is_file():
+            return FileResponse(str(requested_file))
+
+        return FileResponse(str(frontend_dist_path / "index.html"))
 
 
 if __name__ == "__main__":

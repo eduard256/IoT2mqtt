@@ -21,11 +21,47 @@ class ConfigService:
     """Service for managing configurations with file locking"""
     
     def __init__(self, base_path: str = None):
-        self.base_path = Path(base_path or os.getenv("IOT2MQTT_PATH", "/app"))
+        raw_base_path = base_path or os.getenv("IOT2MQTT_PATH")
+        if raw_base_path:
+            candidate_base = Path(raw_base_path)
+        else:
+            candidate_base = self._detect_base_path()
+
+        self.base_path = candidate_base.resolve()
         self.env_file = self.base_path / ".env"
         self.connectors_path = self.base_path / "connectors"
         self.secrets_path = self.base_path / "secrets"
+        self.discovered_devices_path = self.base_path / "discovered_devices.json"
+        self.discovery_config_path = self.base_path / "discovery_config.json"
+        self.frontend_dist_path = self._detect_frontend_dist_path()
+
+        # Ensure core directories exist so API calls do not fail on clean installs
+        self.connectors_path.mkdir(parents=True, exist_ok=True)
+        self.secrets_path.mkdir(parents=True, exist_ok=True)
+
         self.secrets_manager = SecretsManager(str(self.secrets_path))
+    
+    def _detect_base_path(self) -> Path:
+        """Detect project base path when not explicitly provided"""
+        candidate = Path(__file__).resolve()
+        for parent in candidate.parents:
+            # docker-compose.yml lives in repo root and inside container at /app
+            if (parent / "docker-compose.yml").exists():
+                return parent
+        return Path.cwd()
+    
+    def _detect_frontend_dist_path(self) -> Path:
+        """Locate built frontend assets directory"""
+        candidates = [
+            self.base_path / "frontend" / "dist",
+            self.base_path / "web" / "frontend" / "dist",
+            self.base_path / "frontend-dist"
+        ]
+        for candidate in candidates:
+            if (candidate / "index.html").exists():
+                return candidate
+        # Fall back to first candidate even if it does not exist yet
+        return candidates[0]
         
     @contextmanager
     def locked_file(self, filepath: Path, mode: str = 'r+'):
