@@ -12,16 +12,7 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
-# Import the router
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from api.discovery import router, DiscoveredDevice, AddDeviceRequest, ManualDeviceRequest
-
-# Create test app
-app = FastAPI()
-app.include_router(router)
-
-client = TestClient(app)
+# Import the router lazily in tests to avoid module-level initialization
 
 
 class TestDiscoveryAPI:

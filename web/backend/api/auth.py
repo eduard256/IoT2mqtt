@@ -67,29 +67,29 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 @router.post("/login")
 async def login(access_key: str):
     """Login with access key"""
-    from ..services.config_service import ConfigService
-    
+    from services.config_service import ConfigService
+
     config_service = ConfigService()
-    stored_key_hash = config_service.get_access_key_hash()
-    
+    stored_key_hash = config_service.get_access_key()
+
     if not stored_key_hash:
         # First time setup - save the key
         hashed = get_password_hash(access_key)
-        config_service.save_access_key_hash(hashed)
+        config_service.set_access_key(hashed)
         stored_key_hash = hashed
-    
+
     if not verify_password(access_key, stored_key_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid access key",
         )
-    
+
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": "user"}, expires_delta=access_token_expires
     )
-    
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
