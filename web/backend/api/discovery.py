@@ -177,17 +177,9 @@ async def add_discovered_device(device_id: str, request: AddDeviceRequest):
 async def add_device_manually(request: ManualDeviceRequest):
     """Add a device manually without discovery"""
     try:
-        # Load integration manifest
-        manifest_path = config_service.connectors_path / request.integration / "manifest.json"
-        
-        if not manifest_path.exists():
-            raise HTTPException(status_code=404, detail=f"Integration {request.integration} not found")
-        
-        with open(manifest_path, 'r') as f:
-            manifest = json.load(f)
-        
         # Test connection using test-runner service
         test_runner_url = os.environ.get("TEST_RUNNER_URL", "http://localhost:8001")
+        default_port = request.port or 55443
         
         # Test TCP connection first
         try:
@@ -195,7 +187,7 @@ async def add_device_manually(request: ManualDeviceRequest):
                 f"{test_runner_url}/test/tcp",
                 json={
                     "ip": request.ip,
-                    "port": request.port or manifest.get("manual_config", {}).get("fields", [{}])[1].get("default", 55443),
+                    "port": default_port,
                     "timeout": 5
                 },
                 timeout=10
@@ -223,31 +215,30 @@ async def add_device_manually(request: ManualDeviceRequest):
             "friendly_name": request.friendly_name,
             "connection": {
                 "ip": request.ip,
-                "port": request.port or manifest.get("manual_config", {}).get("fields", [{}])[1].get("default", 55443)
+                "port": default_port
             },
-            "devices": [{
-                "device_id": device_id,
-                "global_id": f"{request.instance_id}_{device_id}",
-                "friendly_name": request.name,
-                "model": request.model or "unknown",
-                "enabled": True,
-                "ip": request.ip,
-                "port": request.port
-            }],
+            "devices": [
+                {
+                    "device_id": device_id,
+                    "friendly_name": request.name,
+                    "model": request.model or "unknown",
+                    "enabled": True,
+                    "ip": request.ip,
+                    "port": default_port
+                }
+            ],
             "enabled": True,
             "update_interval": 10,
-            **request.config
+            **(request.config or {})
         }
-        
-        # Save instance configuration
-        instance_path = config_service.connectors_path / request.integration / "instances"
-        instance_path.mkdir(exist_ok=True)
-        
-        config_file = instance_path / f"{request.instance_id}.json"
-        with open(config_file, 'w') as f:
-            json.dump(instance_config, f, indent=2)
-        
-        # Start the container
+
+        config_service.save_instance_with_secrets(
+            request.integration,
+            request.instance_id,
+            instance_config
+        )
+
+        # Start or update connector container
         docker_service.create_or_update_container(
             request.integration,
             request.instance_id,

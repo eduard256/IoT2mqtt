@@ -44,7 +44,14 @@ secrets/
 connectors/*/instances/**
 !connectors/*/instances/
 !connectors/*/instances/.gitkeep
-/instances/
+instances/**
+!instances/
+!instances/.gitkeep
+oauth_sessions/**
+!oauth_sessions/
+!oauth_sessions/.gitkeep
+config/oauth/*.json
+!config/oauth/.gitkeep
 
 # Docker compose с настройками
 docker-compose.yml

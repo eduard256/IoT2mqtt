@@ -77,6 +77,7 @@ export default function Containers() {
     return () => {
       if (wsRef.current) {
         wsRef.current.close()
+        wsRef.current = null
       }
     }
   }, [selectedContainer])
@@ -131,8 +132,9 @@ export default function Containers() {
     setLogs([])
     
     // Close existing WebSocket if any
-    if (wsRef.current) {
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
       wsRef.current.close()
+      wsRef.current = null
     }
 
     const token = getAuthToken()
@@ -157,7 +159,21 @@ export default function Containers() {
     wsRef.current.onmessage = (event) => {
       try {
         const log = JSON.parse(event.data)
-        setLogs(prev => [...prev, log])
+        
+        // Handle error messages
+        if (log.error) {
+          console.error('Log error:', log.error)
+          return
+        }
+        
+        setLogs(prev => {
+          // Keep only last 500 logs to prevent memory issues
+          const newLogs = [...prev, log]
+          if (newLogs.length > 500) {
+            return newLogs.slice(-500)
+          }
+          return newLogs
+        })
       } catch (error) {
         console.error('Error parsing log:', error)
       }
@@ -165,15 +181,10 @@ export default function Containers() {
     
     wsRef.current.onerror = (error) => {
       console.error('WebSocket error:', error)
-      toast({
-        title: t('Error'),
-        description: t('Failed to connect to log stream'),
-        variant: 'destructive'
-      })
     }
     
-    wsRef.current.onclose = () => {
-      console.log('WebSocket disconnected')
+    wsRef.current.onclose = (event) => {
+      console.log('WebSocket disconnected:', event.code, event.reason)
     }
   }
 

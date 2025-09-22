@@ -308,6 +308,10 @@ class DockerService:
             if not self.build_image(connector_name, image_tag):
                 return None
         
+        # Ensure instance directory exists on host
+        instances_dir = self.host_base_path / "instances" / connector_name
+        instances_dir.mkdir(parents=True, exist_ok=True)
+
         # Prepare container configuration
         container_config = {
             "image": image_tag,
@@ -322,7 +326,7 @@ class DockerService:
             ],
             "volumes": {
                 str(self.host_base_path / "shared"): {"bind": "/app/shared", "mode": "ro"},
-                str(self.host_base_path / "connectors" / connector_name / "instances"): {
+                str(instances_dir): {
                     "bind": "/app/instances",
                     "mode": "ro"
                 },
@@ -377,7 +381,7 @@ class DockerService:
             "restart": "unless-stopped",
             "volumes": [
                 "./shared:/app/shared:ro",
-                f"./connectors/{connector_name}/instances:/app/instances:ro"
+                f"./instances/{connector_name}:/app/instances:ro"
             ],
             "environment": [
                 f"INSTANCE_NAME={instance_id}",

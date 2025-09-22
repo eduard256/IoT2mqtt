@@ -1,236 +1,349 @@
 {
-  "version": "1.0.0",
-  "display_name": "Xiaomi MiIO",
-  "description": "Cloud and manual setup for Xiaomi MiIO devices using isolated tools.",
-  "author": "IoT2MQTT",
-  "requirements": {
-    "network": "internet"
-  },
-  "tools": [
-    {
-      "id": "cloud_list_devices",
-      "entry": "actions/device.py",
-      "timeout": 30,
-      "network": "internet",
-      "secrets": ["password"],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "username": {"type": "string", "format": "email", "title": "Xiaomi Account Email"},
-          "password": {"type": "string", "title": "Password"},
-          "country": {"type": "string", "enum": ["cn", "de", "us", "ru", "sg", "i2"], "default": "cn", "title": "Region"}
-        },
-        "required": ["username", "password", "country"]
-      }
+    "version": "1.0.0",
+    "display_name": "Xiaomi MiIO",
+    "description": "Onboard Xiaomi MiIO devices via cloud or manual token flows.",
+    "author": "IoT2MQTT",
+    "requirements": {
+        "network": "internet"
     },
-    {
-      "id": "autogen",
-      "entry": "actions/autogen.py",
-      "timeout": 5,
-      "network": "none",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "integration": {"type": "string"},
-          "display_name": {"type": "string"},
-          "host": {"type": "string"},
-          "model": {"type": "string"}
-        },
-        "required": ["integration", "display_name", "host"]
-      }
-    },
-    {
-      "id": "device_token_fetch",
-      "entry": "actions/gettoken.py",
-      "timeout": 30,
-      "network": "internet",
-      "secrets": ["password"],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "username": {"type": "string", "format": "email", "title": "Xiaomi Account Email"},
-          "password": {"type": "string", "title": "Password"},
-          "country": {"type": "string", "enum": ["cn", "de", "us", "ru", "sg", "i2"], "default": "cn", "title": "Region"},
-          "did": {"type": "string", "title": "Device ID (DID)"}
-        },
-        "required": ["username", "password", "country", "did"]
-      }
-    },
-    {
-      "id": "validate_connection",
-      "entry": "actions/validate.py",
-      "timeout": 15,
-      "network": "none",
-      "secrets": ["token"],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "host": {"type": "string", "title": "IP Address"},
-          "token": {"type": "string", "title": "Device Token"}
-        },
-        "required": ["host", "token"]
-      }
-    },
-    {
-      "id": "token_instructions",
-      "entry": "actions/instructions.py",
-      "timeout": 5,
-      "network": "none",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "method": {"type": "string", "enum": ["cloud", "mi_home_backup", "sniffing"], "default": "cloud"}
-        }
-      }
-    }
-  ],
-  "setup_flows": [
-    {
-      "id": "cloud_setup",
-      "name": "Cloud Setup (Recommended)",
-      "steps": [
-        {
-          "type": "form",
-          "id": "cloud_credentials",
-          "title": "Xiaomi Cloud Login",
-          "schema": {
-            "fields": [
-              {"name": "username", "type": "email", "label": "Email", "required": true},
-              {"name": "password", "type": "password", "label": "Password", "required": true},
-              {"name": "country", "type": "select", "label": "Region", "required": true, "options": [
-                {"value": "cn", "label": "China"},
-                {"value": "de", "label": "Germany"},
-                {"value": "us", "label": "USA"},
-                {"value": "ru", "label": "Russia"},
-                {"value": "sg", "label": "Singapore"},
-                {"value": "i2", "label": "India"}
-              ], "default": "cn"},
-              {"name": "goto_manual", "type": "button", "label": "Manual Token", "placement": "footer", "variant": "ghost", "action": {"type": "goto_setup", "flow_id": "manual_setup"}}
+    "tools": {
+        "cloud_list_devices": {
+            "entry": "actions/device.py",
+            "timeout": 45,
+            "network": "internet",
+            "secrets": [
+                "password"
             ]
-          }
         },
-        {
-          "type": "run_tool",
-          "tool": "cloud_list_devices",
-          "input": {
-            "username": "{{ form.cloud_credentials.username }}",
-            "password": "{{ form.cloud_credentials.password }}",
-            "country": "{{ form.cloud_credentials.country }}"
-          },
-          "output_key": "cloud_devices"
-        },
-        {
-          "type": "select_list",
-          "id": "device_select",
-          "title": "Select Device",
-          "items": "{{ tools.cloud_devices.result.devices }}",
-          "item_label": "{{ item.name }} - {{ item.model }} ({{ item.localip }})",
-          "item_value": "{{ item.did }}",
-          "output_key": "selected_did"
-        },
-        {
-          "type": "run_tool",
-          "tool": "device_token_fetch",
-          "input": {
-            "username": "{{ form.cloud_credentials.username }}",
-            "password": "{{ form.cloud_credentials.password }}",
-            "country": "{{ form.cloud_credentials.country }}",
-            "did": "{{ selection.selected_did }}"
-          },
-          "output_key": "device_token"
-        },
-        {
-          "type": "summary",
-          "title": "Review",
-          "sections": [
-            {"label": "Device", "value": "{{ tools.device_token.result.name }} ({{ tools.device_token.result.model }})"},
-            {"label": "IP", "value": "{{ tools.device_token.result.localip }}"}
-          ]
-        },
-        {
-          "type": "form",
-          "id": "instance_details",
-          "title": "Instance Details",
-          "schema": {
-            "fields": [
-              {"name": "instance_id", "type": "text", "label": "Instance ID", "required": true, "validation": {"pattern": "^[a-z0-9_-]+$"}},
-              {"name": "friendly_name", "type": "text", "label": "Friendly Name", "required": true}
+        "device_token_fetch": {
+            "entry": "actions/gettoken.py",
+            "timeout": 45,
+            "network": "internet",
+            "secrets": [
+                "password"
             ]
-          }
         },
-        {
-          "type": "create_instance",
-          "connector_type": "xiaomi_miio",
-          "instance_id": "{{ form.instance_details.instance_id }}",
-          "friendly_name": "{{ form.instance_details.friendly_name }}",
-          "devices": [
-            {
-              "device_id": "{{ form.instance_details.instance_id + '_' + tools.device_token.result.localip }}",
-              "host": "{{ tools.device_token.result.localip }}",
-              "token": "{{ tools.device_token.result.token }}",
-              "model": "{{ tools.device_token.result.model }}",
-              "name": "{{ tools.device_token.result.name }}",
-              "mac": "{{ tools.device_token.result.mac }}",
-              "enabled": true
-            }
-          ]
+        "validate_connection": {
+            "entry": "actions/validate.py",
+            "timeout": 15,
+            "network": "none",
+            "secrets": [
+                "token"
+            ]
+        },
+        "autogen": {
+            "entry": "actions/autogen.py",
+            "timeout": 5,
+            "network": "none"
+        },
+        "token_instructions": {
+            "entry": "actions/instructions.py",
+            "timeout": 5,
+            "network": "none"
         }
-      ]
     },
-    {
-      "id": "manual_setup",
-      "name": "Manual Token",
-      "steps": [
+    "flows": [
         {
-          "type": "form",
-          "id": "manual",
-          "title": "Manual Device Details",
-          "schema": {
-            "fields": [
-              {"name": "host", "type": "text", "label": "IP Address", "required": true},
-              {"name": "token", "type": "password", "label": "Token (32 hex)", "required": true},
-              {"name": "goto_cloud", "type": "button", "label": "Cloud Setup", "placement": "footer", "variant": "ghost", "action": {"type": "goto_setup", "flow_id": "cloud_setup"}}
+            "id": "cloud_setup",
+            "name": "Cloud",
+            "description": "Log into your Xiaomi account and select a device.",
+            "default": true,
+            "steps": [
+                {
+                    "id": "cloud_credentials",
+                    "type": "form",
+                    "title": "Xiaomi Cloud login",
+                    "schema": {
+                        "fields": [
+                            {
+                                "type": "email",
+                                "name": "username",
+                                "label": "Email",
+                                "required": true
+                            },
+                            {
+                                "type": "password",
+                                "name": "password",
+                                "label": "Password",
+                                "required": true
+                            },
+                            {
+                                "type": "select",
+                                "name": "country",
+                                "label": "Region",
+                                "default": "cn",
+                                "options": [
+                                    {
+                                        "value": "cn",
+                                        "label": "China"
+                                    },
+                                    {
+                                        "value": "de",
+                                        "label": "Germany"
+                                    },
+                                    {
+                                        "value": "us",
+                                        "label": "USA"
+                                    },
+                                    {
+                                        "value": "ru",
+                                        "label": "Russia"
+                                    },
+                                    {
+                                        "value": "sg",
+                                        "label": "Singapore"
+                                    },
+                                    {
+                                        "value": "i2",
+                                        "label": "India"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "actions": [
+                        {
+                            "type": "goto_flow",
+                            "label": "Manual token",
+                            "flow": "manual_setup"
+                        }
+                    ]
+                },
+                {
+                    "id": "list_devices",
+                    "type": "tool",
+                    "title": "Fetch devices",
+                    "description": "Retrieving your devices from the Xiaomi cloud.",
+                    "tool": "cloud_list_devices",
+                    "input": {
+                        "username": "{{ form.cloud_credentials.username }}",
+                        "password": "{{ form.cloud_credentials.password }}",
+                        "country": "{{ form.cloud_credentials.country }}"
+                    },
+                    "auto_advance": true
+                },
+                {
+                    "id": "device_select",
+                    "type": "select",
+                    "title": "Select a device",
+                    "items": "{{ tools.cloud_list_devices.result.devices }}",
+                    "item_label": "{{ item.name }} - {{ item.model }} ({{ item.localip }})",
+                    "item_value": {
+                        "did": "{{ item.did }}",
+                        "name": "{{ item.name }}",
+                        "model": "{{ item.model }}",
+                        "ip": "{{ item.localip }}"
+                    },
+                    "output_key": "selected_did"
+                },
+                {
+                    "id": "token_fetch",
+                    "type": "tool",
+                    "title": "Fetch device token",
+                    "tool": "device_token_fetch",
+                    "input": {
+                        "username": "{{ form.cloud_credentials.username }}",
+                        "password": "{{ form.cloud_credentials.password }}",
+                        "country": "{{ form.cloud_credentials.country }}",
+                        "did": "{{ selection.selected_did.did }}"
+                    },
+                    "output_key": "token_response"
+                },
+                {
+                    "id": "instance_details",
+                    "type": "form",
+                    "title": "Instance details",
+                    "schema": {
+                        "fields": [
+                            {
+                                "type": "text",
+                                "name": "instance_id",
+                                "label": "Instance ID",
+                                "required": true,
+                                "default": "{{ selection.selected_did.did }}"
+                            },
+                            {
+                                "type": "text",
+                                "name": "friendly_name",
+                                "label": "Friendly name",
+                                "required": true,
+                                "default": "{{ tools.token_response.result.name }}"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "cloud_summary",
+                    "type": "summary",
+                    "title": "Review",
+                    "sections": [
+                        {
+                            "label": "Device",
+                            "value": "{{ tools.token_response.result.name }}"
+                        },
+                        {
+                            "label": "IP",
+                            "value": "{{ tools.token_response.result.localip }}"
+                        },
+                        {
+                            "label": "Model",
+                            "value": "{{ tools.token_response.result.model }}"
+                        }
+                    ]
+                },
+                {
+                    "id": "cloud_create",
+                    "type": "instance",
+                    "instance": {
+                        "instance_id": "{{ form.instance_details.instance_id }}",
+                        "friendly_name": "{{ form.instance_details.friendly_name }}",
+                        "connector_type": "xiaomi_miio",
+                        "update_interval": 15,
+                        "config": {
+                            "connection": {
+                                "method": "cloud",
+                                "country": "{{ form.cloud_credentials.country }}"
+                            }
+                        },
+                        "devices": [
+                            {
+                                "device_id": "{{ selection.selected_did.did }}",
+                                "host": "{{ tools.token_response.result.localip }}",
+                                "token": "{{ tools.token_response.result.token }}",
+                                "model": "{{ tools.token_response.result.model }}",
+                                "name": "{{ tools.token_response.result.name }}",
+                                "enabled": true
+                            }
+                        ]
+                    }
+                }
             ]
-          }
         },
         {
-          "type": "run_tool",
-          "tool": "validate_connection",
-          "input": {
-            "host": "{{ form.manual.host }}",
-            "token": "{{ form.manual.token }}"
-          },
-          "output_key": "validation",
-          "optional": true
-        },
-        {
-          "type": "run_tool",
-          "tool": "autogen",
-          "input": {
-            "integration": "xiaomi_miio",
-            "display_name": "Xiaomi MiIO",
-            "host": "{{ form.manual.host }}",
-            "model": "{{ tools.validation.result.model }}"
-          },
-          "output_key": "autogen"
-        },
-        {
-          "type": "create_instance",
-          "connector_type": "xiaomi_miio",
-          "instance_id": "{{ tools.autogen.result.instance_id }}",
-          "friendly_name": "{{ tools.autogen.result.friendly_name }}",
-          "devices": [
-            {
-              "device_id": "{{ tools.autogen.result.device_id }}",
-              "host": "{{ form.manual.host }}",
-              "token": "{{ form.manual.token }}",
-              "model": "{{ tools.autogen.result.model }}",
-              "name": "{{ tools.autogen.result.device_name }}",
-              "enabled": true
-            }
-          ]
+            "id": "manual_setup",
+            "name": "Manual",
+            "description": "Use an existing device token.",
+            "steps": [
+                {
+                    "id": "manual_form",
+                    "type": "form",
+                    "title": "Manual details",
+                    "schema": {
+                        "fields": [
+                            {
+                                "type": "text",
+                                "name": "instance_id",
+                                "label": "Instance ID",
+                                "required": true
+                            },
+                            {
+                                "type": "text",
+                                "name": "friendly_name",
+                                "label": "Friendly name",
+                                "required": true
+                            },
+                            {
+                                "type": "text",
+                                "name": "host",
+                                "label": "IP address",
+                                "required": true
+                            },
+                            {
+                                "type": "password",
+                                "name": "token",
+                                "label": "Token (32 hex)",
+                                "required": true
+                            },
+                            {
+                                "type": "text",
+                                "name": "model",
+                                "label": "Model"
+                            }
+                        ]
+                    },
+                    "actions": [
+                        {
+                            "type": "goto_flow",
+                            "label": "Use cloud",
+                            "flow": "cloud_setup"
+                        },
+                        {
+                            "type": "open_url",
+                            "label": "Token instructions",
+                            "url": "https://github.com/eduard256/IoT2mqtt/wiki/xiaomi-miio#token"
+                        }
+                    ]
+                },
+                {
+                    "id": "manual_validate",
+                    "type": "tool",
+                    "title": "Validate device",
+                    "tool": "validate_connection",
+                    "input": {
+                        "host": "{{ form.manual_form.host }}",
+                        "token": "{{ form.manual_form.token }}"
+                    },
+                    "optional": true,
+                    "output_key": "validation"
+                },
+                {
+                    "id": "manual_autogen",
+                    "type": "tool",
+                    "title": "Generate defaults",
+                    "tool": "autogen",
+                    "input": {
+                        "integration": "xiaomi_miio",
+                        "display_name": "Xiaomi MiIO",
+                        "host": "{{ form.manual_form.host }}",
+                        "model": "{{ form.manual_form.model }}"
+                    },
+                    "output_key": "autogen"
+                },
+                {
+                    "id": "manual_summary",
+                    "type": "summary",
+                    "title": "Review",
+                    "sections": [
+                        {
+                            "label": "Instance",
+                            "value": "{{ form.manual_form.instance_id }}"
+                        },
+                        {
+                            "label": "Device",
+                            "value": "{{ form.manual_form.host }}"
+                        },
+                        {
+                            "label": "Model",
+                            "value": "{{ form.manual_form.model }}"
+                        }
+                    ]
+                },
+                {
+                    "id": "manual_create",
+                    "type": "instance",
+                    "instance": {
+                        "instance_id": "{{ form.manual_form.instance_id }}",
+                        "friendly_name": "{{ form.manual_form.friendly_name }}",
+                        "connector_type": "xiaomi_miio",
+                        "update_interval": 15,
+                        "config": {
+                            "connection": {
+                                "method": "manual"
+                            }
+                        },
+                        "devices": [
+                            {
+                                "device_id": "{{ tools.autogen.result.device_id }}",
+                                "host": "{{ form.manual_form.host }}",
+                                "token": "{{ form.manual_form.token }}",
+                                "model": "{{ form.manual_form.model }}",
+                                "name": "{{ tools.autogen.result.device_name }}",
+                                "enabled": true
+                            }
+                        ]
+                    }
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }

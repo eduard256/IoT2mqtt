@@ -31,7 +31,7 @@ Responsibilities:
 - Build images on demand (`build_image`), create or restart connector containers (`create_container`, `create_or_update_container`), and produce lightweight container summaries (`list_containers`, `get_container_info`).
 - Mount host directories into connector containers:
   - `shared/` (read-only shared libs)
-  - `connectors/<name>/instances` (instance configurations)
+  - `instances/<name>` (instance configurations)
   - `.env` (for MQTT settings and other env vars)
 
 Container naming and labels:
@@ -58,7 +58,7 @@ Key actors: `ConfigService`, `DockerService`, `api/discovery.py`.
 1. When discovery starts, the API ensures the connector supports discovery via its manifest/setup.
 2. A short-lived container is launched with the connector image in discovery mode (`python -m connector discover`).
 3. Logs are streamed to keep track of progress; JSON entries with `device` or `progress` keys are parsed and stored in `discovery_sessions`.
-4. Discovered devices are persisted into `discovered_devices.json` (under the runtime base path). Adding a device writes a new instance file under `connectors/<name>/instances/` then creates or restarts the connector container via `DockerService`.
+4. Discovered devices are persisted into `discovered_devices.json` (under the runtime base path). Adding a device writes a new instance file under `instances/<name>/` then creates or restarts the connector container via `DockerService`.
 5. WebSockets (`/api/discovery/{session_id}`) push live updates to the frontend.
 
 ## Static Assets Serving
@@ -70,4 +70,3 @@ Key actors: `ConfigService`, `DockerService`, `api/discovery.py`.
 - A catch-all handler that serves `index.html` for any non-API path so client-side routing works.
 
 This setup allows identical behavior whether the backend runs inside the official Docker image or directly from a local checkout.
-

@@ -30,6 +30,7 @@ class ConfigService:
         self.base_path = candidate_base.resolve()
         self.env_file = self.base_path / ".env"
         self.connectors_path = self.base_path / "connectors"
+        self.instances_path = self.base_path / "instances"
         self.secrets_path = self.base_path / "secrets"
         self.discovered_devices_path = self.base_path / "discovered_devices.json"
         self.discovery_config_path = self.base_path / "discovery_config.json"
@@ -37,6 +38,7 @@ class ConfigService:
 
         # Ensure core directories exist so API calls do not fail on clean installs
         self.connectors_path.mkdir(parents=True, exist_ok=True)
+        self.instances_path.mkdir(parents=True, exist_ok=True)
         self.secrets_path.mkdir(parents=True, exist_ok=True)
 
         self.secrets_manager = SecretsManager(str(self.secrets_path))
@@ -208,14 +210,14 @@ class ConfigService:
                     "name": connector_dir.name,
                     "display_name": connector_dir.name.replace('_', ' ').title(),
                     "instances": [],
-                    "has_setup": (connector_dir / "setup.json").exists() or (connector_dir / "setup.py").exists(),
+                    "has_setup": (connector_dir / "setup.json").exists(),
                     "has_icon": (connector_dir / "icon.svg").exists()
                 }
                 
                 # Count instances
-                instances_dir = connector_dir / "instances"
-                if instances_dir.exists():
-                    info["instances"] = [f.stem for f in instances_dir.glob("*.json")]
+                instance_dir = self.instances_path / connector_dir.name
+                if instance_dir.exists():
+                    info["instances"] = [f.stem for f in instance_dir.glob("*.json")]
                 
                 # Load setup.json if exists
                 setup_json = connector_dir / "setup.json"
@@ -235,39 +237,10 @@ class ConfigService:
         setup_file = self.connectors_path / connector_name / "setup.json"
         
         if not setup_file.exists():
-            # Try to generate from setup.py if exists
-            setup_py = self.connectors_path / connector_name / "setup.py"
-            if setup_py.exists():
-                # Return a basic schema for connectors without setup.json
-                return self._generate_basic_setup_schema(connector_name)
             return None
-        
+
         with self.locked_file(setup_file, 'r') as f:
             return json.load(f)
-    
-    def _generate_basic_setup_schema(self, connector_name: str) -> Dict[str, Any]:
-        """Generate basic setup schema for connectors without setup.json"""
-        return {
-            "version": "1.0.0",
-            "display_name": connector_name.replace('_', ' ').title(),
-            "fields": [
-                {
-                    "type": "text",
-                    "name": "instance_id",
-                    "label": "Instance ID",
-                    "description": "Unique identifier for this instance",
-                    "required": True,
-                    "validation": {"pattern": "^[a-z0-9_-]+$"}
-                },
-                {
-                    "type": "text",
-                    "name": "friendly_name",
-                    "label": "Friendly Name",
-                    "description": "Human-readable name",
-                    "required": True
-                }
-            ]
-        }
     
     def list_instances(self, connector_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """List instances for a connector or all connectors"""
@@ -275,7 +248,7 @@ class ConfigService:
         
         if connector_name:
             # List instances for specific connector
-            instances_dir = self.connectors_path / connector_name / "instances"
+            instances_dir = self.instances_path / connector_name
             if instances_dir.exists():
                 for instance_file in instances_dir.glob("*.json"):
                     with self.locked_file(instance_file, 'r') as f:
@@ -292,7 +265,7 @@ class ConfigService:
     
     def get_instance_config(self, connector_name: str, instance_id: str) -> Optional[Dict[str, Any]]:
         """Get instance configuration"""
-        instance_file = self.connectors_path / connector_name / "instances" / f"{instance_id}.json"
+        instance_file = self.instances_path / connector_name / f"{instance_id}.json"
         
         if not instance_file.exists():
             return None
@@ -302,9 +275,9 @@ class ConfigService:
     
     def save_instance_config(self, connector_name: str, instance_id: str, config: Dict[str, Any]):
         """Save instance configuration"""
-        instances_dir = self.connectors_path / connector_name / "instances"
+        instances_dir = self.instances_path / connector_name
         instances_dir.mkdir(parents=True, exist_ok=True)
-        
+
         instance_file = instances_dir / f"{instance_id}.json"
         
         # Add metadata
@@ -320,11 +293,11 @@ class ConfigService:
     
     def delete_instance_config(self, connector_name: str, instance_id: str) -> bool:
         """Delete instance configuration"""
-        instance_file = self.connectors_path / connector_name / "instances" / f"{instance_id}.json"
-        
+        instance_file = self.instances_path / connector_name / f"{instance_id}.json"
+
         if instance_file.exists():
             # Backup before deletion
-            backup_dir = self.connectors_path / connector_name / "instances" / ".backup"
+            backup_dir = self.instances_path / connector_name / ".backup"
             backup_dir.mkdir(exist_ok=True)
             backup_file = backup_dir / f"{instance_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             shutil.copy(instance_file, backup_file)
@@ -356,15 +329,19 @@ class ConfigService:
         with self.locked_file(compose_file, 'w') as f:
             yaml.dump(compose_data, f, default_flow_style=False, sort_keys=False)
     
-    def save_instance_with_secrets(self, connector_name: str, instance_id: str, 
-                                  config: Dict[str, Any]) -> Dict[str, Any]:
+    def save_instance_with_secrets(self, connector_name: str, instance_id: str,
+                                  config: Dict[str, Any],
+                                  explicit_secrets: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Save instance configuration with separated secrets"""
         # Extract sensitive fields
         clean_config, sensitive_data = self.secrets_manager.extract_sensitive_fields(config)
+
+        if explicit_secrets:
+            sensitive_data.update({k: v for k, v in explicit_secrets.items() if v is not None})
         
         # Save clean config
         self.save_instance_config(connector_name, instance_id, clean_config)
-        
+
         # Save encrypted secrets if any
         if sensitive_data:
             self.secrets_manager.save_instance_secret(instance_id, sensitive_data)

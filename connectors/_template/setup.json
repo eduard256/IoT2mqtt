@@ -1,0 +1,61 @@
+{
+    "version": "1.0.0",
+    "display_name": "Template Connector",
+    "description": "Starter template for new IoT2MQTT connectors.",
+    "author": "IoT2MQTT",
+    "tools": {
+        "example": {
+            "entry": "actions/example.py",
+            "timeout": 5,
+            "network": "none"
+        }
+    },
+    "flows": [
+        {
+            "id": "default",
+            "name": "Example flow",
+            "default": true,
+            "steps": [
+                {
+                    "id": "basics",
+                    "type": "form",
+                    "title": "Instance basics",
+                    "schema": {
+                        "fields": [
+                            {
+                                "type": "text",
+                                "name": "instance_id",
+                                "label": "Instance ID",
+                                "required": true
+                            },
+                            {
+                                "type": "text",
+                                "name": "friendly_name",
+                                "label": "Friendly name",
+                                "required": true
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "example_tool",
+                    "type": "tool",
+                    "title": "Run example tool",
+                    "tool": "example",
+                    "auto_advance": true
+                },
+                {
+                    "id": "create",
+                    "type": "instance",
+                    "instance": {
+                        "instance_id": "{{ form.basics.instance_id }}",
+                        "friendly_name": "{{ form.basics.friendly_name }}",
+                        "connector_type": "template",
+                        "config": {},
+                        "devices": []
+                    }
+                }
+            ]
+        }
+    ]
+}

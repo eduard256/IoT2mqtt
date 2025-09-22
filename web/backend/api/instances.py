@@ -36,6 +36,7 @@ class CreateInstanceRequest(BaseModel):
     devices: List[Dict[str, Any]] = []
     enabled: bool = True
     update_interval: int = 10
+    secrets: Optional[Dict[str, Any]] = None
 
 
 class UpdateInstanceRequest(BaseModel):
@@ -131,12 +132,19 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
             "update_interval": request.update_interval,
             "created_at": datetime.now().isoformat()
         }
-        
+
+        # Maintain backwards compatibility: expose connection keys at top-level
+        if isinstance(request.config, dict):
+            for key, value in request.config.items():
+                if key not in instance_config:
+                    instance_config[key] = value
+
         # Save configuration with separated secrets
         docker_secrets = config_service.save_instance_with_secrets(
             request.connector_type,
             request.instance_id,
-            instance_config
+            instance_config,
+            request.secrets
         )
         
         # Update docker-compose.yml
@@ -144,13 +152,16 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
         service_name = f"{request.connector_type}_{request.instance_id}"
         
         # Add service configuration
+        compose_data.setdefault("services", {})
+        compose_data.setdefault("networks", {"iot2mqtt": {"driver": "bridge"}})
+
         compose_data["services"][service_name] = {
             "build": f"./connectors/{request.connector_type}",
             "container_name": f"iot2mqtt_{service_name}",
             "restart": "unless-stopped",
             "volumes": [
                 "./shared:/app/shared:ro",
-                f"./connectors/{request.connector_type}/instances:/app/instances:ro",
+                f"./instances/{request.connector_type}:/app/instances:ro",
                 "./.env:/app/.env:ro"  # Mount .env file for dynamic MQTT config
             ],
             "environment": [
@@ -231,7 +242,11 @@ async def update_instance(connector: str, instance_id: str, request: UpdateInsta
         if request.friendly_name is not None:
             existing["friendly_name"] = request.friendly_name
         if request.config is not None:
+            existing.setdefault("connection", {})
             existing["connection"].update(request.config)
+            for key, value in request.config.items():
+                if key not in existing or key in {"effect_type", "discovery_enabled", "cloud_credentials", "token"}:
+                    existing[key] = value
         if request.devices is not None:
             existing["devices"] = request.devices
         if request.enabled is not None:

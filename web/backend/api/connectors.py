@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from services.config_service import ConfigService
 from services.docker_service import DockerService
-from models.schemas import ConnectorInfo, SetupSchema, SetupField
+from models.schemas import ConnectorInfo, FlowSetupSchema, FormField
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +59,18 @@ async def list_integrations():
 async def get_integration_meta(name: str):
     """Get integration metadata including setup schema and branding"""
     try:
-        setup = config_service.get_connector_setup(name)
-        if not setup:
+        raw_setup = config_service.get_connector_setup(name)
+        if not raw_setup:
             raise HTTPException(status_code=404, detail="Integration not found")
-        
+
+        try:
+            setup_schema = FlowSetupSchema(**raw_setup)
+        except Exception as exc:
+            logger.error(f"Invalid setup schema for {name}: {exc}")
+            raise HTTPException(status_code=500, detail="Malformed setup schema")
+
+        setup = json.loads(setup_schema.json())
+
         # Add branding if not present
         if "branding" not in setup:
             setup["branding"] = config_service.get_connector_branding(name)
@@ -256,54 +264,54 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
 async def validate_configuration(name: str, request: ValidateRequest):
     """Validate integration configuration"""
     try:
-        setup = config_service.get_connector_setup(name)
-        if not setup:
+        raw_setup = config_service.get_connector_setup(name)
+        if not raw_setup:
             raise HTTPException(status_code=404, detail="Integration not found")
-        
-        errors = []
-        warnings = []
-        
-        # Validate required fields
-        if "fields" in setup:
-            for field in setup["fields"]:
-                field_name = field["name"]
-                field_required = field.get("required", False)
-                
-                if field_required and field_name not in request.config:
-                    errors.append(f"Required field '{field_name}' is missing")
-                
-                # Validate field value if present
-                if field_name in request.config:
-                    value = request.config[field_name]
-                    
-                    # Type validation
-                    field_type = field.get("type")
-                    if field_type == "number" and not isinstance(value, (int, float)):
-                        errors.append(f"Field '{field_name}' must be a number")
-                    elif field_type == "checkbox" and not isinstance(value, bool):
-                        errors.append(f"Field '{field_name}' must be a boolean")
-                    
-                    # Pattern validation
-                    if "validation" in field and "pattern" in field["validation"]:
-                        import re
-                        pattern = field["validation"]["pattern"]
-                        if isinstance(value, str) and not re.match(pattern, value):
-                            errors.append(f"Field '{field_name}' does not match required pattern")
-                    
-                    # Range validation for numbers
-                    if field_type == "number":
-                        if "min" in field and value < field["min"]:
-                            errors.append(f"Field '{field_name}' must be >= {field['min']}")
-                        if "max" in field and value > field["max"]:
-                            errors.append(f"Field '{field_name}' must be <= {field['max']}")
-        
-        # Check for unknown fields
-        if "fields" in setup:
-            known_fields = {f["name"] for f in setup["fields"]}
-            for key in request.config.keys():
-                if key not in known_fields and not key.startswith("_"):
-                    warnings.append(f"Unknown field '{key}'")
-        
+
+        try:
+            setup = FlowSetupSchema(**raw_setup)
+        except Exception as exc:
+            logger.error(f"Invalid setup schema for {name}: {exc}")
+            raise HTTPException(status_code=500, detail="Malformed setup schema")
+
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        form_fields: Dict[str, FormField] = {}
+
+        for flow in setup.flows:
+            for step in flow.steps:
+                if step.type == "form" and step.schema:
+                    for field in step.schema.fields:
+                        form_fields[field.name] = field
+
+        for field_name, field in form_fields.items():
+            if field.required and field_name not in request.config:
+                errors.append(f"Required field '{field_name}' is missing")
+
+            if field_name in request.config:
+                value = request.config[field_name]
+                if field.type == "number" and not isinstance(value, (int, float)):
+                    errors.append(f"Field '{field_name}' must be numeric")
+                if field.type == "checkbox" and not isinstance(value, bool):
+                    errors.append(f"Field '{field_name}' must be boolean")
+
+                if field.pattern and isinstance(value, str):
+                    import re
+
+                    if not re.fullmatch(field.pattern, value):
+                        errors.append(f"Field '{field_name}' value does not match pattern")
+
+                if field.type == "number":
+                    if field.min is not None and value < field.min:
+                        errors.append(f"Field '{field_name}' must be >= {field.min}")
+                    if field.max is not None and value > field.max:
+                        errors.append(f"Field '{field_name}' must be <= {field.max}")
+
+        for key in request.config.keys():
+            if key not in form_fields and not key.startswith("_"):
+                warnings.append(f"Unknown field '{key}'")
+
         return {
             "valid": len(errors) == 0,
             "errors": errors,
@@ -320,51 +328,55 @@ async def validate_configuration(name: str, request: ValidateRequest):
 @router.get("/api/connectors/available")
 async def get_available_connectors():
     """Get list of available connectors with manifest data"""
-    connectors = []
+    connectors: List[Dict[str, Any]] = []
 
-    # Scan connectors directory
     connectors_path = config_service.connectors_path
     if not connectors_path.exists():
-        return []
-    
+        return connectors
+
     for connector_dir in connectors_path.iterdir():
-        if connector_dir.is_dir() and not connector_dir.name.startswith('_'):
-            # Check for manifest.json (new format)
-            manifest_file = connector_dir / "manifest.json"
-            if manifest_file.exists():
-                with open(manifest_file, 'r') as f:
-                    manifest = json.load(f)
-                    
-                connectors.append({
-                    "name": connector_dir.name,
-                    "display_name": manifest.get("name", connector_dir.name),
-                    "version": manifest.get("version", "1.0.0"),
-                    "author": manifest.get("author", "Unknown"),
-                    "description": f"Integration for {manifest.get('name', connector_dir.name)} devices",
-                    "branding": manifest.get("branding"),
-                    "discovery": manifest.get("discovery"),
-                    "manual_config": manifest.get("manual_config"),
-                    "capabilities": manifest.get("capabilities", [])
-                })
-            # Fallback to old setup.json format
-            elif (connector_dir / "setup.json").exists():
-                setup_file = connector_dir / "setup.json"
-                with open(setup_file, 'r') as f:
-                    setup_data = json.load(f)
-                    
-                connectors.append({
-                    "name": connector_dir.name,
-                    "display_name": setup_data.get("display_name", connector_dir.name),
-                    "version": setup_data.get("version", "1.0.0"),
-                    "author": setup_data.get("author", "Unknown"),
-                    "description": setup_data.get("description", ""),
-                    "branding": {
-                        "icon": "📦",
-                        "category": "general"
-                    },
-                    "discovery": {
-                        "supported": False
-                    }
-                })
-    
+        if not connector_dir.is_dir() or connector_dir.name.startswith('_'):
+            continue
+
+        setup_path = connector_dir / "setup.json"
+        manifest_path = connector_dir / "manifest.json"
+
+        if not setup_path.exists():
+            continue
+
+        with open(setup_path, 'r') as f:
+            raw_setup = json.load(f)
+
+        try:
+            setup = FlowSetupSchema(**raw_setup)
+        except Exception as exc:
+            logger.error(f"Skipping {connector_dir.name}: invalid setup schema ({exc})")
+            continue
+
+        manifest: Dict[str, Any] = {}
+        if manifest_path.exists():
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+
+        primary_flow = next((flow for flow in setup.flows if flow.default), setup.flows[0])
+
+        connectors.append({
+            "name": connector_dir.name,
+            "display_name": setup.display_name,
+            "version": manifest.get("version", setup.version),
+            "author": setup.author or manifest.get("author", "Unknown"),
+            "description": setup.description or manifest.get("description", ""),
+            "branding": setup.branding or manifest.get("branding"),
+            "discovery": setup.discovery,
+            "capabilities": manifest.get("capabilities", []),
+            "default_flow": primary_flow.id,
+            "flows": [
+                {
+                    "id": flow.id,
+                    "name": flow.name,
+                    "description": flow.description
+                } for flow in setup.flows
+            ]
+        })
+
     return connectors

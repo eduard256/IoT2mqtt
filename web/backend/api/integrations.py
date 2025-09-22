@@ -62,7 +62,7 @@ async def get_configured_integrations():
             if not connector_dir.is_dir() or connector_dir.name.startswith('_'):
                 continue
                 
-            instances_path = connector_dir / "instances"
+            instances_path = config_service.instances_path / connector_dir.name
             if not instances_path.exists():
                 continue
             
@@ -135,7 +135,7 @@ async def get_configured_integrations():
 async def get_integration_instances(integration_name: str):
     """Get all instances for a specific integration"""
     try:
-        instances_path = config_service.connectors_path / integration_name / "instances"
+        instances_path = config_service.instances_path / integration_name
         if not instances_path.exists():
             return []
         
@@ -176,13 +176,13 @@ async def get_instance_details(instance_id: str):
     """Get detailed information about a specific instance"""
     try:
         # Find the instance file across all connectors
-        connectors_path = config_service.connectors_path
-        
-        for connector_dir in connectors_path.iterdir():
+        instances_root = config_service.instances_path
+
+        for connector_dir in config_service.connectors_path.iterdir():
             if not connector_dir.is_dir() or connector_dir.name.startswith('_'):
                 continue
-                
-            instance_file = connector_dir / "instances" / f"{instance_id}.json"
+
+            instance_file = instances_root / connector_dir.name / f"{instance_id}.json"
             if instance_file.exists():
                 with open(instance_file, 'r') as f:
                     instance_config = json.load(f)
@@ -357,7 +357,7 @@ async def delete_instance(instance_id: str):
             pass
         
         # 2. Delete configuration file
-        config_file = config_service.connectors_path / integration_name / "instances" / f"{instance_id}.json"
+        config_file = config_service.instances_path / integration_name / f"{instance_id}.json"
         if config_file.exists():
             config_file.unlink()
             logger.info(f"Deleted config file {config_file}")
@@ -414,13 +414,11 @@ async def get_container_status(integration_name: str, instance_id: str) -> str:
 
 async def find_integration_for_instance(instance_id: str) -> Optional[str]:
     """Find which integration an instance belongs to"""
-    connectors_path = config_service.connectors_path
-    
-    for connector_dir in connectors_path.iterdir():
+    for connector_dir in config_service.connectors_path.iterdir():
         if not connector_dir.is_dir() or connector_dir.name.startswith('_'):
             continue
-            
-        instance_file = connector_dir / "instances" / f"{instance_id}.json"
+
+        instance_file = config_service.instances_path / connector_dir.name / f"{instance_id}.json"
         if instance_file.exists():
             return connector_dir.name
     
@@ -431,7 +429,7 @@ async def create_container_for_instance(integration_name: str, instance_id: str)
     """Create and start a container for an instance"""
     try:
         # Load instance configuration
-        config_file = config_service.connectors_path / integration_name / "instances" / f"{instance_id}.json"
+        config_file = config_service.instances_path / integration_name / f"{instance_id}.json"
         if not config_file.exists():
             raise HTTPException(status_code=404, detail="Instance configuration not found")
         

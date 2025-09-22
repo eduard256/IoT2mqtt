@@ -1,184 +1,18 @@
 {
   "domain": "yeelight",
   "name": "Yeelight",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "IoT2MQTT",
   "documentation": "https://github.com/eduard256/IoT2mqtt/wiki/yeelight",
   "requirements": ["yeelight==0.7.14"],
   "iot_class": "local_polling",
   "integration_type": "device",
   "supported_brands": ["Yeelight", "Xiaomi", "Mijia"],
-  
-  "discovery": {
-    "supported": true,
-    "timeout": 15,
-    "network_mode": "host",
-    "command": "python discovery.py"
-  },
-  
-  "manual_config": {
-    "fields": [
-      {
-        "name": "ip",
-        "type": "ip",
-        "label": "IP Address",
-        "required": true,
-        "placeholder": "192.168.1.100",
-        "validation": {
-          "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$",
-          "message": "Please enter a valid IP address"
-        }
-      },
-      {
-        "name": "port",
-        "type": "number",
-        "label": "Port",
-        "default": 55443,
-        "min": 1,
-        "max": 65535,
-        "required": false
-      },
-      {
-        "name": "name",
-        "type": "text",
-        "label": "Device Name",
-        "required": true,
-        "placeholder": "Living Room Light",
-        "maxLength": 50
-      },
-      {
-        "name": "model",
-        "type": "select",
-        "label": "Device Model",
-        "required": false,
-        "options": [
-          {"value": "mono", "label": "Monochrome"},
-          {"value": "color", "label": "Color"},
-          {"value": "stripe", "label": "Light Strip"},
-          {"value": "ceiling", "label": "Ceiling Light"},
-          {"value": "bslamp", "label": "Bedside Lamp"}
-        ],
-        "default": "color"
-      },
-      {
-        "name": "transition",
-        "type": "number",
-        "label": "Transition Duration (ms)",
-        "default": 300,
-        "min": 30,
-        "max": 10000,
-        "step": 50,
-        "required": false
-      },
-      {
-        "name": "effect",
-        "type": "select",
-        "label": "Default Effect",
-        "options": [
-          {"value": "smooth", "label": "Smooth"},
-          {"value": "sudden", "label": "Sudden"}
-        ],
-        "default": "smooth",
-        "required": false
-      }
-    ],
-    "test_connection": {
-      "enabled": true,
-      "command": "python -c \"from yeelight import Bulb; b = Bulb('{ip}', {port}); print('OK' if b.get_properties() else 'FAIL')\""
-    }
-  },
-  
-  "instance_config": {
-    "fields": [
-      {
-        "name": "instance_id",
-        "type": "text",
-        "label": "Instance ID",
-        "required": true,
-        "placeholder": "home_lights",
-        "validation": {
-          "pattern": "^[a-z0-9_-]+$",
-          "message": "Only lowercase letters, numbers, underscore and dash allowed"
-        }
-      },
-      {
-        "name": "friendly_name",
-        "type": "text",
-        "label": "Friendly Name",
-        "required": true,
-        "placeholder": "Home Lights"
-      },
-      {
-        "name": "update_interval",
-        "type": "number",
-        "label": "Update Interval (seconds)",
-        "default": 10,
-        "min": 1,
-        "max": 300,
-        "required": false
-      },
-      {
-        "name": "discovery_enabled",
-        "type": "checkbox",
-        "label": "Enable automatic device discovery",
-        "default": true,
-        "required": false
-      },
-      {
-        "name": "discovery_interval",
-        "type": "number",
-        "label": "Discovery Interval (seconds)",
-        "default": 300,
-        "min": 60,
-        "max": 3600,
-        "required": false,
-        "depends_on": {
-          "discovery_enabled": true
-        }
-      }
-    ]
-  },
-  
-  "branding": {
-    "icon": "💡",
-    "color": "#FFA500",
-    "background": "linear-gradient(135deg, #FFA500 0%, #FF6B6B 100%)",
-    "category": "lighting"
-  },
-  
   "capabilities": [
     "brightness",
     "color_temp",
     "rgb_color",
     "effects",
     "transitions"
-  ],
-  
-  "device_types": [
-    {
-      "model": "mono",
-      "name": "Monochrome Bulb",
-      "capabilities": ["brightness"]
-    },
-    {
-      "model": "color",
-      "name": "Color Bulb",
-      "capabilities": ["brightness", "color_temp", "rgb_color"]
-    },
-    {
-      "model": "stripe",
-      "name": "Light Strip",
-      "capabilities": ["brightness", "rgb_color", "effects"]
-    },
-    {
-      "model": "ceiling",
-      "name": "Ceiling Light",
-      "capabilities": ["brightness", "color_temp", "rgb_color", "moonlight"]
-    },
-    {
-      "model": "bslamp",
-      "name": "Bedside Lamp",
-      "capabilities": ["brightness", "color_temp", "rgb_color"]
-    }
   ]
 }

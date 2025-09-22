@@ -10,36 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { toast } from '@/hooks/use-toast'
 import BrandIcon from './BrandIcon'
-import DeviceSetupForm from './DeviceSetupForm'
 import FlowSetupForm from './FlowSetupForm'
-
-interface Integration {
-  name: string
-  display_name: string
-  version: string
-  author: string
-  description: string
-  branding?: {
-    icon: string
-    color: string
-    category: string
-  }
-  discovery?: {
-    supported: boolean
-  }
-  manual_config?: {
-    fields: Array<{
-      name: string
-      type: string
-      label: string
-      required: boolean
-      default?: any
-      placeholder?: string
-      validation?: any
-      options?: Array<{ value: string; label: string }>
-    }>
-  }
-}
+import type { IntegrationSummary } from '@/types/integration'
 
 interface AddIntegrationModalProps {
   onClose: () => void
@@ -50,8 +22,8 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [integrations, setIntegrations] = useState<Integration[]>([])
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
+  const [integrations, setIntegrations] = useState<IntegrationSummary[]>([])
+  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationSummary | null>(null)
 
   useEffect(() => {
     fetchIntegrations()
@@ -72,9 +44,9 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
       })
 
       if (response.ok) {
-        const data = await response.json()
+        const data: IntegrationSummary[] = await response.json()
         // Filter out _template during development
-        const filtered = data.filter((integration: Integration) => !integration.name.startsWith('_'))
+        const filtered = data.filter(integration => !integration.name.startsWith('_'))
         setIntegrations(filtered)
       } else {
         throw new Error('Failed to load integrations')
@@ -93,10 +65,10 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
   const filteredIntegrations = integrations.filter(integration =>
     integration.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     integration.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    integration.branding?.category?.toLowerCase().includes(searchQuery.toLowerCase())
+    (integration.branding?.category as string | undefined)?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const handleIntegrationSelect = (integration: Integration) => {
+  const handleIntegrationSelect = (integration: IntegrationSummary) => {
     setSelectedIntegration(integration)
   }
 
@@ -193,7 +165,7 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <h4 className="font-semibold truncate">{integration.display_name}</h4>
-                            {integration.discovery?.supported && (
+                            {integration.discovery && (
                               <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
                                 {t('Auto')}
                               </Badge>
@@ -204,13 +176,18 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
                             {integration.description}
                           </p>
 
-                          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                             <span>{t('Version')}: {integration.version}</span>
                             {integration.branding?.category && (
                               <Badge variant="outline" className="text-xs">
-                                {integration.branding.category}
+                                {integration.branding.category as string}
                               </Badge>
                             )}
+                            {(integration.flows ?? []).slice(0, 2).map(flow => (
+                              <Badge key={`${integration.name}-${flow.id}`} variant="secondary" className="text-xs">
+                                {flow.name}
+                              </Badge>
+                            ))}
                           </div>
                         </div>
                       </div>

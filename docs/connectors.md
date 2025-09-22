@@ -1,68 +1,87 @@
-# Connector Structure and Packaging
+# Connector Structure
 
-Connectors live under `connectors/<name>/` and are packaged as standalone Docker images managed by the web container. This document explains the directory layout and expectations when authoring or debugging a connector.
+Connectors now live entirely inside `connectors/<name>/` and expose their setup
+flows via a declarative `setup.json`. The runtime containers mount shared code
+from `/app/shared` and instance configuration from the top-level `instances/`
+directory.
 
 ## Directory Layout
 
 ```
 connectors/
   <connector_name>/
-    connector.py           # Entrypoint used by DockerService
-    discovery.py           # Optional discovery runner
-    manifest.json          # Metadata + UI schema (preferred)
-    setup.json             # Legacy schema (fallback)
-    icon.svg               # Optional icon served in the integrations catalog
-    instances/             # Generated per-instance configs (not tracked in git)
-    requirements.txt       # Python dependencies for the connector container
-    Dockerfile             # Builds iot2mqtt/<connector>:latest
-    README.md              # Connector-specific documentation (optional)
+    actions/             # Setup flow helpers executed by the test-runner
+    connector.py         # Runtime implementation (inherits BaseConnector)
+    Dockerfile           # Builds iot2mqtt_<connector>:latest
+    main.py              # Entrypoint for the container
+    manifest.json        # Metadata for the integrations catalog
+    requirements.txt     # Python dependencies for runtime/actions
+    setup.json           # Declarative flow definition consumed by the web UI
+    README.md            # Optional connector-specific notes
 ```
 
-Key notes:
+All instance files are stored under `instances/<connector>/<instance_id>.json`
+and are never committed to the repository.
 
-- The repository keeps empty `instances/` folders via `.gitkeep`. Real instance configs are generated on the host and ignored by `.gitignore`.
-- Each connector may reference shared utilities through `/app/shared`, which is mounted read-only into every container.
-- The Docker image name follows `iot2mqtt/<connector>:latest`. Discovery uses the same image, launched with the `python -m connector discover` command.
+## Declarative Setup (`setup.json`)
 
-## Manifest and Setup
+The web UI reads `setup.json` and renders multi-step flows without any custom
+frontend code. The schema is defined by `FlowSetupSchema` and includes:
 
-### `manifest.json`
+- `flows` — list of scenarios (cloud, manual, discovery, etc.) with ordered
+  `steps`.
+- Step types: `form`, `tool`, `select`, `summary`, `message`, `oauth`,
+  `instance`.
+- `tools` — mapping of tool identifiers to scripts under `actions/`. Tools run
+  inside the dedicated test-runner container.
+- Optional metadata (`branding`, `requirements`, `discovery`) to enrich the
+  integrations catalog.
 
-Preferred format that supports:
+### Step Data Binding
 
-- `name`, `version`, `author`, `documentation` — displayed in the UI.
-- `branding` — icon (emoji or relative path), primary color, gradient background, category.
-- `discovery` — flags discovery support and default runtime arguments (`timeout`, `network_mode`, `command`).
-- `manual_config` / `instance_config` — form metadata used by the React `FlowSetupForm` component.
+Templating uses double curly braces (e.g. `{{ form.credentials.username }}`)
+with the following namespaces:
 
-### `setup.json`
+- `form.<step_id>` – values collected in previous form steps
+- `tools.<output_key>` – JSON returned by tool executions
+- `selection.<key>` – value produced by `select` steps
+- `oauth.<provider>` – session information returned by OAuth flows
+- `integration` – basic metadata such as the integration name
 
-Legacy fallback. When only `setup.py` is present, `ConfigService` auto-generates a minimal schema composed of `instance_id` and `friendly_name` fields.
+Arrays and objects can be produced by specifying structured `item_value`
+objects or `instance` payloads – `FlowSetupForm` resolves nested placeholders
+recursively.
 
-## Instances
+## Runtime Containers
 
-- Saved under `connectors/<name>/instances/<instance_id>.json`.
-- Managed exclusively via APIs: discovery add flow or manual instance creation.
-- Contain device lists, connection parameters, and metadata (`created_at`, `updated_at`).
-- Sensitive fields are extracted and stored separately through `SecretsManager`; plain configs remain safe to inspect.
+When an instance is created the backend:
 
-## Icons
+1. Saves configuration to `instances/<connector>/<instance_id>.json`.
+2. Extracts sensitive fields via `SecretsManager` and stores them under
+   `secrets/instances/` (also exposed as Docker secrets to the container).
+3. Updates `docker-compose.yml` with a service named
+   `<connector>_<instance_id>` mounting `./instances/<connector>:/app/instances`.
+4. Builds and starts `iot2mqtt_<connector>:latest` if necessary.
 
-- `icon.svg` is optional but recommended. The backend exposes `/api/integrations/{name}/icon` for the frontend.
-- Missing icons fall back to the default vectors bundled inside the frontend build (`dist/icons/default.svg` or `dist/assets/default-icon.svg`).
+At runtime the connector uses `BaseConnector` which already handles MQTT
+subscriptions, state publishing, and clean shutdown.
 
-## Container Naming and Labels
+## Actions & Test Runner
 
-- Runtime container name: `iot2mqtt_<connector>_<instance>`.
-- Labels applied automatically:
-  - `iot2mqtt.type=connector`
-  - `iot2mqtt.connector=<connector>`
-  - `iot2mqtt.instance=<instance>`
+Tool scripts under `actions/` run inside `test-runner`. Each script must read
+JSON input from `stdin` (or accept `--` arguments) and print a JSON response to
+`stdout` in the format `{ "ok": true/false, "result": ... }`.
 
-These labels allow the Containers page to categorize entries and map them back to integrations.
+Examples:
 
-## Discovery Output Contract
+- `actions/discover.py` — scan the network and return device candidates.
+- `actions/validate.py` — verify credentials or reachable hosts.
+- `actions/autogen.py` — generate instance IDs, device names, or other helper
+  data.
 
-- Discovery scripts should emit JSON lines containing either `{"device": {...}}` or `{"progress": <int>}` so the backend can persist results and surface live status updates.
-- Devices saved in `discovered_devices.json` must include unique `id` values and the owning `integration` name. Additional metadata (IP, port, model, capabilities) improves the UX when converting to managed instances.
+## Template Connector
 
+A ready-to-clone template is available in `connectors/_template`. It contains a
+minimal runtime, sample action, and a one-step `setup.json` to demonstrate the
+shape of a flow. Copy the folder, rename it, and adjust the files to build new
+integrations.

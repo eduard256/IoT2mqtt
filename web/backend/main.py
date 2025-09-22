@@ -27,7 +27,7 @@ from models.schemas import *
 from services.config_service import ConfigService
 from services.docker_service import DockerService
 from services.mqtt_service import MQTTService
-from api import auth, mqtt, connectors, instances, devices, docker, discovery, integrations, tools
+from api import auth, mqtt, connectors, instances, devices, docker, discovery, integrations, tools, oauth
 from services.secrets_manager import SecretsManager
 
 import logging
@@ -112,6 +112,7 @@ app.include_router(docker.router, prefix="/api/docker")
 app.include_router(discovery.router)
 app.include_router(integrations.router)
 app.include_router(tools.router)
+app.include_router(oauth.router)
 
 # Static files will be mounted after API routes
 

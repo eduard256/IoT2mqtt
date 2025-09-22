@@ -9,6 +9,7 @@ services:
     volumes:
       - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock:rw  # Docker access (rootless compatible)
       - ./connectors:/app/connectors:rw               # Connector definitions
+      - ./instances:/app/instances:rw                 # Instance configurations
       - ./secrets:/app/secrets:rw                     # Secrets storage
       - ./.env:/app/.env:rw                          # Environment config
       - ./shared:/app/shared:ro                       # Shared libraries
@@ -41,6 +42,7 @@ services:
       - iot2mqtt
     volumes:
       - ./connectors:/app/connectors:ro              # Read-only access to connectors
+      - ./instances:/app/instances:ro                # Read-only access to instances
       - ./shared:/app/shared:ro                      # Shared libraries
     environment:
       - TEST_RUNNER_PORT=8001

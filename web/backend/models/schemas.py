@@ -76,29 +76,128 @@ class DeviceCommand(BaseModel):
     timeout: float = 5.0
 
 
-class SetupField(BaseModel):
-    """Setup form field definition"""
-    type: Literal["text", "password", "number", "select", "checkbox", "ip", "url", "email", "json"]
-    name: str
+class FlowAction(BaseModel):
+    """Action rendered as a button inside a step"""
+    type: Literal["goto_flow", "open_url", "reset_flow", "rerun_step", "submit", "close", "custom"]
+    label: Optional[str] = None
+    flow: Optional[str] = Field(default=None, description="Target flow id for goto_flow")
+    url: Optional[str] = Field(default=None, description="URL to open for open_url")
+    payload: Optional[Dict[str, Any]] = None
+    confirm: Optional[Dict[str, Any]] = Field(default=None, description="Optional confirmation dialog settings")
+
+
+class FormFieldOption(BaseModel):
+    """Selectable option used by select fields"""
+    value: Any
     label: str
+
+
+class FormField(BaseModel):
+    """Single form field definition"""
+    type: Literal[
+        "text",
+        "password",
+        "number",
+        "select",
+        "checkbox",
+        "ip",
+        "url",
+        "email",
+        "textarea"
+    ]
+    name: str
+    label: Optional[str] = None
     description: Optional[str] = None
-    required: bool = True
+    required: bool = False
     default: Optional[Any] = None
     placeholder: Optional[str] = None
-    validation: Optional[Dict[str, Any]] = None
-    options: Optional[List[Dict[str, Any]]] = None  # For select type
-    min: Optional[float] = None  # For number type
-    max: Optional[float] = None  # For number type
-    step: Optional[float] = None  # For number type
-    depends_on: Optional[Dict[str, Any]] = None  # Conditional fields
+    options: Optional[List[FormFieldOption]] = None
+    pattern: Optional[str] = None
+    min: Optional[float] = None
+    max: Optional[float] = None
+    step: Optional[float] = None
+    multiline: bool = False
+    secret: bool = False
+    conditions: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional map describing when the field should be shown"
+    )
 
 
-class SetupSchema(BaseModel):
-    """Connector setup schema"""
+class FormSchema(BaseModel):
+    """Schema used by form steps"""
+    fields: List[FormField]
+
+
+class FlowStep(BaseModel):
+    """Generic flow step description"""
+    id: str
+    type: Literal[
+        "form",
+        "tool",
+        "select",
+        "summary",
+        "discovery",
+        "message",
+        "instance",
+        "oauth"
+    ]
+    title: Optional[str] = None
+    description: Optional[str] = None
+    schema: Optional[FormSchema] = None
+    tool: Optional[str] = None
+    input: Optional[Dict[str, Any]] = None
+    output_key: Optional[str] = None
+    items: Optional[str] = Field(default=None, description="Template describing items source for select steps")
+    item_label: Optional[str] = None
+    item_value: Optional[str] = None
+    multi_select: bool = False
+    sections: Optional[List[Dict[str, Any]]] = None
+    actions: Optional[List[FlowAction]] = None
+    auto_advance: bool = False
+    optional: bool = False
+    conditions: Optional[Dict[str, Any]] = None
+    instance: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Configuration payload for instance steps"
+    )
+    oauth: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="OAuth provider configuration for oauth steps"
+    )
+
+
+class FlowDefinition(BaseModel):
+    """Single setup flow"""
+    id: str
+    name: str
+    description: Optional[str] = None
+    default: bool = False
+    prerequisites: Optional[List[str]] = None
+    steps: List[FlowStep]
+
+
+class ToolDefinition(BaseModel):
+    """Definition of an executable tool used by setup flows"""
+    entry: str
+    timeout: int = 30
+    network: Literal["none", "local", "internet"] = "none"
+    secrets: Optional[List[str]] = None
+    environment: Optional[Dict[str, str]] = None
+
+
+class FlowSetupSchema(BaseModel):
+    """Complete connector setup description"""
     version: str = "1.0.0"
-    fields: List[SetupField]
-    groups: Optional[List[Dict[str, Any]]] = None  # Field grouping
-    wizard_steps: Optional[List[Dict[str, Any]]] = None  # Multi-step wizard
+    display_name: str
+    description: Optional[str] = None
+    author: Optional[str] = None
+    branding: Optional[Dict[str, Any]] = None
+    requirements: Optional[Dict[str, Any]] = None
+    flows: List[FlowDefinition]
+    tools: Dict[str, ToolDefinition] = {}
+    discovery: Optional[Dict[str, Any]] = None
+    secrets: Optional[List[str]] = None
 
 
 class ContainerInfo(BaseModel):

@@ -59,7 +59,7 @@ This document lists the main REST endpoints exposed by the FastAPI backend. All 
 ### POST `/api/discovery/devices/{device_id}/add`
 
 - Body: `{ "device_id", "instance_id", "friendly_name", "config": { ... } }`.
-- Action: writes a new instance file under `connectors/<integration>/instances/` and starts/updates the connector container.
+- Action: writes a new instance file under `instances/<integration>/` and starts/updates the connector container.
 
 ### DELETE `/api/discovery/devices/{device_id}`
 
@@ -115,4 +115,3 @@ Key routes under `/api/mqtt`:
 ### WebSocket `/ws/mqtt`
 
 - Streams MQTT messages (topics and payloads). The frontend subscribes after login, sending the JWT as a query parameter.
-

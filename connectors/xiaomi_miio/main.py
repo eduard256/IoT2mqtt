@@ -56,7 +56,7 @@ def main():
     config_path = os.getenv('CONFIG_PATH')
     if not config_path:
         # Try standard locations
-        config_path = f"/app/connectors/xiaomi_miio/instances/{instance_name}.json"
+        config_path = f"/app/instances/{instance_name}.json"
         if not os.path.exists(config_path):
             config_path = f"instances/{instance_name}.json"
     
