@@ -9,7 +9,7 @@ This document explains the core backend services that power the web API and conn
 Responsibilities:
 
 - Determine the runtime base path. The service first checks `IOT2MQTT_PATH`, then walks up from its own location until it finds a directory containing `docker-compose.yml`, finally falling back to the current working directory.
-- Provide resolved paths for: `.env`, `connectors/`, `secrets/`, `discovered_devices.json`, `discovery_config.json`, and the compiled frontend (`frontend/dist` or `web/frontend/dist`).
+- Provide resolved paths for: `.env`, `connectors/`, `secrets/`, `discovered_devices.json`, `discovery_config.json`, and the compiled frontend (`frontend/dist` or `web/frontend/dist`). Путь к директории `secrets/` может быть переопределён переменной окружения `IOT2MQTT_SECRETS_PATH`.
 - Guarantee required directories exist by calling `mkdir(parents=True, exist_ok=True)` for `connectors/` and `secrets/` during initialization.
 - Load and persist `.env` values with file locking to avoid concurrent write issues.
 - Enumerate connectors and instances, generating backup copies when configs are updated.

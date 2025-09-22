@@ -135,6 +135,14 @@ Key benefits:
 - OAuth, discovery, and manual flows share the same infrastructure.
 - Instance files are stored under `instances/<connector>/<id>.json`, while
   secrets are encrypted automatically.
+
+### Environment variables
+
+- `IOT2MQTT_PATH` — overrides the project root auto-detected by backend
+  services.
+- `IOT2MQTT_SECRETS_PATH` — custom directory for encrypted secrets and the
+  master key (`.master.key`). Useful for running tests or deploying in
+  environments with restricted filesystem access.
 5. **Shared Network** allows inter-container communication
 
 ## 🎨 Web Interface Features

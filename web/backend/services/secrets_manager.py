@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 class SecretsManager:
     """Manages encryption and storage of sensitive credentials"""
     
-    def __init__(self, secrets_path: str = "/app/secrets"):
-        self.secrets_path = Path(secrets_path)
+    def __init__(self, secrets_path: Optional[str] = None):
+        raw_path = secrets_path or os.getenv("IOT2MQTT_SECRETS_PATH") or "/app/secrets"
+        self.secrets_path = Path(raw_path)
         self.instances_path = self.secrets_path / "instances"
         self.master_key_path = self.secrets_path / ".master.key"
         
