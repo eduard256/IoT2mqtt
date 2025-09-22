@@ -52,6 +52,9 @@ Arrays and objects can be produced by specifying structured `item_value`
 objects or `instance` payloads – `FlowSetupForm` resolves nested placeholders
 recursively.
 
+For a full reference of every step type, action, templating rule, and OAuth
+integration see [`docs/setup-flows.md`](setup-flows.md).
+
 ## Runtime Containers
 
 When an instance is created the backend:

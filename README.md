@@ -118,6 +118,23 @@ Your Host System
 2. **Docker Socket** is mounted to allow container management
 3. **Connector Containers** are created dynamically for each integration
 4. **MQTT Communication** happens directly from each container
+
+### Declarative Setup Flows
+
+Every integration describes its onboarding wizard in
+`connectors/<name>/setup.json`. The backend validates this schema and the
+frontend renders it dynamically (forms, tool execution, OAuth, summaries, etc.).
+Documentation for the full schema lives in
+[`docs/setup-flows.md`](docs/setup-flows.md).
+
+Key benefits:
+
+- No custom UI code per connector – add new steps by editing `setup.json`.
+- Tool scripts run in isolation via the test-runner container
+  (`connectors/<name>/actions/`).
+- OAuth, discovery, and manual flows share the same infrastructure.
+- Instance files are stored under `instances/<connector>/<id>.json`, while
+  secrets are encrypted automatically.
 5. **Shared Network** allows inter-container communication
 
 ## 🎨 Web Interface Features
