@@ -382,8 +382,8 @@ async def execute_action(integration: str, body: Dict[str, Any]):
         raise HTTPException(status_code=400, detail="Missing 'tool' field")
 
     setup = _load_setup(integration)
-    tools = setup.get("tools", [])
-    tool = next((t for t in tools if t.get("id") == tool_id), None)
+    tools = setup.get("tools", {})
+    tool = tools.get(tool_id)
     if not tool:
         raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found for {integration}")
 
