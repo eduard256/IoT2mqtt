@@ -25,12 +25,17 @@ security = HTTPBearer()
 
 def verify_password(plain_password, hashed_password):
     """Verify password against hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    # Truncate to 72 bytes to match hashing behavior
+    password_bytes = plain_password.encode('utf-8')[:72]
+    truncated_password = password_bytes.decode('utf-8', errors='ignore')
+    return pwd_context.verify(truncated_password, hashed_password)
 
 
 def get_password_hash(password):
-    """Hash password"""
-    return pwd_context.hash(password)
+    """Hash password (bcrypt limit: 72 bytes)"""
+    # Bcrypt has a 72 byte limit, truncate if necessary
+    password_bytes = password.encode('utf-8')[:72]
+    return pwd_context.hash(password_bytes.decode('utf-8', errors='ignore'))
 
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
@@ -68,8 +73,16 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 async def login(request: dict):
     """Login with access key"""
     from services.config_service import ConfigService
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info(f"Login request received: {request}")
+    logger.info(f"Request type: {type(request)}")
+    logger.info(f"Request keys: {request.keys() if isinstance(request, dict) else 'Not a dict'}")
 
     access_key = request.get("key")
+    logger.info(f"Access key extracted: {access_key}, length: {len(access_key) if access_key else 0}")
+
     if not access_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
