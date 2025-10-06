@@ -246,6 +246,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       setError('Tool step missing tool name')
       return
     }
+
     setBusy(true)
     setError(null)
 
@@ -284,6 +285,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     } catch (e: any) {
       // Don't show error if request was aborted (user switched flows)
       if (e.name === 'AbortError') {
+        setBusy(false)
         return
       }
       setError(e?.message ?? 'Tool execution failed')
@@ -883,11 +885,11 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
             </Button>
           )}
           {currentStep.type === 'instance' ? (
-            <Button disabled={busy} onClick={() => createInstance(currentStep)}>
+            <Button key={`finish-${currentFlowId}-${currentStepIndex}`} disabled={busy} onClick={() => createInstance(currentStep)}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Finish
             </Button>
           ) : (
-            <Button disabled={busy} onClick={handleNext}>
+            <Button key={`next-${currentFlowId}-${currentStepIndex}`} disabled={busy} onClick={handleNext}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Next
             </Button>
           )}
