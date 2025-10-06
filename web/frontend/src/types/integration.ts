@@ -69,7 +69,7 @@ export interface FlowStep {
   output_key?: string
   items?: string
   item_label?: string
-  item_value?: string
+  item_value?: string | Record<string, unknown>
   multi_select?: boolean
   sections?: Array<{ label: string; value: unknown }>
   actions?: FlowAction[]

@@ -2,7 +2,7 @@
 Pydantic models for API
 """
 
-from typing import Dict, Any, List, Optional, Literal
+from typing import Dict, Any, List, Optional, Literal, Union
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
@@ -150,7 +150,7 @@ class FlowStep(BaseModel):
     output_key: Optional[str] = None
     items: Optional[str] = Field(default=None, description="Template describing items source for select steps")
     item_label: Optional[str] = None
-    item_value: Optional[str] = None
+    item_value: Optional[Union[str, Dict[str, Any]]] = None
     multi_select: bool = False
     sections: Optional[List[Dict[str, Any]]] = None
     actions: Optional[List[FlowAction]] = None
