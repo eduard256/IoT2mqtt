@@ -105,6 +105,7 @@ app.add_middleware(
 )
 
 # Include API routers
+app.include_router(auth.router)
 app.include_router(connectors.router)
 app.include_router(instances.router)
 app.include_router(devices.router)
@@ -174,26 +175,6 @@ async def health_check():
     }
 
 
-@app.post("/api/auth/login", response_model=AuthResponse)
-async def login(request: AuthRequest):
-    """Login with access key"""
-    if not verify_access_key(request.key):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid access key"
-        )
-    
-    # Create access token
-    access_token = create_access_token(
-        data={"sub": "user"},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    
-    return AuthResponse(
-        success=True,
-        message="Login successful",
-        token=access_token
-    )
 
 
 @app.get("/api/auth/check")

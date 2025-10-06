@@ -65,9 +65,16 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 
 @router.post("/login")
-async def login(access_key: str):
+async def login(request: dict):
     """Login with access key"""
     from services.config_service import ConfigService
+
+    access_key = request.get("key")
+    if not access_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Access key is required",
+        )
 
     config_service = ConfigService()
     stored_key_hash = config_service.get_access_key()
