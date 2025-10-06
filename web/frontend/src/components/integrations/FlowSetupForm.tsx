@@ -51,6 +51,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [busy, setBusy] = useState(false)
   const [oauthSession, setOauthSession] = useState<{ id: string; provider: string } | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const autoRanSteps = useRef<Set<string>>(new Set())
 
   useEffect(() => {
@@ -333,6 +334,16 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     })
   }
 
+  function generateInstanceId(friendlyName: string): string {
+    return friendlyName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s_-]/g, '')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+  }
+
   async function createInstance(step: FlowStep) {
     if (!step.instance) {
       setError('Instance step missing configuration')
@@ -342,10 +353,20 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     setError(null)
     try {
       const resolved = resolveDeep(step.instance)
+
+      // Auto-generate instance_id if empty or "auto"
+      let instanceId = resolved.instance_id
+      if (!instanceId || instanceId.trim() === '' || instanceId.trim().toLowerCase() === 'auto') {
+        if (!resolved.friendly_name) {
+          throw new Error('Friendly name is required to auto-generate instance ID')
+        }
+        instanceId = generateInstanceId(resolved.friendly_name)
+      }
+
       const payload = {
-        instance_id: resolved.instance_id,
+        instance_id: instanceId,
         connector_type: resolved.connector_type ?? integration.name,
-        friendly_name: resolved.friendly_name ?? resolved.instance_id,
+        friendly_name: resolved.friendly_name ?? instanceId,
         config: resolved.config ?? {},
         devices: resolved.devices ?? [],
         enabled: resolved.enabled ?? true,
@@ -474,6 +495,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     const values = flowState.form[step.id] ?? {}
     const value = values[field.name] ?? (field.default ?? '')
     if (!evaluateConditions(field.conditions)) return null
+    if (field.advanced && !showAdvanced) return null
 
     if (field.type === 'select') {
       return (
@@ -530,6 +552,8 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   }
 
   function renderForm(step: FlowStep) {
+    const hasAdvancedFields = step.schema?.fields?.some(field => field.advanced) ?? false
+
     return (
       <Card>
         <CardHeader>
@@ -538,6 +562,17 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         </CardHeader>
         <CardContent className="space-y-4">
           {step.schema?.fields?.map(field => renderField(step, field))}
+          {hasAdvancedFields && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full"
+            >
+              {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
+            </Button>
+          )}
         </CardContent>
       </Card>
     )

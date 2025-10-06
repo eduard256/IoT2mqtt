@@ -118,6 +118,10 @@ class FormField(BaseModel):
     step: Optional[float] = None
     multiline: bool = False
     secret: bool = False
+    advanced: bool = Field(
+        default=False,
+        description="Whether this field should be hidden under 'Advanced' section"
+    )
     conditions: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Optional map describing when the field should be shown"

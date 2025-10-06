@@ -232,12 +232,6 @@
                         "fields": [
                             {
                                 "type": "text",
-                                "name": "instance_id",
-                                "label": "Instance ID",
-                                "required": true
-                            },
-                            {
-                                "type": "text",
                                 "name": "friendly_name",
                                 "label": "Friendly name",
                                 "required": true
@@ -256,8 +250,17 @@
                             },
                             {
                                 "type": "text",
+                                "name": "instance_id",
+                                "label": "Instance ID",
+                                "placeholder": "auto",
+                                "description": "Leave empty to auto-generate from friendly name",
+                                "advanced": true
+                            },
+                            {
+                                "type": "text",
                                 "name": "model",
-                                "label": "Model"
+                                "label": "Model",
+                                "advanced": true
                             }
                         ]
                     },

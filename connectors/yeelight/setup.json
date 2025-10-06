@@ -175,12 +175,6 @@
                         "fields": [
                             {
                                 "type": "text",
-                                "name": "instance_id",
-                                "label": "Instance ID",
-                                "required": true
-                            },
-                            {
-                                "type": "text",
                                 "name": "friendly_name",
                                 "label": "Friendly name",
                                 "required": true
@@ -192,16 +186,26 @@
                                 "required": true
                             },
                             {
+                                "type": "text",
+                                "name": "instance_id",
+                                "label": "Instance ID",
+                                "placeholder": "auto",
+                                "description": "Leave empty to auto-generate from friendly name",
+                                "advanced": true
+                            },
+                            {
                                 "type": "number",
                                 "name": "port",
                                 "label": "Port",
-                                "default": 55443
+                                "default": 55443,
+                                "advanced": true
                             },
                             {
                                 "type": "select",
                                 "name": "effect_type",
                                 "label": "Transition",
                                 "default": "smooth",
+                                "advanced": true,
                                 "options": [
                                     {
                                         "value": "smooth",
@@ -220,7 +224,8 @@
                                 "default": 300,
                                 "min": 30,
                                 "max": 10000,
-                                "step": 50
+                                "step": 50,
+                                "advanced": true
                             }
                         ]
                     },

@@ -41,6 +41,7 @@ export interface FormField {
   step?: number
   multiline?: boolean
   secret?: boolean
+  advanced?: boolean
   conditions?: Record<string, unknown>
 }
 
