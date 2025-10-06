@@ -432,6 +432,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         setCurrentStepIndex(0)
         autoRanSteps.current = new Set()
         setFlowState(initialFlowState)
+        setBusy(false)
+        setError(null)
+        setShowAdvanced(false)
         return
       }
       case 'open_url': {
