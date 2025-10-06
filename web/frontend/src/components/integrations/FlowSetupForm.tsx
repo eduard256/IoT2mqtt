@@ -53,6 +53,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   const [oauthSession, setOauthSession] = useState<{ id: string; provider: string } | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const autoRanSteps = useRef<Set<string>>(new Set())
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -247,6 +248,10 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     }
     setBusy(true)
     setError(null)
+
+    // Create new AbortController for this request
+    abortControllerRef.current = new AbortController()
+
     try {
       const token = getAuthToken()
       const inputPayload = resolveDeep(step.input ?? {})
@@ -256,7 +261,8 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ tool: step.tool, input: inputPayload })
+        body: JSON.stringify({ tool: step.tool, input: inputPayload }),
+        signal: abortControllerRef.current.signal
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || data.ok === false) {
@@ -276,6 +282,10 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         return
       }
     } catch (e: any) {
+      // Don't show error if request was aborted (user switched flows)
+      if (e.name === 'AbortError') {
+        return
+      }
       setError(e?.message ?? 'Tool execution failed')
     }
     setBusy(false)
@@ -428,6 +438,13 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       case 'goto_flow': {
         const target = action.flow
         if (!target) return
+
+        // Abort any running tool execution (e.g., auto-discovery)
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort()
+          abortControllerRef.current = null
+        }
+
         setCurrentFlowId(target)
         setCurrentStepIndex(0)
         autoRanSteps.current = new Set()
