@@ -116,7 +116,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   useEffect(() => {
     if (!currentStep) return
     if (currentStep.type === 'tool' && currentStep.auto_advance && !autoRanSteps.current.has(currentStep.id)) {
-      autoRanSteps.current.add(currentStep.id)
+      console.log('[useEffect] Auto-running tool step:', currentStep.id)
       void executeTool(currentStep)
     }
   }, [currentStep])
@@ -254,7 +254,14 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       return
     }
 
-    console.log('[executeTool] Starting tool:', step.tool)
+    // Prevent duplicate runs - mark as running immediately
+    if (autoRanSteps.current.has(step.id)) {
+      console.log('[executeTool] Already running/ran:', step.id)
+      return
+    }
+    autoRanSteps.current.add(step.id)
+
+    console.log('[executeTool] Starting tool:', step.tool, 'step:', step.id)
     setBusy(true)
     setError(null)
 
@@ -324,6 +331,12 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
   async function handleNext() {
     if (!currentStep) return
+    if (isChangingFlow.current) {
+      console.log('[handleNext] Blocked: flow is changing')
+      return
+    }
+
+    console.log('[handleNext] Processing step:', currentStep.id, 'type:', currentStep.type)
 
     if (currentStep.type === 'form') {
       const formValues = flowState.form[currentStep.id] ?? {}
