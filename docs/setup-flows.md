@@ -44,7 +44,7 @@ Available step types:
 
 | Type        | Description                                                                     |
 |-------------|---------------------------------------------------------------------------------|
-| `form`      | Renders a form defined by `schema.fields`. Supports text, password, select, etc.|
+| `form`      | Renders a form defined by `schema.fields`. Supports text, password, select, etc. See [Advanced Fields](#advanced-fields) for UI optimization.|
 | `tool`      | Executes a registered tool. Input templates are resolved before invocation.     |
 | `select`    | Displays selectable cards populated from resolved data. Supports multi-select.  |
 | `summary`   | Shows read-only values before final confirmation.                               |
@@ -130,6 +130,71 @@ Tool scripts must:
 
 The test runner runs every tool inside its own container, so scripts can install
 extra dependencies by extending the integration’s `requirements.txt`.
+
+## Advanced Fields
+
+Form fields can be marked as `"advanced": true` to reduce UI clutter for common
+use cases. Advanced fields are hidden behind a "Show Advanced" toggle button that
+appears only when at least one field has this flag.
+
+```json
+{
+  "type": "form",
+  "schema": {
+    "fields": [
+      {
+        "type": "text",
+        "name": "friendly_name",
+        "label": "Friendly name",
+        "required": true
+      },
+      {
+        "type": "text",
+        "name": "instance_id",
+        "label": "Instance ID",
+        "placeholder": "auto",
+        "description": "Leave empty to auto-generate from friendly name",
+        "advanced": true
+      },
+      {
+        "type": "number",
+        "name": "port",
+        "label": "Port",
+        "default": 55443,
+        "advanced": true
+      }
+    ]
+  }
+}
+```
+
+### Instance ID Auto-Generation
+
+When `instance_id` field is empty or set to `"auto"`, the frontend automatically
+generates a unique identifier from the `friendly_name` field:
+
+- Converts to lowercase
+- Replaces spaces with underscores
+- Removes special characters (keeps alphanumeric, underscores, hyphens)
+- Collapses multiple underscores
+- Trims leading/trailing underscores
+
+Examples:
+- `"Living Room Light"` → `"living_room_light"`
+- `"My Device #1"` → `"my_device_1"`
+- `"Test   Device"` → `"test_device"`
+
+Users can override the auto-generated ID by entering a custom value in the
+advanced section. The backend validates uniqueness and returns HTTP 409 if
+an instance with the same ID already exists.
+
+This feature is universal for all integrations and requires no connector-specific
+code. To use it:
+
+1. Mark the `instance_id` field as `"advanced": true`
+2. Set `"placeholder": "auto"` to hint at auto-generation
+3. Make it non-required or leave `"required": false` (default)
+4. Ensure `friendly_name` appears before `instance_id` in the form
 
 ## Backend Validation
 
