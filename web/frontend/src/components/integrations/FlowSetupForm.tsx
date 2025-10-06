@@ -54,6 +54,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   const [showAdvanced, setShowAdvanced] = useState(false)
   const autoRanSteps = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
+  const isChangingFlow = useRef(false)
 
   useEffect(() => {
     const load = async () => {
@@ -247,6 +248,13 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       return
     }
 
+    // Don't update state if we're in the middle of changing flows
+    if (isChangingFlow.current) {
+      console.log('[executeTool] Blocked: flow is changing')
+      return
+    }
+
+    console.log('[executeTool] Starting tool:', step.tool)
     setBusy(true)
     setError(null)
 
@@ -265,10 +273,25 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         body: JSON.stringify({ tool: step.tool, input: inputPayload }),
         signal: abortControllerRef.current.signal
       })
+
+      // Don't update state if we switched flows while request was in flight
+      if (isChangingFlow.current) {
+        console.log('[executeTool] Blocked after fetch: flow changed')
+        return
+      }
+
       const data = await response.json().catch(() => ({}))
       if (!response.ok || data.ok === false) {
         throw new Error(data?.error?.message ?? data?.detail ?? 'Tool execution failed')
       }
+
+      // Don't update state if we switched flows
+      if (isChangingFlow.current) {
+        console.log('[executeTool] Blocked before state update: flow changed')
+        return
+      }
+
+      console.log('[executeTool] Tool succeeded, updating state')
       const storageKey = step.output_key ?? step.tool
       setFlowState(prev => ({
         ...prev,
@@ -278,19 +301,25 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         }
       }))
       if (step.auto_advance) {
-        setBusy(false)
+        if (!isChangingFlow.current) {
+          console.log('[executeTool] Auto-advance: setting busy=false')
+          setBusy(false)
+        }
         await handleNext()
         return
       }
     } catch (e: any) {
       // Don't show error if request was aborted (user switched flows)
       if (e.name === 'AbortError') {
-        setBusy(false)
+        console.log('[executeTool] Request aborted')
+        if (!isChangingFlow.current) setBusy(false)
         return
       }
-      setError(e?.message ?? 'Tool execution failed')
+      console.error('[executeTool] Error:', e)
+      if (!isChangingFlow.current) setError(e?.message ?? 'Tool execution failed')
     }
-    setBusy(false)
+    console.log('[executeTool] Finished, setting busy=false, isChangingFlow:', isChangingFlow.current)
+    if (!isChangingFlow.current) setBusy(false)
   }
 
   async function handleNext() {
@@ -441,19 +470,33 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         const target = action.flow
         if (!target) return
 
+        console.log('[goto_flow] Switching to flow:', target)
+        console.log('[goto_flow] Current busy state:', busy)
+
+        // Block all state updates from ongoing async operations
+        isChangingFlow.current = true
+
         // Abort any running tool execution (e.g., auto-discovery)
         if (abortControllerRef.current) {
+          console.log('[goto_flow] Aborting active request')
           abortControllerRef.current.abort()
           abortControllerRef.current = null
         }
 
+        console.log('[goto_flow] Setting busy=false')
+        setBusy(false)
         setCurrentFlowId(target)
         setCurrentStepIndex(0)
         autoRanSteps.current = new Set()
         setFlowState(initialFlowState)
-        setBusy(false)
         setError(null)
         setShowAdvanced(false)
+
+        // Unblock after a short delay to allow React to process updates
+        setTimeout(() => {
+          console.log('[goto_flow] Unblocking flow changes')
+          isChangingFlow.current = false
+        }, 100)
         return
       }
       case 'open_url': {
