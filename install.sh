@@ -26,6 +26,7 @@ INSTALL_DIR="/opt/iot2mqtt"
 REPO_URL="https://github.com/eduard256/IoT2mqtt.git"
 BRANCH="main"
 LOG_FILE="/var/log/iot2mqtt-install.log"
+declare -a LOG_LINES
 
 # Setup sudo if not root
 SUDO=""
@@ -55,6 +56,7 @@ echo "[installer] starting at $(date -Is)" >>"$LOG_FILE" 2>&1 || true
 cleanup() {
   [ ${CLEANED:-0} -eq 1 ] && return || true
   CLEANED=1
+  stop_log_monitor || true
   show_cursor || true
   printf "\n\n%bInstallation log:%b %s\n" "$DIM" "$RESET" "$LOG_FILE"
 }
@@ -76,20 +78,10 @@ is_lxc_env() {
   return 1
 }
 
-# Detect piped stdin (curl | bash) and LXC to decide on UI/game usage
-PIPE_STDIN=0
-[ -p /dev/stdin ] && PIPE_STDIN=1
-
 # Determine if stdout is a terminal to decide fancy UI
 USE_TPUT=0
 if command -v tput >/dev/null 2>&1 && [ -t 1 ]; then
   USE_TPUT=1
-fi
-
-# Decide if we should run the game
-IOT2MQTT_NO_GAME=${IOT2MQTT_NO_GAME:-0}
-if [ "$PIPE_STDIN" -eq 1 ] || is_lxc_env; then
-  IOT2MQTT_NO_GAME=1
 fi
 
 # -------------- UI Helpers --------------
@@ -100,15 +92,6 @@ hide_cursor() { [ "$USE_TPUT" -eq 1 ] && tput civis 2>/dev/null || true; }
 show_cursor() { [ "$USE_TPUT" -eq 1 ] && tput cnorm 2>/dev/null || true; }
 move_to() { [ "$USE_TPUT" -eq 1 ] && tput cup "$1" "$2" 2>/dev/null || true; }
 clear_screen() { [ "$USE_TPUT" -eq 1 ] && tput clear 2>/dev/null || printf "\n%.0s" {1..3}; }
-
-can_use_game() {
-  # Need a real TTY and working termios on /dev/tty
-  if [ "$USE_TPUT" -ne 1 ]; then return 1; fi
-  if ! tty -s 2>/dev/null; then return 1; fi
-  if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then return 1; fi
-  if ! stty -F /dev/tty -g >/dev/null 2>&1; then return 1; fi
-  return 0
-}
 
 draw_logo() {
   local cols=$(term_cols)
@@ -141,14 +124,53 @@ progress_row() {
   echo 8
 }
 
-game_top_row() {
-  # Leave space for logo and progress, then center game vertically
+log_area_row() {
+  # Start logs below progress bar + 2
+  echo 11
+}
+
+log_area_height() {
   local rows=$(term_rows)
-  local game_rows=14
-  local progress_line=$(progress_row)
-  local top=$(( (progress_line + 3) + (rows - (progress_line + 3) - game_rows) / 2 ))
-  [ $top -lt 10 ] && top=10
-  echo $top
+  # Reserve space: logo(8) + progress(3) + success message(7) = 18
+  local available=$(( rows - 18 ))
+  [ $available -lt 5 ] && available=5
+  [ $available -gt 15 ] && available=15
+  echo $available
+}
+
+draw_log_line() {
+  if [ "$USE_TPUT" -ne 1 ]; then return; fi
+  local line="$1"
+  local row=$(log_area_row)
+  local height=$(log_area_height)
+  local cols=$(term_cols)
+
+  # Shift existing lines up in memory
+  for ((i=0; i<height-1; i++)); do
+    LOG_LINES[$i]="${LOG_LINES[$i+1]:-}"
+  done
+
+  # Add new line at bottom
+  LOG_LINES[$((height-1))]="$line"
+
+  # Redraw all log lines
+  for ((i=0; i<height; i++)); do
+    move_to $((row + i)) 0
+    # Clear line and print
+    printf "%b%-${cols}s%b" "$DIM" "${LOG_LINES[$i]}" "$RESET"
+  done
+}
+
+clear_log_area() {
+  if [ "$USE_TPUT" -ne 1 ]; then return; fi
+  local row=$(log_area_row)
+  local height=$(log_area_height)
+  local cols=$(term_cols)
+
+  for ((i=0; i<height; i++)); do
+    move_to $((row + i)) 0
+    printf "%-${cols}s" " "
+  done
 }
 
 draw_progress() {
@@ -184,171 +206,40 @@ finalize_progress() {
   draw_progress 100 "Done"
 }
 
-# -------------- Snake Game (centered) --------------
-# Runs in a subshell to isolate traps and reads
-start_snake_game() {
-(
-  set +Eeuo pipefail
-  # visuals
-  [ "$USE_TPUT" -eq 1 ] || exit 0
-
-  trap 'tput cnorm 2>/dev/null; exit 0' EXIT
-  trap 'tput cnorm 2>/dev/null; exit 0' INT
-
-  local cols=28
-  local rows=12
-  local X_TIME=0.08
-  local Y_TIME=0.12
-  local REFRESH_TIME=$X_TIME
-  declare -A screen
-  declare -a snakebod_x
-  declare -a snakebod_y
-  local score=0
-  local vel_x=1
-  local vel_y=0
-  local food_x
-  local food_y
-  local key=""
-  local SNAKE_ICON="${FG_BR_WHITE}${BOLD}█${RESET}"
-  local FOOD_ICON="${FG_YELLOW}${BOLD}●${RESET}"
-  local EMPTY=" "
-  local HORIZONTAL_BAR="${FG_BLUE}─${RESET}"
-  local VERTICAL_BAR="${FG_BLUE}│${RESET}"
-  local CORNER_ICON="${FG_BLUE}┼${RESET}"
-
-  local top_off=$(game_top_row)
-  local total_cols=$(term_cols)
-  local left_off=$(( (total_cols - cols) / 2 ))
-  [ $left_off -lt 0 ] && left_off=0
-
-  set_pixel() { tput cup $((top_off + $1)) $((left_off + $2)); printf "%s" "$3"; }
-
-  clear_game_area_screen() {
-    # draw empty area and border
-    for ((i=1;i<rows;i++)); do
-      for ((j=1;j<cols;j++)); do
-        screen[$i,$j]=$EMPTY
-      done
-    done
-    draw_game_area_boundaries
-  }
-
-  draw_game_area_boundaries(){
-    for i in 0 $rows; do
-      for ((j=0;j<cols;j++)); do screen[$i,$j]=$HORIZONTAL_BAR; done
-    done
-    for j in 0 $cols; do
-      for ((i=0;i<rows+1;i++)); do screen[$i,$j]=$VERTICAL_BAR; done
-    done
-    screen[0,0]=$CORNER_ICON
-    screen[0,$cols]=$CORNER_ICON
-    screen[$rows,$cols]=$CORNER_ICON
-    screen[$rows,0]=$CORNER_ICON
-  }
-
-  print_screen(){
-    for ((i=0;i<rows+1;i++)); do
-      for ((j=0;j<cols+1;j++)); do printf "%s" "${screen[$i,$j]}"; done
-      tput cup $((top_off + i)) $((left_off + cols + 1)); printf "\n"
-    done
-  }
-
-  set_food(){
-    while :; do
-      food_x=$(( 1+$RANDOM%(cols-1) ))
-      food_y=$(( 1+$RANDOM%(rows-1) ))
-      local screen_val=${screen[$food_y,$food_x]}
-      if [[ $screen_val == "$EMPTY" ]]; then
-        screen[$food_y,$food_x]=$FOOD_ICON
-        set_pixel "$food_y" "$food_x" "$FOOD_ICON"
-        return
+# Background log monitor
+start_log_monitor() {
+  if [ "$USE_TPUT" -ne 1 ]; then return; fi
+  (
+    # Monitor log file and display new lines
+    local last_line=0
+    while kill -0 $$ 2>/dev/null; do
+      if [ -f "$LOG_FILE" ]; then
+        local total_lines=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+        if [ "$total_lines" -gt "$last_line" ]; then
+          # Read new lines
+          tail -n +$((last_line + 1)) "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
+            # Truncate long lines
+            local cols=$(term_cols)
+            local max_len=$((cols - 4))
+            if [ ${#line} -gt $max_len ]; then
+              line="${line:0:$max_len}..."
+            fi
+            draw_log_line "$line"
+          done
+          last_line=$total_lines
+        fi
       fi
+      sleep 0.1
     done
-  }
+  ) &
+  LOG_MONITOR_PID=$!
+}
 
-  calc_new_snake_head_x(){
-    local cur_head_x=$1; local v_x=$2; new_head_x=$(( cur_head_x+v_x ))
-    if (( new_head_x == 0 )); then new_head_x=$(( cols-1 ))
-    elif (( new_head_x == cols )); then new_head_x=1; fi
-  }
-  calc_new_snake_head_y(){
-    local cur_head_y=$1; local v_y=$2; new_head_y=$(( cur_head_y+v_y ))
-    if (( new_head_y == 0 )); then new_head_y=$(( rows-1 ))
-    elif (( new_head_y == rows )); then new_head_y=1; fi
-  }
-
-  handle_input(){
-    case "$1" in
-      A) (( vel_y != 1 ))  && { vel_x=0; vel_y=-1; REFRESH_TIME=$Y_TIME; };;
-      B) (( vel_y != -1 )) && { vel_x=0; vel_y=1;  REFRESH_TIME=$Y_TIME; };;
-      C) (( vel_x != -1 )) && { vel_x=1; vel_y=0;  REFRESH_TIME=$X_TIME; };;
-      D) (( vel_x != 1 ))  && { vel_x=-1; vel_y=0; REFRESH_TIME=$X_TIME; };;
-    esac
-  }
-
-  clear_snake(){
-    local snake_length=${#snakebod_x[@]}
-    for ((i=0;i<snake_length;i++)); do screen[${snakebod_y[i]},${snakebod_x[i]}]=$EMPTY; done
-    set_pixel "${snakebod_y[snake_length-1]}" "${snakebod_x[snake_length-1]}" "$EMPTY"
-  }
-
-  draw_snake(){
-    local snake_length=${#snakebod_x[@]}
-    for ((i=0;i<snake_length;i++)); do screen[${snakebod_y[i]},${snakebod_x[i]}]="$SNAKE_ICON"; done
-    set_pixel "${snakebod_y[0]}" "${snakebod_x[0]}" "$SNAKE_ICON"
-  }
-
-  game(){
-    clear_snake
-    local head_x=${snakebod_x[0]}
-    local head_y=${snakebod_y[0]}
-    local new_head_x; local new_head_y
-    calc_new_snake_head_x $head_x $vel_x
-    calc_new_snake_head_y $head_y $vel_y
-    local snake_length=${#snakebod_x[@]}
-
-    # self hit
-    for ((i=0;i<snake_length-1;i++)); do
-      if [[ ${snakebod_y[i]} -eq $new_head_y ]] && [[ ${snakebod_x[i]} -eq $new_head_x ]]; then
-        return 1
-      fi
-    done
-
-    if (( new_head_x == food_x )) && (( new_head_y == food_y )); then
-      snakebod_x=($new_head_x ${snakebod_x[@]:0:${#snakebod_x[@]}})
-      snakebod_y=($new_head_y ${snakebod_y[@]:0:${#snakebod_y[@]}})
-      draw_snake; set_food; ((score++))
-    else
-      snakebod_x=($new_head_x ${snakebod_x[@]:0:${#snakebod_x[@]}-1})
-      snakebod_y=($new_head_y ${snakebod_y[@]:0:${#snakebod_y[@]}-1})
-      draw_snake
-    fi
-    return 0
-  }
-
-  while :; do
-    # init new game
-    score=0; vel_x=1; vel_y=0
-    snakebod_x=( $((cols/2)) ); snakebod_y=( $((rows/2)) )
-    clear_game_area_screen; print_screen; set_food
-    # loop: step game + poll key
-    while :; do
-      # non-blocking key read from controlling tty
-      if [ -r /dev/tty ]; then
-        IFS= read -rsn1 -t 0.02 key </dev/tty || key=""
-      else
-        key=""
-        sleep 0.02
-      fi
-      tput cup "$top_off" "$left_off"
-      handle_input "$key"; game; rc=$?
-      if [ "$rc" -ne 0 ]; then
-        break
-      fi
-      sleep "$REFRESH_TIME"
-    done
-  done
-)
+stop_log_monitor() {
+  if [ -n "${LOG_MONITOR_PID:-}" ] && kill -0 "$LOG_MONITOR_PID" 2>/dev/null; then
+    kill "$LOG_MONITOR_PID" 2>/dev/null || true
+    wait "$LOG_MONITOR_PID" 2>/dev/null || true
+  fi
 }
 
 # -------------- System helpers --------------
@@ -468,15 +359,6 @@ compose_cmd() {
   if docker compose version >/dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi
 }
 
-# -------------- Cleanup traps --------------
-CLEANED=0
-finalize_cleanup() {
-  # Final tidy and terminate snake if running
-  if [ -n "${SNAKE_PID:-}" ] && kill -0 "$SNAKE_PID" >/dev/null 2>&1; then
-    kill "$SNAKE_PID" >/dev/null 2>&1 || true
-  fi
-}
-
 # -------------- Begin --------------
 clear_screen || true
 hide_cursor || true
@@ -484,14 +366,10 @@ hide_cursor || true
 if [ "$USE_TPUT" -eq 1 ]; then
   draw_logo || true
   draw_progress 1 "Starting installer" || true
+  clear_log_area || true
+  start_log_monitor || true
 else
   printf "IoT2MQTT installer starting...\n" | tee -a "$LOG_FILE" >/dev/null 2>&1 || true
-fi
-
-# Start snake game in background (non-blocking)
-if [ "$USE_TPUT" -eq 1 ] && [ "${IOT2MQTT_NO_GAME}" != "1" ] && can_use_game; then
-  start_snake_game &
-  SNAKE_PID=$!
 fi
 
 # Step 1: Preflight
@@ -628,21 +506,20 @@ APP_IP=$(lan_ip)
 URL="http://${APP_IP}:${WEB_PORT}"
 
 if [ "$USE_TPUT" -eq 1 ]; then
-  move_to $(( $(game_top_row) - 2 )) 0
+  # Stop log monitor and clear log area
+  stop_log_monitor || true
+  sleep 0.2  # Allow final logs to be processed
+  clear_log_area || true
+
+  # Display success message
+  move_to $(( $(progress_row) + 3 )) 0
   printf "\n%b══════════════════════════════════════════════════════════════%b\n" "$FG_GREEN$BOLD" "$RESET"
   printf "%b IoT2MQTT is up and running! %b\n" "$FG_GREEN$BOLD" "$RESET"
-  printf "%b Web: %b%s%b\n" "$FG_BR_WHITE$BOLD" "$FG_BR_CYAN$UNDERLINE" "$URL" "$RESET"
+  printf "%b Web: %b\033]8;;%s\033\\%s\033]8;;\033\\%b\n" "$FG_BR_WHITE$BOLD" "$FG_BR_CYAN$UNDERLINE" "$URL" "$URL" "$RESET"
   printf "%b Containers restart automatically on boot. %b\n" "$FG_BR_WHITE$DIM" "$RESET"
   printf "%b══════════════════════════════════════════════════════════════%b\n" "$FG_GREEN$BOLD" "$RESET"
 else
-  printf "IoT2MQTT is up. Web: %s\n" "$URL"
-fi
-
-# Keep the snake running for a bit so user can play; then exit.
-sleep 1
-if [ -n "${SNAKE_PID:-}" ] && kill -0 "$SNAKE_PID" >/dev/null 2>&1; then
-  sleep 5 || true
-  kill "$SNAKE_PID" >/dev/null 2>&1 || true
+  printf "IoT2MQTT is up. Web: \033]8;;%s\033\\%s\033]8;;\033\\\n" "$URL" "$URL"
 fi
 
 exit 0
