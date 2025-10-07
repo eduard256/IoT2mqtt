@@ -203,10 +203,15 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       const segments = rawPath.split('.').filter(Boolean)
       let pointer: any = combined
       for (const segment of segments) {
-        if (pointer == null) return ''
+        if (pointer == null) {
+          console.log('[resolveTemplate] null pointer at segment:', segment, 'path:', rawPath)
+          return ''
+        }
         pointer = pointer[segment]
       }
-      return pointer ?? ''
+      const result = pointer ?? ''
+      console.log('[resolveTemplate] path:', rawPath, 'result:', result)
+      return result
     }
 
     const matcher = /{{\s*([^}]+)\s*}}/g
