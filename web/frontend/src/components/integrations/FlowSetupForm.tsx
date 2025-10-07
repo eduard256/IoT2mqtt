@@ -249,6 +249,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     if (!formStep?.schema?.fields) return flowState.form[formStepId] || {}
 
     const currentValues = flowState.form[formStepId] || {}
+    console.log('[applyFormDefaults] formStepId:', formStepId, 'currentValues:', currentValues)
     const result: Record<string, any> = {}
 
     // Apply defaults for fields that are empty or missing
@@ -275,6 +276,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       }
     }
 
+    console.log('[applyFormDefaults] result:', result)
     return result
   }
 
@@ -321,6 +323,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     try {
       const token = getAuthToken()
       const inputPayload = resolveDeep(step.input ?? {})
+      console.log('[executeTool] Input payload:', inputPayload)
       const response = await fetch(`/api/integrations/${integration.name}/tools/execute`, {
         method: 'POST',
         headers: {
