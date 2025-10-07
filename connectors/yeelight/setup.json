@@ -247,6 +247,7 @@
                         "host": "{{ form.device_form.ip }}",
                         "port": "{{ form.device_form.port }}"
                     },
+                    "auto_advance": true,
                     "optional": true
                 },
                 {

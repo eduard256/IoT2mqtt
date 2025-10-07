@@ -147,6 +147,7 @@
                         "country": "{{ form.cloud_credentials.country }}",
                         "did": "{{ selection.selected_did.did }}"
                     },
+                    "auto_advance": true,
                     "output_key": "token_response"
                 },
                 {
@@ -286,6 +287,7 @@
                         "host": "{{ form.manual_form.host }}",
                         "token": "{{ form.manual_form.token }}"
                     },
+                    "auto_advance": true,
                     "optional": true,
                     "output_key": "validation"
                 },
@@ -300,6 +302,7 @@
                         "host": "{{ form.manual_form.host }}",
                         "model": "{{ form.manual_form.model }}"
                     },
+                    "auto_advance": true,
                     "output_key": "autogen"
                 },
                 {
