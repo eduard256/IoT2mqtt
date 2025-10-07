@@ -86,19 +86,34 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     load()
   }, [integration.name])
 
-  const context = useMemo(() => ({
-    integration,
-    form: flowState.form,
-    tools: flowState.tools,
-    selection: flowState.selection,
-    shared: flowState.shared,
-    oauth: flowState.oauth
-  }), [integration, flowState])
-
   const currentFlow: FlowDefinition | undefined = useMemo(() => {
     if (!schema || !currentFlowId) return undefined
     return schema.flows.find(flow => flow.id === currentFlowId) ?? schema.flows[0]
   }, [schema, currentFlowId])
+
+  const context = useMemo(() => {
+    // Enrich form data with defaults for all form steps in current flow
+    const enrichedForm: Record<string, any> = {}
+    if (currentFlow) {
+      for (const step of currentFlow.steps) {
+        if (step.type === 'form' && step.id) {
+          enrichedForm[step.id] = applyFormDefaults(step.id)
+        } else if (flowState.form[step.id]) {
+          // Keep non-form step data as-is
+          enrichedForm[step.id] = flowState.form[step.id]
+        }
+      }
+    }
+
+    return {
+      integration,
+      form: enrichedForm,
+      tools: flowState.tools,
+      selection: flowState.selection,
+      shared: flowState.shared,
+      oauth: flowState.oauth
+    }
+  }, [integration, flowState, currentFlow])
 
   const visibleSteps: FlowStep[] = useMemo(() => {
     if (!currentFlow) return []
@@ -226,6 +241,39 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       return result as T
     }
     return payload
+  }
+
+  function applyFormDefaults(formStepId: string): Record<string, any> {
+    // Find the form step in the current flow
+    const formStep = currentFlow?.steps.find(s => s.id === formStepId && s.type === 'form')
+    if (!formStep?.schema?.fields) return flowState.form[formStepId] || {}
+
+    const currentValues = flowState.form[formStepId] || {}
+    const result: Record<string, any> = {}
+
+    // Apply defaults for fields that are empty or missing
+    for (const field of formStep.schema.fields) {
+      const currentValue = currentValues[field.name]
+
+      // Check if value is empty/missing and field has default
+      if ((currentValue === undefined || currentValue === null || currentValue === '') && field.default !== undefined) {
+        // Use default value
+        result[field.name] = field.default
+      } else if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+        // Use existing value, but convert to correct type for number fields
+        if (field.type === 'number' && typeof currentValue === 'string') {
+          const parsed = parseFloat(currentValue)
+          result[field.name] = isNaN(parsed) ? field.default || 0 : parsed
+        } else {
+          result[field.name] = currentValue
+        }
+      } else if (field.type === 'number' && currentValue === '') {
+        // Empty string for number field - use default or 0
+        result[field.name] = field.default !== undefined ? field.default : 0
+      }
+    }
+
+    return result
   }
 
   function updateFormValue(stepId: string, field: FormField, value: any) {
@@ -592,6 +640,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
               ))}
             </SelectContent>
           </Select>
+          {field.description && (
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          )}
         </div>
       )
     }
@@ -605,6 +656,32 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
             onChange={event => updateFormValue(step.id, field, event.target.checked)}
           />
           <Label className="font-normal">{field.label ?? field.name}</Label>
+        </div>
+      )
+    }
+
+    // Handle number fields specially
+    if (field.type === 'number') {
+      return (
+        <div key={field.name} className="space-y-2">
+          <Label>{field.label ?? field.name}</Label>
+          <Input
+            type="number"
+            placeholder={field.placeholder ?? field.default?.toString()}
+            value={value ?? ''}
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => {
+              const val = event.target.value
+              // Store as number if valid, empty string if empty
+              const numValue = val === '' ? '' : parseFloat(val)
+              updateFormValue(step.id, field, isNaN(numValue) ? '' : numValue)
+            }}
+          />
+          {field.description && (
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          )}
         </div>
       )
     }
@@ -624,6 +701,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
           <Textarea {...inputProps} rows={field.multiline ? 6 : 3} />
         ) : (
           <Input type={inputType} {...inputProps} />
+        )}
+        {field.description && (
+          <p className="text-xs text-muted-foreground">{field.description}</p>
         )}
       </div>
     )

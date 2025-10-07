@@ -33,7 +33,16 @@ def load_payload() -> Dict[str, Any]:
 def main() -> None:
     payload = load_payload()
     host = payload.get("host")
-    port = int(payload.get("port", 55443))
+
+    # Handle empty string or missing port gracefully
+    port_value = payload.get("port", 55443)
+    if port_value == "" or port_value is None:
+        port = 55443
+    else:
+        try:
+            port = int(port_value)
+        except (ValueError, TypeError):
+            port = 55443
 
     if not host:
         print(json.dumps({
