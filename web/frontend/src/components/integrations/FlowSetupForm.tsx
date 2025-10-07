@@ -255,21 +255,23 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     for (const field of formStep.schema.fields) {
       const currentValue = currentValues[field.name]
 
-      // Check if value is empty/missing and field has default
-      if ((currentValue === undefined || currentValue === null || currentValue === '') && field.default !== undefined) {
-        // Use default value
-        result[field.name] = field.default
-      } else if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
-        // Use existing value, but convert to correct type for number fields
+      // If field has a value (not empty), use it
+      if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+        // Convert to correct type for number fields
         if (field.type === 'number' && typeof currentValue === 'string') {
           const parsed = parseFloat(currentValue)
-          result[field.name] = isNaN(parsed) ? field.default || 0 : parsed
+          result[field.name] = isNaN(parsed) ? (field.default !== undefined ? field.default : 0) : parsed
         } else {
           result[field.name] = currentValue
         }
-      } else if (field.type === 'number' && currentValue === '') {
-        // Empty string for number field - use default or 0
-        result[field.name] = field.default !== undefined ? field.default : 0
+      }
+      // If field is empty but has default, use default
+      else if (field.default !== undefined) {
+        result[field.name] = field.default
+      }
+      // If field is empty and has no default, include it anyway (for required fields)
+      else if (currentValue !== undefined) {
+        result[field.name] = currentValue
       }
     }
 
