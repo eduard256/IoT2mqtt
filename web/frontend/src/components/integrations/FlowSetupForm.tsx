@@ -91,29 +91,65 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     return schema.flows.find(flow => flow.id === currentFlowId) ?? schema.flows[0]
   }, [schema, currentFlowId])
 
-  const context = useMemo(() => {
-    // Enrich form data with defaults for all form steps in current flow
+  // Unified context builder - single source of truth
+  const buildContext = useCallback((state: FlowState, flow: FlowDefinition | undefined) => {
     const enrichedForm: Record<string, any> = {}
-    if (currentFlow) {
-      for (const step of currentFlow.steps) {
+
+    if (flow) {
+      for (const step of flow.steps) {
         if (step.type === 'form' && step.id) {
-          enrichedForm[step.id] = applyFormDefaults(step.id)
-        } else if (flowState.form[step.id]) {
+          // Find the form step schema
+          const formStep = flow.steps.find(s => s.id === step.id && s.type === 'form')
+          const formData = state.form[step.id] || {}
+          const enrichedData: Record<string, any> = {}
+
+          if (formStep?.schema?.fields) {
+            // Apply defaults for all fields
+            for (const field of formStep.schema.fields) {
+              const currentValue = formData[field.name]
+
+              // Use existing value if present and not empty
+              if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+                // Convert to correct type for number fields
+                if (field.type === 'number' && typeof currentValue === 'string') {
+                  const parsed = parseFloat(currentValue)
+                  enrichedData[field.name] = isNaN(parsed) ? (field.default ?? 0) : parsed
+                } else {
+                  enrichedData[field.name] = currentValue
+                }
+              }
+              // Use default if available
+              else if (field.default !== undefined) {
+                enrichedData[field.name] = field.default
+              }
+              // Keep empty value for required fields without defaults
+              else {
+                enrichedData[field.name] = ''
+              }
+            }
+          }
+
+          enrichedForm[step.id] = Object.keys(enrichedData).length > 0 ? enrichedData : formData
+        } else if (state.form[step.id]) {
           // Keep non-form step data as-is
-          enrichedForm[step.id] = flowState.form[step.id]
+          enrichedForm[step.id] = state.form[step.id]
         }
       }
     }
 
+    console.log('[buildContext] Built context with enrichedForm:', enrichedForm)
+
     return {
       integration,
       form: enrichedForm,
-      tools: flowState.tools,
-      selection: flowState.selection,
-      shared: flowState.shared,
-      oauth: flowState.oauth
+      tools: state.tools,
+      selection: state.selection,
+      shared: state.shared,
+      oauth: state.oauth
     }
-  }, [integration, flowState, currentFlow])
+  }, [integration])
+
+  const context = useMemo(() => buildContext(flowState, currentFlow), [buildContext, flowState, currentFlow])
 
   const visibleSteps: FlowStep[] = useMemo(() => {
     if (!currentFlow) return []
@@ -269,21 +305,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   }
 
   function resolveDeep<T = any>(payload: T, extra: Record<string, unknown> = {}): T {
-    if (payload == null) return payload
-    if (typeof payload === 'string') {
-      return resolveTemplate(payload, extra) as T
-    }
-    if (Array.isArray(payload)) {
-      return payload.map(item => resolveDeep(item, extra)) as T
-    }
-    if (typeof payload === 'object') {
-      const result: Record<string, any> = {}
-      for (const [key, val] of Object.entries(payload)) {
-        result[key] = resolveDeep(val, extra)
-      }
-      return result as T
-    }
-    return payload
+    // Always use fresh context built from current state
+    const freshContext = buildContext(flowState, currentFlow)
+    return resolveDeepWithContext(payload, freshContext, extra)
   }
 
   function resolveDeepWithContext<T = any>(payload: T, contextToUse: any, extra: Record<string, unknown> = {}): T {
@@ -304,57 +328,47 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     return payload
   }
 
-  function applyFormDefaults(formStepId: string): Record<string, any> {
-    // Find the form step in the current flow
-    const formStep = currentFlow?.steps.find(s => s.id === formStepId && s.type === 'form')
-    if (!formStep?.schema?.fields) return flowState.form[formStepId] || {}
-
-    const currentValues = flowState.form[formStepId] || {}
-    console.log('[applyFormDefaults] formStepId:', formStepId, 'currentValues:', currentValues)
-    const result: Record<string, any> = {}
-
-    // Apply defaults for fields that are empty or missing
-    for (const field of formStep.schema.fields) {
-      const currentValue = currentValues[field.name]
-
-      // If field has a value (not empty), use it
-      if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
-        // Convert to correct type for number fields
-        if (field.type === 'number' && typeof currentValue === 'string') {
-          const parsed = parseFloat(currentValue)
-          result[field.name] = isNaN(parsed) ? (field.default !== undefined ? field.default : 0) : parsed
-        } else {
-          result[field.name] = currentValue
-        }
-      }
-      // If field is empty but has default, use default
-      else if (field.default !== undefined) {
-        result[field.name] = field.default
-      }
-      // If field is empty and has no default, include it anyway (for required fields)
-      else if (currentValue !== undefined) {
-        result[field.name] = currentValue
-      }
-    }
-
-    console.log('[applyFormDefaults] result:', result)
-    return result
-  }
 
   function updateFormValue(stepId: string, field: FormField, value: any) {
-    setFlowState(prev => ({
-      ...prev,
-      form: {
-        ...prev.form,
-        [stepId]: {
-          ...(prev.form[stepId] ?? {}),
-          [field.name]: value
+    setFlowState(prev => {
+      // Get current form data for this step
+      const currentStepData = prev.form[stepId] ?? {}
+
+      // Update the specific field value
+      const updatedStepData = {
+        ...currentStepData,
+        [field.name]: value
+      }
+
+      // Find the form step to get all field definitions
+      const formStep = currentFlow?.steps.find(s => s.id === stepId && s.type === 'form')
+
+      // Apply defaults for empty fields
+      if (formStep?.schema?.fields) {
+        for (const f of formStep.schema.fields) {
+          // Skip the field we're currently updating
+          if (f.name === field.name) continue
+
+          // If field is empty and has default, apply it
+          if (!updatedStepData[f.name] && f.default !== undefined) {
+            updatedStepData[f.name] = f.default
+          }
         }
       }
-    }))
+
+      console.log('[updateFormValue] Updated step data:', stepId, updatedStepData)
+
+      return {
+        ...prev,
+        form: {
+          ...prev.form,
+          [stepId]: updatedStepData
+        }
+      }
+    })
   }
 
-  async function executeTool(step: FlowStep, overrideContext?: any) {
+  async function executeTool(step: FlowStep, freshState?: FlowState) {
     if (!schema) return
     if (!step.tool) {
       setError('Tool step missing tool name')
@@ -383,10 +397,21 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
     try {
       const token = getAuthToken()
-      // Use overrideContext if provided, otherwise use current context
-      const contextToUse = overrideContext || context
+      // Build fresh context with latest state
+      const stateToUse = freshState || flowState
+      const contextToUse = buildContext(stateToUse, currentFlow)
+      console.log('[executeTool] Using context:', contextToUse)
+
       const inputPayload = resolveDeepWithContext(step.input ?? {}, contextToUse)
       console.log('[executeTool] Input payload:', inputPayload)
+
+      // Validate required fields
+      if (step.tool === 'validate_device' || step.tool === 'validate_connection') {
+        if (!inputPayload.host && !inputPayload.ip) {
+          throw new Error('Host/IP address is required for validation')
+        }
+      }
+
       const response = await fetch(`/api/integrations/${integration.name}/tools/execute`, {
         method: 'POST',
         headers: {
@@ -505,31 +530,22 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     // Check if the new step needs auto-execution after React updates
     const nextStep = visibleSteps[nextIndex]
     if (nextStep && nextStep.type === 'tool' && nextStep.auto_advance && !autoRanSteps.current.has(nextStep.id)) {
-      // Create fresh context with current form data
-      const enrichedForm: Record<string, any> = {}
-      if (currentFlow) {
-        for (const step of currentFlow.steps) {
-          if (step.type === 'form' && step.id) {
-            enrichedForm[step.id] = applyFormDefaults(step.id)
-          } else if (flowState.form[step.id]) {
-            enrichedForm[step.id] = flowState.form[step.id]
-          }
-        }
-      }
+      // Use setState callback to get the latest state
+      setFlowState(prevState => {
+        // Build fresh context with the absolute latest state
+        const latestContext = buildContext(prevState, currentFlow)
 
-      const freshContext = {
-        integration,
-        form: enrichedForm,
-        tools: flowState.tools,
-        selection: flowState.selection,
-        shared: flowState.shared,
-        oauth: flowState.oauth
-      }
-
-      // Use requestAnimationFrame to ensure React has completed its updates
-      requestAnimationFrame(() => {
         console.log('[advanceStep] Auto-running tool after step advance:', nextStep.id)
-        void executeTool(nextStep, freshContext)
+        console.log('[advanceStep] Latest state:', prevState)
+        console.log('[advanceStep] Built context:', latestContext)
+
+        // Schedule tool execution with the latest state
+        requestAnimationFrame(() => {
+          void executeTool(nextStep, prevState)
+        })
+
+        // Return state unchanged
+        return prevState
       })
     }
   }
@@ -552,7 +568,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     setBusy(true)
     setError(null)
     try {
-      const resolved = resolveDeep(step.instance)
+      // Build fresh context for instance creation
+      const freshContext = buildContext(flowState, currentFlow)
+      const resolved = resolveDeepWithContext(step.instance, freshContext)
 
       // Auto-generate instance_id if empty or "auto"
       let instanceId = resolved.instance_id
