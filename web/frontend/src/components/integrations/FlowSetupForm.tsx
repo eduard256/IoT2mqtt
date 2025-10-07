@@ -196,6 +196,42 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     return cursor
   }
 
+  function resolveTemplateWithContext(value: unknown, contextToUse: any, extra: Record<string, unknown> = {}): any {
+    if (typeof value !== 'string') return value
+    const singleMatch = value.match(/^{{\s*([^}]+)\s*}}$/)
+    if (singleMatch) {
+      const rawPath = singleMatch[1]
+      const combined = { ...contextToUse, ...extra }
+      const segments = rawPath.split('.').filter(Boolean)
+      let pointer: any = combined
+      for (const segment of segments) {
+        if (pointer == null) {
+          console.log('[resolveTemplateWithContext] null pointer at segment:', segment, 'path:', rawPath)
+          return ''
+        }
+        pointer = pointer[segment]
+      }
+      const result = pointer ?? ''
+      console.log('[resolveTemplateWithContext] path:', rawPath, 'result:', result, 'contextToUse:', contextToUse)
+      return result
+    }
+
+    const matcher = /{{\s*([^}]+)\s*}}/g
+    return value.replace(matcher, (_, rawPath) => {
+      const path = rawPath.trim()
+      const combined = { ...contextToUse, ...extra }
+      const segments = path.split('.').filter(Boolean)
+      let pointer: any = combined
+      for (const segment of segments) {
+        if (pointer == null) return ''
+        pointer = pointer[segment]
+      }
+      if (pointer == null) return ''
+      if (typeof pointer === 'object') return JSON.stringify(pointer)
+      return String(pointer)
+    })
+  }
+
   function resolveTemplate(value: unknown, extra: Record<string, unknown> = {}): any {
     if (typeof value !== 'string') return value
     const singleMatch = value.match(/^{{\s*([^}]+)\s*}}$/)
@@ -244,6 +280,24 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       const result: Record<string, any> = {}
       for (const [key, val] of Object.entries(payload)) {
         result[key] = resolveDeep(val, extra)
+      }
+      return result as T
+    }
+    return payload
+  }
+
+  function resolveDeepWithContext<T = any>(payload: T, contextToUse: any, extra: Record<string, unknown> = {}): T {
+    if (payload == null) return payload
+    if (typeof payload === 'string') {
+      return resolveTemplateWithContext(payload, contextToUse, extra) as T
+    }
+    if (Array.isArray(payload)) {
+      return payload.map(item => resolveDeepWithContext(item, contextToUse, extra)) as T
+    }
+    if (typeof payload === 'object') {
+      const result: Record<string, any> = {}
+      for (const [key, val] of Object.entries(payload)) {
+        result[key] = resolveDeepWithContext(val, contextToUse, extra)
       }
       return result as T
     }
@@ -300,7 +354,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     }))
   }
 
-  async function executeTool(step: FlowStep) {
+  async function executeTool(step: FlowStep, overrideContext?: any) {
     if (!schema) return
     if (!step.tool) {
       setError('Tool step missing tool name')
@@ -329,7 +383,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
     try {
       const token = getAuthToken()
-      const inputPayload = resolveDeep(step.input ?? {})
+      // Use overrideContext if provided, otherwise use current context
+      const contextToUse = overrideContext || context
+      const inputPayload = resolveDeepWithContext(step.input ?? {}, contextToUse)
       console.log('[executeTool] Input payload:', inputPayload)
       const response = await fetch(`/api/integrations/${integration.name}/tools/execute`, {
         method: 'POST',
@@ -437,23 +493,45 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
   function advanceStep(delta: number) {
     setError(null)
-    setCurrentStepIndex(index => {
-      const next = index + delta
-      if (next < 0) return 0
-      if (next >= visibleSteps.length) {
-        onSuccess()
-        return index
-      }
-      // After advancing, check if the new step needs auto-execution
-      setTimeout(() => {
-        const nextStep = visibleSteps[next]
-        if (nextStep && nextStep.type === 'tool' && nextStep.auto_advance && !autoRanSteps.current.has(nextStep.id)) {
-          console.log('[advanceStep] Auto-running tool after step advance:', nextStep.id)
-          void executeTool(nextStep)
+    const nextIndex = Math.max(0, Math.min(currentStepIndex + delta, visibleSteps.length - 1))
+
+    if (nextIndex >= visibleSteps.length) {
+      onSuccess()
+      return
+    }
+
+    setCurrentStepIndex(nextIndex)
+
+    // Check if the new step needs auto-execution after React updates
+    const nextStep = visibleSteps[nextIndex]
+    if (nextStep && nextStep.type === 'tool' && nextStep.auto_advance && !autoRanSteps.current.has(nextStep.id)) {
+      // Create fresh context with current form data
+      const enrichedForm: Record<string, any> = {}
+      if (currentFlow) {
+        for (const step of currentFlow.steps) {
+          if (step.type === 'form' && step.id) {
+            enrichedForm[step.id] = applyFormDefaults(step.id)
+          } else if (flowState.form[step.id]) {
+            enrichedForm[step.id] = flowState.form[step.id]
+          }
         }
-      }, 0)
-      return next
-    })
+      }
+
+      const freshContext = {
+        integration,
+        form: enrichedForm,
+        tools: flowState.tools,
+        selection: flowState.selection,
+        shared: flowState.shared,
+        oauth: flowState.oauth
+      }
+
+      // Use requestAnimationFrame to ensure React has completed its updates
+      requestAnimationFrame(() => {
+        console.log('[advanceStep] Auto-running tool after step advance:', nextStep.id)
+        void executeTool(nextStep, freshContext)
+      })
+    }
   }
 
   function generateInstanceId(friendlyName: string): string {
