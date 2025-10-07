@@ -130,10 +130,12 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
   useEffect(() => {
     if (!currentStep) return
-    if (currentStep.type === 'tool' && currentStep.auto_advance && !autoRanSteps.current.has(currentStep.id)) {
-      console.log('[useEffect] Auto-running tool step:', currentStep.id)
-      void executeTool(currentStep)
-    }
+    // Disabled auto_advance in useEffect - tools should only run through handleNext
+    // to ensure context is properly updated with form data
+    // if (currentStep.type === 'tool' && currentStep.auto_advance && !autoRanSteps.current.has(currentStep.id)) {
+    //   console.log('[useEffect] Auto-running tool step:', currentStep.id)
+    //   void executeTool(currentStep)
+    // }
   }, [currentStep])
 
   useEffect(() => {
@@ -201,7 +203,6 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       const rawPath = singleMatch[1]
       const combined = { ...context, ...extra }
       const segments = rawPath.split('.').filter(Boolean)
-      console.log('[resolveTemplate] path:', rawPath, 'context.form:', context.form)
       let pointer: any = combined
       for (const segment of segments) {
         if (pointer == null) {
@@ -211,7 +212,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         pointer = pointer[segment]
       }
       const result = pointer ?? ''
-      console.log('[resolveTemplate] result:', result)
+      console.log('[resolveTemplate] path:', rawPath, 'result:', result)
       return result
     }
 
@@ -443,6 +444,14 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         onSuccess()
         return index
       }
+      // After advancing, check if the new step needs auto-execution
+      setTimeout(() => {
+        const nextStep = visibleSteps[next]
+        if (nextStep && nextStep.type === 'tool' && nextStep.auto_advance && !autoRanSteps.current.has(nextStep.id)) {
+          console.log('[advanceStep] Auto-running tool after step advance:', nextStep.id)
+          void executeTool(nextStep)
+        }
+      }, 0)
       return next
     })
   }
