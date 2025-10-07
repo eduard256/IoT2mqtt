@@ -201,6 +201,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       const rawPath = singleMatch[1]
       const combined = { ...context, ...extra }
       const segments = rawPath.split('.').filter(Boolean)
+      console.log('[resolveTemplate] path:', rawPath, 'context.form:', context.form)
       let pointer: any = combined
       for (const segment of segments) {
         if (pointer == null) {
@@ -210,7 +211,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         pointer = pointer[segment]
       }
       const result = pointer ?? ''
-      console.log('[resolveTemplate] path:', rawPath, 'result:', result)
+      console.log('[resolveTemplate] result:', result)
       return result
     }
 
