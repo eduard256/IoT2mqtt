@@ -251,18 +251,24 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     if (singleMatch) {
       const rawPath = singleMatch[1]
       const combined = { ...contextToUse, ...extra }
+      console.log('[resolveTemplateWithContext] START path:', rawPath)
+      console.log('[resolveTemplateWithContext] combined keys:', Object.keys(combined))
+      console.log('[resolveTemplateWithContext] combined.form:', combined.form)
       const segments = rawPath.split('.').filter(Boolean)
       let pointer: any = combined
-      for (const segment of segments) {
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i]
+        console.log('[resolveTemplateWithContext] segment[' + i + ']:', segment, 'pointer type:', typeof pointer, 'pointer keys:', pointer ? Object.keys(pointer) : 'null')
         if (pointer == null) {
           console.log('[resolveTemplateWithContext] null pointer at segment:', segment, 'path:', rawPath)
           return ''
         }
         pointer = pointer[segment]
+        console.log('[resolveTemplateWithContext] after segment[' + i + ']:', segment, 'pointer =', pointer)
       }
       // Preserve null values - only convert undefined to empty string
       const result = pointer !== undefined ? pointer : ''
-      console.log('[resolveTemplateWithContext] path:', rawPath, 'result:', result, 'contextToUse:', contextToUse)
+      console.log('[resolveTemplateWithContext] FINAL path:', rawPath, 'result:', result)
       return result
     }
 
