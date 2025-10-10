@@ -236,7 +236,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   }
 
   function readContextPath(path: string): any {
-    const segments = path.split('.').filter(Boolean)
+    const segments = path.split('.')
+      .map(segment => segment.trim())
+      .filter(segment => segment)
     let cursor: any = context
     for (const segment of segments) {
       if (cursor == null) return undefined
@@ -254,7 +256,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       console.log('[resolveTemplateWithContext] START path:', rawPath)
       console.log('[resolveTemplateWithContext] combined keys:', Object.keys(combined))
       console.log('[resolveTemplateWithContext] combined.form:', combined.form)
-      const segments = rawPath.split('.').filter(Boolean)
+      const segments = rawPath.split('.')
+        .map(segment => segment.trim())
+        .filter(segment => segment)
       let pointer: any = combined
       for (let i = 0; i < segments.length; i++) {
         const segment = segments[i]
@@ -276,7 +280,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     return value.replace(matcher, (_, rawPath) => {
       const path = rawPath.trim()
       const combined = { ...contextToUse, ...extra }
-      const segments = path.split('.').filter(Boolean)
+      const segments = path.split('.')
+        .map(segment => segment.trim())
+        .filter(segment => segment)
       let pointer: any = combined
       for (const segment of segments) {
         if (pointer == null) return ''
@@ -294,7 +300,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     if (singleMatch) {
       const rawPath = singleMatch[1]
       const combined = { ...context, ...extra }
-      const segments = rawPath.split('.').filter(Boolean)
+      const segments = rawPath.split('.')
+        .map(segment => segment.trim())
+        .filter(segment => segment)
       let pointer: any = combined
       for (const segment of segments) {
         if (pointer == null) {
@@ -312,7 +320,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     return value.replace(matcher, (_, rawPath) => {
       const path = rawPath.trim()
       const combined = { ...context, ...extra }
-      const segments = path.split('.').filter(Boolean)
+      const segments = path.split('.')
+        .map(segment => segment.trim())
+        .filter(segment => segment)
       let pointer: any = combined
       for (const segment of segments) {
         if (pointer == null) return ''
