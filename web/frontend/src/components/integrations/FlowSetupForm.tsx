@@ -584,13 +584,22 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   }
 
   function generateInstanceId(friendlyName: string): string {
-    return friendlyName
+    // Generate random suffix (6 alphanumeric characters)
+    const randomSuffix = Math.random().toString(36).substring(2, 8).toLowerCase()
+    // Use integration name as prefix
+    const prefix = integration.name
+    return `${prefix}_${randomSuffix}`
+  }
+
+  function normalizeDeviceId(name: string): string {
+    // Normalize device name to valid device_id format
+    return name
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9\s_-]/g, '')
-      .replace(/\s+/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
   }
 
   async function createInstance(step: FlowStep) {
@@ -645,6 +654,10 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       if (payload.devices && Array.isArray(payload.devices)) {
         payload.devices = payload.devices.map(device => {
           const mapped = { ...device }
+          // Normalize device_id if it's a friendly name (not already normalized)
+          if (mapped.device_id && typeof mapped.device_id === 'string') {
+            mapped.device_id = normalizeDeviceId(mapped.device_id)
+          }
           if (typeof mapped.port === 'string') {
             const trimmed = mapped.port.trim()
             const numericPort = Number(trimmed)

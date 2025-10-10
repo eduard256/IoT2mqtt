@@ -61,14 +61,14 @@
                 {
                     "id": "instance_details",
                     "type": "form",
-                    "title": "Instance details",
-                    "description": "Name your device and optionally customize the instance ID.",
+                    "title": "Device details",
+                    "description": "Configure your Yeelight device.",
                     "schema": {
                         "fields": [
                             {
                                 "type": "text",
                                 "name": "friendly_name",
-                                "label": "Friendly name",
+                                "label": "Device name",
                                 "required": true,
                                 "placeholder": "Living Room Light",
                                 "default": "{{ selection.selected_device.friendly_name }}"
@@ -79,7 +79,7 @@
                                 "label": "Instance ID",
                                 "required": false,
                                 "placeholder": "auto",
-                                "description": "Leave empty to auto-generate from friendly name and IP address",
+                                "description": "Leave empty to auto-generate unique instance ID",
                                 "advanced": true
                             },
                             {
@@ -152,7 +152,7 @@
                         },
                         "devices": [
                             {
-                                "device_id": "{{ selection.selected_device.device_id }}",
+                                "device_id": "{{ form.instance_details.friendly_name }}",
                                 "ip": "{{ selection.selected_device.ip }}",
                                 "port": "{{ selection.selected_device.port }}",
                                 "name": "{{ form.instance_details.friendly_name }}",
@@ -178,7 +178,7 @@
                             {
                                 "type": "text",
                                 "name": "friendly_name",
-                                "label": "Friendly name",
+                                "label": "Device name",
                                 "placeholder": "Living Room Light",
                                 "required": true
                             },
@@ -194,7 +194,7 @@
                                 "name": "instance_id",
                                 "label": "Instance ID",
                                 "placeholder": "auto",
-                                "description": "Leave empty to auto-generate from friendly name and IP address",
+                                "description": "Leave empty to auto-generate unique instance ID",
                                 "advanced": true
                             },
                             {
@@ -292,7 +292,7 @@
                         },
                         "devices": [
                             {
-                                "device_id": "yeelight_{{ form.device_form.ip }}",
+                                "device_id": "{{ form.device_form.friendly_name }}",
                                 "ip": "{{ form.device_form.ip }}",
                                 "port": "{{ form.device_form.port }}",
                                 "name": "{{ form.device_form.friendly_name }}",
