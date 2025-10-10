@@ -136,11 +136,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
                 enrichedData[field.name] = field.default
                 console.log('[buildContext] Using default for field:', field.name, '=', field.default)
               }
-              // Keep empty value for required fields without defaults
-              else {
-                enrichedData[field.name] = ''
-                console.log('[buildContext] Setting empty value for field:', field.name)
-              }
+              // Don't add fields without values or defaults - they should not appear in context
             }
           }
 
