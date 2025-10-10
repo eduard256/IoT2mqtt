@@ -264,7 +264,8 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         }
         pointer = pointer[segment]
       }
-      const result = pointer ?? ''
+      // Preserve null values - only convert undefined to empty string
+      const result = pointer !== undefined ? pointer : ''
       console.log('[resolveTemplateWithContext] path:', rawPath, 'result:', result, 'contextToUse:', contextToUse)
       return result
     }
@@ -364,14 +365,14 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       // Find the form step to get all field definitions
       const formStep = currentFlow?.steps.find(s => s.id === stepId && s.type === 'form')
 
-      // Apply defaults for empty fields
+      // Apply defaults for fields that haven't been set yet
       if (formStep?.schema?.fields) {
         for (const f of formStep.schema.fields) {
           // Skip the field we're currently updating
           if (f.name === field.name) continue
 
-          // If field is empty and has default, apply it
-          if (!updatedStepData[f.name] && f.default !== undefined) {
+          // Only apply default if field was never set (not just empty)
+          if (!(f.name in updatedStepData) && f.default !== undefined) {
             console.log('[updateFormValue] Applying default for field:', f.name, 'default:', f.default)
             updatedStepData[f.name] = f.default
           }
