@@ -4,17 +4,16 @@
 
 ### Ключевая концепция:
 - **Device Name (friendly_name)** → используется для **device_id** (нормализуется)
-- **Instance ID** → уникальный идентификатор инстанса коннектора (auto: `{integration}_{Random6}`)
-  - Формат random: 6 символов, mixed-case + цифры (например: `7K9mX2`, `A3k9M2`)
+- **Instance ID** → уникальный идентификатор инстанса коннектора (auto: `{integration}_{random}`)
 
 ### Auto Discovery Flow:
 1. **Device Name** - имя устройства (например "Main Eduard Monitor Strip")
-2. **Instance ID** - опционально, auto-generation = `yeelight_{Random6}` (например `yeelight_7K9mX2`)
+2. **Instance ID** - опционально, auto-generation = `yeelight_{random6chars}`
 3. **Device ID** = нормализованное Device Name = `main-eduard-monitor-strip`
 
 ### Manual Entry Flow:
 1. **Device Name** - имя устройства (например "Main Eduard Monitor Strip")
-2. **Instance ID** - опционально, auto-generation = `yeelight_{Random6}` (например `yeelight_7K9mX2`)
+2. **Instance ID** - опционально, auto-generation = `yeelight_{random6chars}`
 3. **Device ID** = нормализованное Device Name = `main-eduard-monitor-strip`
 
 ## Примеры:
@@ -23,20 +22,20 @@
 - Вводим Device Name: "Main Eduard Monitor Strip"
 - Instance ID: оставляем пустым (auto)
 - Результат:
-  - instance_id: `yeelight_7K9mX2` (случайный mixed-case суффикс)
+  - instance_id: `yeelight_a3k9m2` (случайный суффикс)
   - device_id: `main-eduard-monitor-strip` (нормализовано из Device Name)
   - device name: "Main Eduard Monitor Strip"
-  - **MQTT путь**: `IoT2mqtt/v1/instances/yeelight_7K9mX2/devices/main-eduard-monitor-strip`
+  - **MQTT путь**: `IoT2mqtt/v1/instances/yeelight_a3k9m2/devices/main-eduard-monitor-strip`
 
 ### Пример 2: Manual Entry
 - Вводим Device Name: "Main Eduard Monitor Strip"
 - IP: "10.0.20.43"
 - Instance ID: оставляем пустым (auto)
 - Результат:
-  - instance_id: `yeelight_A3k9M2` (случайный mixed-case суффикс)
+  - instance_id: `yeelight_7k9mx2` (случайный суффикс)
   - device_id: `main-eduard-monitor-strip` (нормализовано из Device Name)
   - device name: "Main Eduard Monitor Strip"
-  - **MQTT путь**: `IoT2mqtt/v1/instances/yeelight_A3k9M2/devices/main-eduard-monitor-strip`
+  - **MQTT путь**: `IoT2mqtt/v1/instances/yeelight_7k9mx2/devices/main-eduard-monitor-strip`
 
 ## Изменения в setup.json:
 

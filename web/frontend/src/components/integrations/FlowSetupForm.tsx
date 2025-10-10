@@ -584,12 +584,8 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   }
 
   function generateInstanceId(friendlyName: string): string {
-    // Generate random suffix (6 mixed-case alphanumeric characters: e.g., 7K9mX2)
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    let randomSuffix = ''
-    for (let i = 0; i < 6; i++) {
-      randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
+    // Generate random suffix (6 alphanumeric characters)
+    const randomSuffix = Math.random().toString(36).substring(2, 8).toLowerCase()
     // Use integration name as prefix
     const prefix = integration.name
     return `${prefix}_${randomSuffix}`
