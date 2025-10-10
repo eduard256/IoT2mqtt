@@ -55,6 +55,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   const autoRanSteps = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const isChangingFlow = useRef(false)
+  const flowStateRef = useRef<FlowState>(initialFlowState)
 
   useEffect(() => {
     const load = async () => {
@@ -358,13 +359,18 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
       console.log('[updateFormValue] Updated step data:', stepId, updatedStepData)
 
-      return {
+      const newState = {
         ...prev,
         form: {
           ...prev.form,
           [stepId]: updatedStepData
         }
       }
+
+      // IMPORTANT: Update ref immediately so executeTool can access fresh data
+      flowStateRef.current = newState
+
+      return newState
     })
   }
 
@@ -398,14 +404,10 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     try {
       const token = getAuthToken()
 
-      // IMPORTANT: Get fresh state from useState by using a promise that resolves after state update
-      // This ensures we have the actual current state, not a stale closure
-      const currentState = await new Promise<FlowState>((resolve) => {
-        setFlowState(prev => {
-          resolve(prev)
-          return prev
-        })
-      })
+      // IMPORTANT: Use ref to get the absolute latest state
+      // This bypasses React's async state updates
+      const currentState = flowStateRef.current
+      console.log('[executeTool] Current state from ref:', currentState)
 
       const contextToUse = buildContext(currentState, currentFlow)
       console.log('[executeTool] Using context:', contextToUse)
