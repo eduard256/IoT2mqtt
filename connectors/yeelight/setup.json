@@ -62,23 +62,25 @@
                     "id": "instance_details",
                     "type": "form",
                     "title": "Instance details",
-                    "description": "Name the instance and optionally adjust default behaviour.",
+                    "description": "Name your device and optionally customize the instance ID.",
                     "schema": {
                         "fields": [
-                            {
-                                "type": "text",
-                                "name": "instance_id",
-                                "label": "Instance ID",
-                                "required": true,
-                                "placeholder": "yeelight_living",
-                                "default": "{{ selection.selected_device.device_id }}"
-                            },
                             {
                                 "type": "text",
                                 "name": "friendly_name",
                                 "label": "Friendly name",
                                 "required": true,
+                                "placeholder": "Living Room Light",
                                 "default": "{{ selection.selected_device.friendly_name }}"
+                            },
+                            {
+                                "type": "text",
+                                "name": "instance_id",
+                                "label": "Instance ID",
+                                "required": false,
+                                "placeholder": "auto",
+                                "description": "Leave empty to auto-generate from friendly name and IP address",
+                                "advanced": true
                             },
                             {
                                 "type": "select",
@@ -121,15 +123,15 @@
                     "title": "Review",
                     "sections": [
                         {
-                            "label": "Device",
-                            "value": "{{ selection.selected_device.friendly_name }}"
+                            "label": "Device Name",
+                            "value": "{{ form.instance_details.friendly_name }}"
                         },
                         {
                             "label": "IP Address",
                             "value": "{{ selection.selected_device.ip }}"
                         },
                         {
-                            "label": "Instance",
+                            "label": "Instance ID",
                             "value": "{{ form.instance_details.instance_id }}"
                         }
                     ]
@@ -153,7 +155,7 @@
                                 "device_id": "{{ selection.selected_device.device_id }}",
                                 "ip": "{{ selection.selected_device.ip }}",
                                 "port": "{{ selection.selected_device.port }}",
-                                "name": "{{ selection.selected_device.friendly_name }}",
+                                "name": "{{ form.instance_details.friendly_name }}",
                                 "model": "{{ selection.selected_device.model }}",
                                 "enabled": true
                             }
@@ -177,12 +179,14 @@
                                 "type": "text",
                                 "name": "friendly_name",
                                 "label": "Friendly name",
+                                "placeholder": "Living Room Light",
                                 "required": true
                             },
                             {
                                 "type": "text",
                                 "name": "ip",
                                 "label": "IP address",
+                                "placeholder": "192.168.1.100",
                                 "required": true
                             },
                             {
@@ -190,7 +194,7 @@
                                 "name": "instance_id",
                                 "label": "Instance ID",
                                 "placeholder": "auto",
-                                "description": "Leave empty to auto-generate from friendly name",
+                                "description": "Leave empty to auto-generate from friendly name and IP address",
                                 "advanced": true
                             },
                             {
@@ -260,16 +264,16 @@
                     "title": "Review",
                     "sections": [
                         {
-                            "label": "Instance",
-                            "value": "{{ form.device_form.instance_id }}"
-                        },
-                        {
-                            "label": "Device",
+                            "label": "Device Name",
                             "value": "{{ form.device_form.friendly_name }}"
                         },
                         {
-                            "label": "IP",
+                            "label": "IP Address",
                             "value": "{{ form.device_form.ip }}:{{ form.device_form.port }}"
+                        },
+                        {
+                            "label": "Instance ID",
+                            "value": "{{ form.device_form.instance_id }}"
                         }
                     ]
                 },
@@ -288,7 +292,7 @@
                         },
                         "devices": [
                             {
-                                "device_id": "{{ form.device_form.instance_id }}",
+                                "device_id": "yeelight_{{ form.device_form.ip }}",
                                 "ip": "{{ form.device_form.ip }}",
                                 "port": "{{ form.device_form.port }}",
                                 "name": "{{ form.device_form.friendly_name }}",
