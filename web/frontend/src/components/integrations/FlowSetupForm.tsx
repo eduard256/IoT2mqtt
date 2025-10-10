@@ -115,9 +115,13 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
               const currentValue = formData[field.name]
               console.log('[buildContext] Field:', field.name, 'currentValue:', currentValue, 'type:', field.type)
 
-              // Use existing value if present and not empty
-              if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
-                // Convert to correct type for number fields
+              // IMPORTANT: Check if field exists in formData (even if value is null)
+              const fieldExistsInFormData = field.name in formData
+              console.log('[buildContext] Field exists in formData:', fieldExistsInFormData)
+
+              if (fieldExistsInFormData) {
+                // Use the value from formData, even if it's null or empty
+                // This is the actual user input
                 if (field.type === 'number' && typeof currentValue === 'string') {
                   const parsed = parseFloat(currentValue)
                   enrichedData[field.name] = isNaN(parsed) ? (field.default ?? 0) : parsed
@@ -127,7 +131,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
                   console.log('[buildContext] Using currentValue for field:', field.name, '=', currentValue)
                 }
               }
-              // Use default if available
+              // Only use default if field was never set in formData
               else if (field.default !== undefined) {
                 enrichedData[field.name] = field.default
                 console.log('[buildContext] Using default for field:', field.name, '=', field.default)
