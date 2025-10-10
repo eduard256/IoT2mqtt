@@ -94,20 +94,26 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
   // Unified context builder - single source of truth
   const buildContext = useCallback((state: FlowState, flow: FlowDefinition | undefined) => {
+    console.log('[buildContext] CALLED with state.form:', state.form)
     const enrichedForm: Record<string, any> = {}
 
     if (flow) {
+      console.log('[buildContext] Processing flow steps:', flow.steps.length)
       for (const step of flow.steps) {
+        console.log('[buildContext] Processing step:', step.id, 'type:', step.type)
         if (step.type === 'form' && step.id) {
           // Find the form step schema
           const formStep = flow.steps.find(s => s.id === step.id && s.type === 'form')
           const formData = state.form[step.id] || {}
+          console.log('[buildContext] step.id:', step.id, 'formData from state.form:', formData)
           const enrichedData: Record<string, any> = {}
 
           if (formStep?.schema?.fields) {
+            console.log('[buildContext] Processing', formStep.schema.fields.length, 'fields for step', step.id)
             // Apply defaults for all fields
             for (const field of formStep.schema.fields) {
               const currentValue = formData[field.name]
+              console.log('[buildContext] Field:', field.name, 'currentValue:', currentValue, 'type:', field.type)
 
               // Use existing value if present and not empty
               if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
@@ -115,30 +121,36 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
                 if (field.type === 'number' && typeof currentValue === 'string') {
                   const parsed = parseFloat(currentValue)
                   enrichedData[field.name] = isNaN(parsed) ? (field.default ?? 0) : parsed
+                  console.log('[buildContext] Converted number field:', field.name, 'to:', enrichedData[field.name])
                 } else {
                   enrichedData[field.name] = currentValue
+                  console.log('[buildContext] Using currentValue for field:', field.name, '=', currentValue)
                 }
               }
               // Use default if available
               else if (field.default !== undefined) {
                 enrichedData[field.name] = field.default
+                console.log('[buildContext] Using default for field:', field.name, '=', field.default)
               }
               // Keep empty value for required fields without defaults
               else {
                 enrichedData[field.name] = ''
+                console.log('[buildContext] Setting empty value for field:', field.name)
               }
             }
           }
 
           enrichedForm[step.id] = Object.keys(enrichedData).length > 0 ? enrichedData : formData
+          console.log('[buildContext] enrichedForm[' + step.id + ']:', enrichedForm[step.id])
         } else if (state.form[step.id]) {
           // Keep non-form step data as-is
           enrichedForm[step.id] = state.form[step.id]
+          console.log('[buildContext] Kept non-form step data for:', step.id)
         }
       }
     }
 
-    console.log('[buildContext] Built context with enrichedForm:', enrichedForm)
+    console.log('[buildContext] FINAL enrichedForm:', enrichedForm)
 
     return {
       integration,
@@ -331,15 +343,19 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
 
   function updateFormValue(stepId: string, field: FormField, value: any) {
+    console.log('[updateFormValue] CALLED with stepId:', stepId, 'field:', field.name, 'value:', value)
     setFlowState(prev => {
+      console.log('[updateFormValue] prev.form:', prev.form)
       // Get current form data for this step
       const currentStepData = prev.form[stepId] ?? {}
+      console.log('[updateFormValue] currentStepData BEFORE update:', currentStepData)
 
       // Update the specific field value
       const updatedStepData = {
         ...currentStepData,
         [field.name]: value
       }
+      console.log('[updateFormValue] updatedStepData AFTER field update:', updatedStepData)
 
       // Find the form step to get all field definitions
       const formStep = currentFlow?.steps.find(s => s.id === stepId && s.type === 'form')
@@ -352,12 +368,13 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
           // If field is empty and has default, apply it
           if (!updatedStepData[f.name] && f.default !== undefined) {
+            console.log('[updateFormValue] Applying default for field:', f.name, 'default:', f.default)
             updatedStepData[f.name] = f.default
           }
         }
       }
 
-      console.log('[updateFormValue] Updated step data:', stepId, updatedStepData)
+      console.log('[updateFormValue] FINAL updatedStepData:', stepId, updatedStepData)
 
       const newState = {
         ...prev,
@@ -367,8 +384,11 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         }
       }
 
+      console.log('[updateFormValue] NEW STATE form:', newState.form)
+
       // IMPORTANT: Update ref immediately so executeTool can access fresh data
       flowStateRef.current = newState
+      console.log('[updateFormValue] Updated flowStateRef.current.form:', flowStateRef.current.form)
 
       return newState
     })
