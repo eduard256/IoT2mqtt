@@ -148,10 +148,9 @@ async def test_yeelight_device(ip: str, port: int = 55443):
         # Try to import and use yeelight library if available
         try:
             from yeelight import Bulb
-            
+
             bulb = Bulb(ip, port)
-            bulb.set_timeout(5)
-            
+
             # Try to get properties
             props = bulb.get_properties()
             

@@ -57,7 +57,6 @@ def main() -> None:
 
     try:
         bulb = Bulb(host, port=port)
-        bulb.set_timeout(3)
         properties = bulb.get_properties()
     except Exception as exc:  # pragma: no cover
         print(json.dumps({
