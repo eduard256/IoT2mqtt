@@ -368,7 +368,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     })
   }
 
-  async function executeTool(step: FlowStep, freshState?: FlowState) {
+  async function executeTool(step: FlowStep) {
     if (!schema) return
     if (!step.tool) {
       setError('Tool step missing tool name')
@@ -397,9 +397,17 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
     try {
       const token = getAuthToken()
-      // Build fresh context with latest state
-      const stateToUse = freshState || flowState
-      const contextToUse = buildContext(stateToUse, currentFlow)
+
+      // IMPORTANT: Get fresh state from useState by using a promise that resolves after state update
+      // This ensures we have the actual current state, not a stale closure
+      const currentState = await new Promise<FlowState>((resolve) => {
+        setFlowState(prev => {
+          resolve(prev)
+          return prev
+        })
+      })
+
+      const contextToUse = buildContext(currentState, currentFlow)
       console.log('[executeTool] Using context:', contextToUse)
 
       const inputPayload = resolveDeepWithContext(step.input ?? {}, contextToUse)
@@ -530,23 +538,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     // Check if the new step needs auto-execution after React updates
     const nextStep = visibleSteps[nextIndex]
     if (nextStep && nextStep.type === 'tool' && nextStep.auto_advance && !autoRanSteps.current.has(nextStep.id)) {
-      // Use setState callback to get the latest state
-      setFlowState(prevState => {
-        // Build fresh context with the absolute latest state
-        const latestContext = buildContext(prevState, currentFlow)
-
-        console.log('[advanceStep] Auto-running tool after step advance:', nextStep.id)
-        console.log('[advanceStep] Latest state:', prevState)
-        console.log('[advanceStep] Built context:', latestContext)
-
-        // Schedule tool execution with the latest state
-        requestAnimationFrame(() => {
-          void executeTool(nextStep, prevState)
-        })
-
-        // Return state unchanged
-        return prevState
-      })
+      console.log('[advanceStep] Auto-running tool after step advance:', nextStep.id)
+      // executeTool will get fresh state via Promise-based approach
+      void executeTool(nextStep)
     }
   }
 

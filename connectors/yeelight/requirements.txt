@@ -1,7 +1,7 @@
 # Yeelight Connector Requirements
 
 # MQTT
-paho-mqtt==1.6.1
+paho-mqtt==2.1.0
 
 # Yeelight library
 yeelight==0.7.14
