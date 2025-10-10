@@ -299,7 +299,7 @@ interface PayloadEncyclopediaProps {
 }
 
 export function PayloadEncyclopedia({ onSelectPayload }: PayloadEncyclopediaProps) {
-  const { t } = useTranslation(['mqtt_explorer', 'common'])
+  const { t } = useTranslation()
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [selectedExample, setSelectedExample] = useState<CommandExample | null>(null)
 
@@ -321,8 +321,8 @@ export function PayloadEncyclopedia({ onSelectPayload }: PayloadEncyclopediaProp
     const payloadStr = JSON.stringify(payload, null, 2)
     navigator.clipboard.writeText(payloadStr)
     toast({
-      title: t('common:copied'),
-      description: t('mqtt_explorer:payload_copied'),
+      title: t('common.copied'),
+      description: t('mqtt_explorer.payload_copied'),
     })
   }
 
@@ -341,7 +341,7 @@ export function PayloadEncyclopedia({ onSelectPayload }: PayloadEncyclopediaProp
     <Card className="p-4">
       <div className="flex items-center gap-2 mb-4">
         <Book className="h-5 w-5" />
-        <h3 className="font-semibold">{t('command_encyclopedia')}</h3>
+        <h3 className="font-semibold">{t('mqtt_explorer.command_encyclopedia')}</h3>
       </div>
       
       <ScrollArea className="h-[400px]">
@@ -408,7 +408,7 @@ export function PayloadEncyclopedia({ onSelectPayload }: PayloadEncyclopediaProp
       <div className="mt-4 p-3 bg-muted rounded-lg">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <AlertCircle className="h-4 w-4" />
-          <span>{t('insert_hint')}</span>
+          <span>{t('mqtt_explorer.insert_hint')}</span>
         </div>
       </div>
     </Card>
