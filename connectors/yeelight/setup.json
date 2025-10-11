@@ -35,9 +35,46 @@
             "default": true,
             "steps": [
                 {
-                    "id": "device_form",
+                    "id": "ip_form",
                     "type": "form",
-                    "title": "Device details",
+                    "title": "IP Connection",
+                    "description": "Enter the IP address of your Yeelight device.",
+                    "schema": {
+                        "fields": [
+                            {
+                                "type": "text",
+                                "name": "ip",
+                                "label": "IP address",
+                                "placeholder": "192.168.1.100",
+                                "required": true
+                            },
+                            {
+                                "type": "number",
+                                "name": "port",
+                                "label": "Port",
+                                "default": 55443,
+                                "advanced": true
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "validate",
+                    "type": "tool",
+                    "title": "Validate device",
+                    "description": "Verify the device responds.",
+                    "tool": "validate_device",
+                    "input": {
+                        "host": "{{ form.ip_form.ip }}",
+                        "port": "{{ form.ip_form.port }}"
+                    },
+                    "auto_advance": true
+                },
+                {
+                    "id": "device_config",
+                    "type": "form",
+                    "title": "Device Configuration",
+                    "description": "Configure your Yeelight device.",
                     "schema": {
                         "fields": [
                             {
@@ -49,24 +86,10 @@
                             },
                             {
                                 "type": "text",
-                                "name": "ip",
-                                "label": "IP address",
-                                "placeholder": "192.168.1.100",
-                                "required": true
-                            },
-                            {
-                                "type": "text",
                                 "name": "instance_id",
                                 "label": "Instance ID",
                                 "placeholder": "auto",
                                 "description": "Leave empty to auto-generate unique instance ID",
-                                "advanced": true
-                            },
-                            {
-                                "type": "number",
-                                "name": "port",
-                                "label": "Port",
-                                "default": 55443,
                                 "advanced": true
                             },
                             {
@@ -100,34 +123,17 @@
                     }
                 },
                 {
-                    "id": "validate",
-                    "type": "tool",
-                    "title": "Validate device",
-                    "description": "Verify the device responds before finishing.",
-                    "tool": "validate_device",
-                    "input": {
-                        "host": "{{ form.device_form.ip }}",
-                        "port": "{{ form.device_form.port }}",
-                        "friendly_name": "{{ form.device_form.friendly_name }}",
-                        "instance_id": "{{ form.device_form.instance_id }}",
-                        "effect_type": "{{ form.device_form.effect_type }}",
-                        "duration": "{{ form.device_form.duration }}"
-                    },
-                    "auto_advance": true,
-                    "optional": true
-                },
-                {
                     "id": "manual_summary",
                     "type": "summary",
                     "title": "Review",
                     "sections": [
                         {
                             "label": "Device Name",
-                            "value": "{{ form.device_form.friendly_name }}"
+                            "value": "{{ form.device_config.friendly_name }}"
                         },
                         {
                             "label": "IP Address",
-                            "value": "{{ form.device_form.ip }}:{{ form.device_form.port }}"
+                            "value": "{{ form.ip_form.ip }}:{{ form.ip_form.port }}"
                         }
                     ]
                 },
@@ -135,21 +141,21 @@
                     "id": "manual_create",
                     "type": "instance",
                     "instance": {
-                        "instance_id": "{{ form.device_form.instance_id }}",
-                        "friendly_name": "{{ form.device_form.friendly_name }}",
+                        "instance_id": "{{ form.device_config.instance_id }}",
+                        "friendly_name": "{{ form.device_config.friendly_name }}",
                         "connector_type": "yeelight",
                         "update_interval": 10,
                         "config": {
                             "discovery_enabled": false,
-                            "effect_type": "{{ form.device_form.effect_type }}",
-                            "duration": "{{ form.device_form.duration }}"
+                            "effect_type": "{{ form.device_config.effect_type }}",
+                            "duration": "{{ form.device_config.duration }}"
                         },
                         "devices": [
                             {
-                                "device_id": "{{ form.device_form.friendly_name }}",
-                                "ip": "{{ form.device_form.ip }}",
-                                "port": "{{ form.device_form.port }}",
-                                "name": "{{ form.device_form.friendly_name }}",
+                                "device_id": "{{ form.device_config.friendly_name }}",
+                                "ip": "{{ form.ip_form.ip }}",
+                                "port": "{{ form.ip_form.port }}",
+                                "name": "{{ form.device_config.friendly_name }}",
                                 "enabled": true
                             }
                         ]
