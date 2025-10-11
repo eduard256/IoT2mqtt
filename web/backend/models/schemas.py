@@ -190,6 +190,16 @@ class ToolDefinition(BaseModel):
     environment: Optional[Dict[str, str]] = None
 
 
+class MultiDeviceConfig(BaseModel):
+    """Multi-device configuration for connectors that support multiple devices per instance"""
+    enabled: bool
+    max_devices: Optional[int] = 100
+    device_label: Optional[str] = "Device"
+    add_button_label: Optional[str] = "Add Another Device"
+    loop_from_step: str
+    loop_to_step: str
+
+
 class FlowSetupSchema(BaseModel):
     """Complete connector setup description"""
     version: str = "1.0.0"
@@ -198,6 +208,7 @@ class FlowSetupSchema(BaseModel):
     author: Optional[str] = None
     branding: Optional[Dict[str, Any]] = None
     requirements: Optional[Dict[str, Any]] = None
+    multi_device: Optional[MultiDeviceConfig] = None
     flows: List[FlowDefinition]
     tools: Dict[str, ToolDefinition] = {}
     discovery: Optional[Dict[str, Any]] = None
