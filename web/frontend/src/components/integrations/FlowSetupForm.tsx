@@ -1141,7 +1141,17 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     )
   }
 
-  function DeviceListItem({ device, index, onRemove }: { device: any; index: number; onRemove: () => void }) {
+  function DeviceListItem({
+    device,
+    index,
+    onRemove,
+    canRemove = true
+  }: {
+    device: any
+    index: number
+    onRemove: () => void
+    canRemove?: boolean
+  }) {
     return (
       <div className="flex items-center justify-between p-3 border rounded-lg bg-background">
         <div className="flex-1">
@@ -1150,26 +1160,21 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
             {device.ip}:{device.port}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onRemove}
-          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-        >
-          <X className="h-4 w-4" />
-        </Button>
+        {canRemove && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onRemove}
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     )
   }
 
   function renderInstance(step: FlowStep) {
-    // Find the most recent summary step before this instance step
-    const stepIndex = currentFlow?.steps.findIndex(s => s.id === step.id) ?? -1
-    const summaryStep = currentFlow?.steps
-      .slice(0, stepIndex)
-      .reverse()
-      .find(s => s.type === 'summary')
-
     // Multi-device support
     const multiDevice = schema?.multi_device
     const allDevices = [...collectedDevices]
@@ -1181,7 +1186,8 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     }
 
     const maxDevices = multiDevice?.max_devices ?? 100
-    const canAddMore = multiDevice?.enabled && allDevices.length < maxDevices
+    // Button is ALWAYS visible when multi-device is enabled
+    const canAddMore = multiDevice?.enabled === true && allDevices.length < maxDevices
 
     return (
       <Card>
@@ -1190,43 +1196,30 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
           {step.description && <CardDescription>{step.description}</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Show summary if available and not multi-device mode OR no devices yet */}
-          {summaryStep && summaryStep.sections && summaryStep.sections.length > 0 && (!multiDevice?.enabled || allDevices.length === 0) && (
-            <div className="p-4 bg-muted/50 rounded-lg space-y-3 border border-border/50">
-              <h4 className="text-sm font-semibold text-foreground">Review Configuration</h4>
-              <div className="space-y-2">
-                {summaryStep.sections.map((section, index) => (
-                  <div key={`summary-${index}`} className="flex justify-between items-start text-sm">
-                    <span className="text-muted-foreground">{section.label}</span>
-                    <span className="font-medium text-right">{resolveTemplate(section.value)}</span>
-                  </div>
-                ))}
-              </div>
+          {/* Universal device list - always shown after first pass */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-foreground">
+                {multiDevice?.enabled
+                  ? `${multiDevice.device_label ?? 'Devices'} (${allDevices.length}/${maxDevices})`
+                  : 'Device Configuration'
+                }
+              </h4>
             </div>
-          )}
-
-          {/* Multi-device list */}
-          {multiDevice?.enabled && allDevices.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-foreground">
-                  {multiDevice.device_label ?? 'Devices'} ({allDevices.length}/{maxDevices})
-                </h4>
-              </div>
-              <div className="space-y-2">
-                {allDevices.map((device, index) => (
-                  <DeviceListItem
-                    key={`${device.device_id}-${index}`}
-                    device={device}
-                    index={index}
-                    onRemove={() => handleRemoveDevice(index)}
-                  />
-                ))}
-              </div>
+            <div className="space-y-2">
+              {allDevices.map((device, index) => (
+                <DeviceListItem
+                  key={`${device.device_id}-${index}`}
+                  device={device}
+                  index={index}
+                  onRemove={() => handleRemoveDevice(index)}
+                  canRemove={multiDevice?.enabled === true || allDevices.length > 1}
+                />
+              ))}
             </div>
-          )}
+          </div>
 
-          {/* Add another device button */}
+          {/* Add another device button - ALWAYS visible when multi-device enabled */}
           {canAddMore && (
             <Button
               variant="outline"
@@ -1239,8 +1232,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
           )}
 
           <p className="text-sm text-muted-foreground">
-            Press Finish to create the connector instance
-            {multiDevice?.enabled && allDevices.length > 0 && ` with ${allDevices.length} device${allDevices.length > 1 ? 's' : ''}`}.
+            Press Finish to create the connector instance with {allDevices.length} device{allDevices.length > 1 ? 's' : ''}.
           </p>
         </CardContent>
       </Card>
