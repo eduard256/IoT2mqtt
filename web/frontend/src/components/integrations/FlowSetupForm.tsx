@@ -1131,6 +1131,21 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     // Button is ALWAYS visible when multi-device is enabled
     const canAddMore = multiDevice?.enabled === true && allDevices.length < maxDevices
 
+    // DEBUG LOGS
+    console.log('[renderInstance] === DEBUG START ===')
+    console.log('[renderInstance] schema:', schema)
+    console.log('[renderInstance] schema?.multi_device:', schema?.multi_device)
+    console.log('[renderInstance] multiDevice:', multiDevice)
+    console.log('[renderInstance] multiDevice?.enabled:', multiDevice?.enabled)
+    console.log('[renderInstance] typeof multiDevice?.enabled:', typeof multiDevice?.enabled)
+    console.log('[renderInstance] multiDevice?.enabled === true:', multiDevice?.enabled === true)
+    console.log('[renderInstance] allDevices:', allDevices)
+    console.log('[renderInstance] allDevices.length:', allDevices.length)
+    console.log('[renderInstance] maxDevices:', maxDevices)
+    console.log('[renderInstance] allDevices.length < maxDevices:', allDevices.length < maxDevices)
+    console.log('[renderInstance] canAddMore:', canAddMore)
+    console.log('[renderInstance] === DEBUG END ===')
+
     return (
       <Card>
         <CardHeader>
