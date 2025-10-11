@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { Loader2, ExternalLink, Play } from 'lucide-react'
+import { Loader2, ExternalLink, Play, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,6 +52,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   const [busy, setBusy] = useState(false)
   const [oauthSession, setOauthSession] = useState<{ id: string; provider: string } | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [collectedDevices, setCollectedDevices] = useState<Array<any>>([])
   const autoRanSteps = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const isChangingFlow = useRef(false)
@@ -622,6 +623,92 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       .replace(/^-|-$/g, '')
   }
 
+  function getLoopSteps(): string[] {
+    if (!schema?.multi_device?.enabled || !currentFlow) return []
+
+    const fromIndex = currentFlow.steps.findIndex(
+      s => s.id === schema.multi_device!.loop_from_step
+    )
+    const toIndex = currentFlow.steps.findIndex(
+      s => s.id === schema.multi_device!.loop_to_step
+    )
+
+    if (fromIndex === -1 || toIndex === -1) return []
+
+    return currentFlow.steps
+      .slice(fromIndex, toIndex + 1)
+      .map(s => s.id)
+  }
+
+  function buildCurrentDevice(): any | null {
+    const loopSteps = getLoopSteps()
+    if (loopSteps.length === 0) return null
+
+    // Try to find IP/connection and device config forms
+    const ipForm = flowState.form.ip_form || flowState.form.connection_form
+    const deviceConfig = flowState.form.device_config || flowState.form.device_form
+
+    if (!ipForm?.ip && !ipForm?.host) return null
+    if (!deviceConfig?.friendly_name && !deviceConfig?.name) return null
+
+    const deviceName = deviceConfig.friendly_name || deviceConfig.name
+    const deviceIp = ipForm.ip || ipForm.host
+
+    return {
+      device_id: normalizeDeviceId(deviceName),
+      ip: deviceIp,
+      port: ipForm.port || 55443,
+      name: deviceName,
+      enabled: true
+    }
+  }
+
+  function isDuplicateDevice(device: any, devices: any[]): boolean {
+    return devices.some(d => d.ip === device.ip || d.device_id === device.device_id)
+  }
+
+  function handleAddAnotherDevice() {
+    if (!schema?.multi_device?.enabled) return
+
+    // Build and save current device
+    const currentDevice = buildCurrentDevice()
+    if (currentDevice && !isDuplicateDevice(currentDevice, collectedDevices)) {
+      setCollectedDevices(prev => [...prev, currentDevice])
+    }
+
+    // Clear loop step forms
+    const loopSteps = getLoopSteps()
+    setFlowState(prev => {
+      const newForm = { ...prev.form }
+      loopSteps.forEach(stepId => {
+        delete newForm[stepId]
+      })
+      return { ...prev, form: newForm }
+    })
+
+    // Reset flowStateRef
+    flowStateRef.current = {
+      ...flowStateRef.current,
+      form: { ...flowStateRef.current.form }
+    }
+    loopSteps.forEach(stepId => {
+      delete flowStateRef.current.form[stepId]
+    })
+
+    // Navigate back to the beginning of the loop
+    const targetStepIndex = visibleSteps.findIndex(
+      s => s.id === schema.multi_device!.loop_from_step
+    )
+    if (targetStepIndex !== -1) {
+      setCurrentStepIndex(targetStepIndex)
+      setError(null)
+    }
+  }
+
+  function handleRemoveDevice(index: number) {
+    setCollectedDevices(prev => prev.filter((_, i) => i !== index))
+  }
+
   async function createInstance(step: FlowStep) {
     if (!step.instance) {
       setError('Instance step missing configuration')
@@ -643,12 +730,26 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         instanceId = generateInstanceId(resolved.friendly_name)
       }
 
+      // Collect devices: multi-device mode vs single device
+      let devices = []
+      if (schema?.multi_device?.enabled) {
+        // Multi-device mode: collect all devices
+        devices = [...collectedDevices]
+        const currentDevice = buildCurrentDevice()
+        if (currentDevice && !isDuplicateDevice(currentDevice, devices)) {
+          devices.push(currentDevice)
+        }
+      } else {
+        // Single device mode: use resolved devices from template
+        devices = resolved.devices ?? []
+      }
+
       const payload = {
         instance_id: instanceId,
         connector_type: resolved.connector_type ?? integration.name,
         friendly_name: resolved.friendly_name ?? instanceId,
         config: resolved.config ?? {},
-        devices: resolved.devices ?? [],
+        devices: devices,
         enabled: resolved.enabled ?? true,
         update_interval: resolved.update_interval ?? 15,
         secrets: resolved.secrets ?? undefined
@@ -1040,6 +1141,27 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     )
   }
 
+  function DeviceListItem({ device, index, onRemove }: { device: any; index: number; onRemove: () => void }) {
+    return (
+      <div className="flex items-center justify-between p-3 border rounded-lg bg-background">
+        <div className="flex-1">
+          <div className="font-medium text-sm">{device.name}</div>
+          <div className="text-xs text-muted-foreground">
+            {device.ip}:{device.port}
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    )
+  }
+
   function renderInstance(step: FlowStep) {
     // Find the most recent summary step before this instance step
     const stepIndex = currentFlow?.steps.findIndex(s => s.id === step.id) ?? -1
@@ -1048,6 +1170,19 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       .reverse()
       .find(s => s.type === 'summary')
 
+    // Multi-device support
+    const multiDevice = schema?.multi_device
+    const allDevices = [...collectedDevices]
+
+    // Add current device if exists and not duplicate
+    const currentDevice = buildCurrentDevice()
+    if (currentDevice && !isDuplicateDevice(currentDevice, allDevices)) {
+      allDevices.push(currentDevice)
+    }
+
+    const maxDevices = multiDevice?.max_devices ?? 100
+    const canAddMore = multiDevice?.enabled && allDevices.length < maxDevices
+
     return (
       <Card>
         <CardHeader>
@@ -1055,8 +1190,8 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
           {step.description && <CardDescription>{step.description}</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Show summary if available */}
-          {summaryStep && summaryStep.sections && summaryStep.sections.length > 0 && (
+          {/* Show summary if available and not multi-device mode OR no devices yet */}
+          {summaryStep && summaryStep.sections && summaryStep.sections.length > 0 && (!multiDevice?.enabled || allDevices.length === 0) && (
             <div className="p-4 bg-muted/50 rounded-lg space-y-3 border border-border/50">
               <h4 className="text-sm font-semibold text-foreground">Review Configuration</h4>
               <div className="space-y-2">
@@ -1070,8 +1205,42 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
             </div>
           )}
 
+          {/* Multi-device list */}
+          {multiDevice?.enabled && allDevices.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-foreground">
+                  {multiDevice.device_label ?? 'Devices'} ({allDevices.length}/{maxDevices})
+                </h4>
+              </div>
+              <div className="space-y-2">
+                {allDevices.map((device, index) => (
+                  <DeviceListItem
+                    key={`${device.device_id}-${index}`}
+                    device={device}
+                    index={index}
+                    onRemove={() => handleRemoveDevice(index)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Add another device button */}
+          {canAddMore && (
+            <Button
+              variant="outline"
+              onClick={handleAddAnotherDevice}
+              disabled={busy}
+              className="w-full"
+            >
+              {multiDevice!.add_button_label ?? 'Add Another Device'}
+            </Button>
+          )}
+
           <p className="text-sm text-muted-foreground">
-            Press Finish to create the connector instance.
+            Press Finish to create the connector instance
+            {multiDevice?.enabled && allDevices.length > 0 && ` with ${allDevices.length} device${allDevices.length > 1 ? 's' : ''}`}.
           </p>
         </CardContent>
       </Card>

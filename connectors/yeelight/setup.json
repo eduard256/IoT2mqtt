@@ -8,6 +8,14 @@
         "color": "#FF7E35",
         "category": "lighting"
     },
+    "multi_device": {
+        "enabled": true,
+        "max_devices": 100,
+        "device_label": "Yeelight Device",
+        "add_button_label": "Add Another Device",
+        "loop_from_step": "ip_form",
+        "loop_to_step": "device_config"
+    },
     "requirements": {
         "network": "host",
         "python": "3.11",

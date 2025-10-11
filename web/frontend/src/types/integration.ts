@@ -102,6 +102,15 @@ export interface ToolDefinition {
   environment?: Record<string, string>
 }
 
+export interface MultiDeviceConfig {
+  enabled: boolean
+  max_devices?: number
+  device_label?: string
+  add_button_label?: string
+  loop_from_step: string
+  loop_to_step: string
+}
+
 export interface FlowSetupSchema {
   version: string
   display_name: string
@@ -109,6 +118,7 @@ export interface FlowSetupSchema {
   author?: string
   branding?: Record<string, unknown>
   requirements?: Record<string, unknown>
+  multi_device?: MultiDeviceConfig
   flows: FlowDefinition[]
   tools: Record<string, ToolDefinition>
   discovery?: Record<string, unknown>
