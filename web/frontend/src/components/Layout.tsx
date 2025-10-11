@@ -34,7 +34,7 @@ export default function Layout({ children }: LayoutProps) {
   const menuItems = [
     { path: '/', icon: Home, label: t('dashboard.title') },
     { path: '/integrations', icon: Box, label: t('integrations.title') },
-    { path: '/devices', icon: Cpu, label: t('devices.title') },
+    // { path: '/devices', icon: Cpu, label: t('devices.title') },
     { path: '/mqtt', icon: Network, label: t('mqtt_explorer.title') },
     { path: '/containers', icon: Activity, label: t('containers.title') },
   ]
