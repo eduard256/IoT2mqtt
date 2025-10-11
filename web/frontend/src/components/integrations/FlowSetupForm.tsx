@@ -95,30 +95,23 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
   // Unified context builder - single source of truth
   const buildContext = useCallback((state: FlowState, flow: FlowDefinition | undefined) => {
-    console.log('[buildContext] CALLED with state.form:', state.form)
     const enrichedForm: Record<string, any> = {}
 
     if (flow) {
-      console.log('[buildContext] Processing flow steps:', flow.steps.length)
       for (const step of flow.steps) {
-        console.log('[buildContext] Processing step:', step.id, 'type:', step.type)
         if (step.type === 'form' && step.id) {
           // Find the form step schema
           const formStep = flow.steps.find(s => s.id === step.id && s.type === 'form')
           const formData = state.form[step.id] || {}
-          console.log('[buildContext] step.id:', step.id, 'formData from state.form:', formData)
           const enrichedData: Record<string, any> = {}
 
           if (formStep?.schema?.fields) {
-            console.log('[buildContext] Processing', formStep.schema.fields.length, 'fields for step', step.id)
             // Apply defaults for all fields
             for (const field of formStep.schema.fields) {
               const currentValue = formData[field.name]
-              console.log('[buildContext] Field:', field.name, 'currentValue:', currentValue, 'type:', field.type)
 
               // IMPORTANT: Check if field exists in formData (even if value is null)
               const fieldExistsInFormData = field.name in formData
-              console.log('[buildContext] Field exists in formData:', fieldExistsInFormData)
 
               if (fieldExistsInFormData) {
                 // Use the value from formData, even if it's null or empty
@@ -126,32 +119,25 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
                 if (field.type === 'number' && typeof currentValue === 'string') {
                   const parsed = parseFloat(currentValue)
                   enrichedData[field.name] = isNaN(parsed) ? (field.default ?? 0) : parsed
-                  console.log('[buildContext] Converted number field:', field.name, 'to:', enrichedData[field.name])
                 } else {
                   enrichedData[field.name] = currentValue
-                  console.log('[buildContext] Using currentValue for field:', field.name, '=', currentValue)
                 }
               }
               // Only use default if field was never set in formData
               else if (field.default !== undefined) {
                 enrichedData[field.name] = field.default
-                console.log('[buildContext] Using default for field:', field.name, '=', field.default)
               }
               // Don't add fields without values or defaults - they should not appear in context
             }
           }
 
           enrichedForm[step.id] = Object.keys(enrichedData).length > 0 ? enrichedData : formData
-          console.log('[buildContext] enrichedForm[' + step.id + ']:', enrichedForm[step.id])
         } else if (state.form[step.id]) {
           // Keep non-form step data as-is
           enrichedForm[step.id] = state.form[step.id]
-          console.log('[buildContext] Kept non-form step data for:', step.id)
         }
       }
     }
-
-    console.log('[buildContext] FINAL enrichedForm:', enrichedForm)
 
     return {
       integration,
@@ -274,26 +260,19 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     if (singleMatch) {
       const rawPath = singleMatch[1]
       const combined = { ...contextToUse, ...extra }
-      console.log('[resolveTemplateWithContext] START path:', rawPath)
-      console.log('[resolveTemplateWithContext] combined keys:', Object.keys(combined))
-      console.log('[resolveTemplateWithContext] combined.form:', combined.form)
       const segments = rawPath.split('.')
         .map(segment => segment.trim())
         .filter(segment => segment)
       let pointer: any = combined
       for (let i = 0; i < segments.length; i++) {
         const segment = segments[i]
-        console.log('[resolveTemplateWithContext] segment[' + i + ']:', segment, 'pointer type:', typeof pointer, 'pointer keys:', pointer ? Object.keys(pointer) : 'null')
         if (pointer == null) {
-          console.log('[resolveTemplateWithContext] null pointer at segment:', segment, 'path:', rawPath)
           return ''
         }
         pointer = pointer[segment]
-        console.log('[resolveTemplateWithContext] after segment[' + i + ']:', segment, 'pointer =', pointer)
       }
       // Preserve null values - only convert undefined to empty string
       const result = pointer !== undefined ? pointer : ''
-      console.log('[resolveTemplateWithContext] FINAL path:', rawPath, 'result:', result)
       return result
     }
 
@@ -327,13 +306,11 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       let pointer: any = combined
       for (const segment of segments) {
         if (pointer == null) {
-          console.log('[resolveTemplate] null pointer at segment:', segment, 'path:', rawPath)
           return ''
         }
         pointer = pointer[segment]
       }
       const result = pointer ?? ''
-      console.log('[resolveTemplate] path:', rawPath, 'result:', result)
       return result
     }
 
@@ -381,19 +358,15 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
 
   function updateFormValue(stepId: string, field: FormField, value: any) {
-    console.log('[updateFormValue] CALLED with stepId:', stepId, 'field:', field.name, 'value:', value)
     setFlowState(prev => {
-      console.log('[updateFormValue] prev.form:', prev.form)
       // Get current form data for this step
       const currentStepData = prev.form[stepId] ?? {}
-      console.log('[updateFormValue] currentStepData BEFORE update:', currentStepData)
 
       // Update the specific field value
       const updatedStepData = {
         ...currentStepData,
         [field.name]: value
       }
-      console.log('[updateFormValue] updatedStepData AFTER field update:', updatedStepData)
 
       // Find the form step to get all field definitions
       const formStep = currentFlow?.steps.find(s => s.id === stepId && s.type === 'form')
@@ -406,13 +379,10 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
           // Only apply default if field was never set (not just empty)
           if (!(f.name in updatedStepData) && f.default !== undefined) {
-            console.log('[updateFormValue] Applying default for field:', f.name, 'default:', f.default)
             updatedStepData[f.name] = f.default
           }
         }
       }
-
-      console.log('[updateFormValue] FINAL updatedStepData:', stepId, updatedStepData)
 
       const newState = {
         ...prev,
@@ -422,11 +392,8 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         }
       }
 
-      console.log('[updateFormValue] NEW STATE form:', newState.form)
-
       // IMPORTANT: Update ref immediately so executeTool can access fresh data
       flowStateRef.current = newState
-      console.log('[updateFormValue] Updated flowStateRef.current.form:', flowStateRef.current.form)
 
       return newState
     })
@@ -441,18 +408,15 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
     // Don't update state if we're in the middle of changing flows
     if (isChangingFlow.current) {
-      console.log('[executeTool] Blocked: flow is changing')
       return
     }
 
     // Prevent duplicate runs - mark as running immediately
     if (autoRanSteps.current.has(step.id)) {
-      console.log('[executeTool] Already running/ran:', step.id)
       return
     }
     autoRanSteps.current.add(step.id)
 
-    console.log('[executeTool] Starting tool:', step.tool, 'step:', step.id)
     setBusy(true)
     setError(null)
 
@@ -465,13 +429,10 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       // IMPORTANT: Use ref to get the absolute latest state
       // This bypasses React's async state updates
       const currentState = flowStateRef.current
-      console.log('[executeTool] Current state from ref:', currentState)
 
       const contextToUse = buildContext(currentState, currentFlow)
-      console.log('[executeTool] Using context:', contextToUse)
 
       const inputPayload = resolveDeepWithContext(step.input ?? {}, contextToUse)
-      console.log('[executeTool] Input payload:', inputPayload)
 
       // Validate required fields
       if (step.tool === 'validate_device' || step.tool === 'validate_connection') {
@@ -492,7 +453,6 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
       // Don't update state if we switched flows while request was in flight
       if (isChangingFlow.current) {
-        console.log('[executeTool] Blocked after fetch: flow changed')
         return
       }
 
@@ -503,11 +463,9 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
       // Don't update state if we switched flows
       if (isChangingFlow.current) {
-        console.log('[executeTool] Blocked before state update: flow changed')
         return
       }
 
-      console.log('[executeTool] Tool succeeded, updating state')
       const storageKey = step.output_key ?? step.tool
       setFlowState(prev => ({
         ...prev,
@@ -518,7 +476,6 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       }))
       if (step.auto_advance) {
         if (!isChangingFlow.current) {
-          console.log('[executeTool] Auto-advance: setting busy=false')
           setBusy(false)
         }
         await handleNext()
@@ -527,25 +484,20 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     } catch (e: any) {
       // Don't show error if request was aborted (user switched flows)
       if (e.name === 'AbortError') {
-        console.log('[executeTool] Request aborted')
         if (!isChangingFlow.current) setBusy(false)
         return
       }
       console.error('[executeTool] Error:', e)
       if (!isChangingFlow.current) setError(e?.message ?? 'Tool execution failed')
     }
-    console.log('[executeTool] Finished, setting busy=false, isChangingFlow:', isChangingFlow.current)
     if (!isChangingFlow.current) setBusy(false)
   }
 
   async function handleNext() {
     if (!currentStep) return
     if (isChangingFlow.current) {
-      console.log('[handleNext] Blocked: flow is changing')
       return
     }
-
-    console.log('[handleNext] Processing step:', currentStep.id, 'type:', currentStep.type)
 
     if (currentStep.type === 'form') {
       const formValues = flowState.form[currentStep.id] ?? {}
@@ -598,7 +550,6 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     // Check if the new step needs auto-execution after React updates
     const nextStep = visibleSteps[nextIndex]
     if (nextStep && nextStep.type === 'tool' && nextStep.auto_advance && !autoRanSteps.current.has(nextStep.id)) {
-      console.log('[advanceStep] Auto-running tool after step advance:', nextStep.id)
       // executeTool will get fresh state via Promise-based approach
       void executeTool(nextStep)
     }
@@ -811,20 +762,15 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         const target = action.flow
         if (!target) return
 
-        console.log('[goto_flow] Switching to flow:', target)
-        console.log('[goto_flow] Current busy state:', busy)
-
         // Block all state updates from ongoing async operations
         isChangingFlow.current = true
 
         // Abort any running tool execution (e.g., auto-discovery)
         if (abortControllerRef.current) {
-          console.log('[goto_flow] Aborting active request')
           abortControllerRef.current.abort()
           abortControllerRef.current = null
         }
 
-        console.log('[goto_flow] Setting busy=false')
         setBusy(false)
         setCurrentFlowId(target)
         setCurrentStepIndex(0)
@@ -835,7 +781,6 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
         // Unblock after a short delay to allow React to process updates
         setTimeout(() => {
-          console.log('[goto_flow] Unblocking flow changes')
           isChangingFlow.current = false
         }, 100)
         return
