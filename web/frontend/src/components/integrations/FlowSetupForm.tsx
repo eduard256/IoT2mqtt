@@ -166,8 +166,28 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
 
   const visibleSteps: FlowStep[] = useMemo(() => {
     if (!currentFlow) return []
-    return currentFlow.steps.filter(step => evaluateConditions(step.conditions))
-  }, [currentFlow, context])
+    return currentFlow.steps.filter(step => {
+      // Check visibility conditions
+      if (!evaluateConditions(step.conditions)) return false
+
+      // Hide tool steps with auto_advance that completed successfully
+      if (step.type === 'tool' && step.auto_advance) {
+        const storageKey = step.output_key ?? step.tool ?? step.id
+        const result = flowState.tools[storageKey]
+        // Hide only if result is successful (ok: true)
+        if (result && result.ok === true) {
+          return false
+        }
+      }
+
+      // Hide all summary steps (they'll be shown inside instance step)
+      if (step.type === 'summary') {
+        return false
+      }
+
+      return true
+    })
+  }, [currentFlow, flowState, context])
 
   useEffect(() => {
     if (currentStepIndex >= visibleSteps.length) {
@@ -1021,15 +1041,37 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   }
 
   function renderInstance(step: FlowStep) {
+    // Find the most recent summary step before this instance step
+    const stepIndex = currentFlow?.steps.findIndex(s => s.id === step.id) ?? -1
+    const summaryStep = currentFlow?.steps
+      .slice(0, stepIndex)
+      .reverse()
+      .find(s => s.type === 'summary')
+
     return (
       <Card>
         <CardHeader>
           <CardTitle>{step.title ?? 'Create Instance'}</CardTitle>
           {step.description && <CardDescription>{step.description}</CardDescription>}
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Show summary if available */}
+          {summaryStep && summaryStep.sections && summaryStep.sections.length > 0 && (
+            <div className="p-4 bg-muted/50 rounded-lg space-y-3 border border-border/50">
+              <h4 className="text-sm font-semibold text-foreground">Review Configuration</h4>
+              <div className="space-y-2">
+                {summaryStep.sections.map((section, index) => (
+                  <div key={`summary-${index}`} className="flex justify-between items-start text-sm">
+                    <span className="text-muted-foreground">{section.label}</span>
+                    <span className="font-medium text-right">{resolveTemplate(section.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p className="text-sm text-muted-foreground">
-            Review the configuration and press Finish to create the connector instance.
+            Press Finish to create the connector instance.
           </p>
         </CardContent>
       </Card>
