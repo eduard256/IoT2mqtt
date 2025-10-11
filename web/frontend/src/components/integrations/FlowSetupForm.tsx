@@ -641,9 +641,6 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   }
 
   function buildCurrentDevice(): any | null {
-    const loopSteps = getLoopSteps()
-    if (loopSteps.length === 0) return null
-
     // Try to find IP/connection and device config forms
     const ipForm = flowState.form.ip_form || flowState.form.connection_form
     const deviceConfig = flowState.form.device_config || flowState.form.device_form
