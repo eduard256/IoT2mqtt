@@ -129,10 +129,6 @@
                         {
                             "label": "IP Address",
                             "value": "{{ selection.selected_device.ip }}"
-                        },
-                        {
-                            "label": "Instance ID",
-                            "value": "{{ form.instance_details.instance_id }}"
                         }
                     ]
                 },
@@ -270,10 +266,6 @@
                         {
                             "label": "IP Address",
                             "value": "{{ form.device_form.ip }}:{{ form.device_form.port }}"
-                        },
-                        {
-                            "label": "Instance ID",
-                            "value": "{{ form.device_form.instance_id }}"
                         }
                     ]
                 },
