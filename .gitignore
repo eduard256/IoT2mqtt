@@ -53,6 +53,10 @@ oauth_sessions/**
 config/oauth/*.json
 !config/oauth/.gitkeep
 
+# Файлы данных пользователя (не коммитить!)
+discovered_devices.json
+discovery_config.json
+
 # Docker compose с настройками
 docker-compose.yml
 docker-compose.*.yml

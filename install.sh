@@ -238,8 +238,33 @@ main() {
 
   if [ -d "$INSTALL_DIR/.git" ]; then
     log "Updating existing installation..."
+
+    # Backup user data before update
+    BACKUP_DIR="/tmp/iot2mqtt-backup-$$"
+    mkdir -p "$BACKUP_DIR"
+
+    log "Backing up user data..."
+    [ -f "$INSTALL_DIR/.env" ] && cp "$INSTALL_DIR/.env" "$BACKUP_DIR/" 2>/dev/null || true
+    [ -f "$INSTALL_DIR/discovered_devices.json" ] && cp "$INSTALL_DIR/discovered_devices.json" "$BACKUP_DIR/" 2>/dev/null || true
+    [ -f "$INSTALL_DIR/discovery_config.json" ] && cp "$INSTALL_DIR/discovery_config.json" "$BACKUP_DIR/" 2>/dev/null || true
+    [ -d "$INSTALL_DIR/instances" ] && cp -r "$INSTALL_DIR/instances" "$BACKUP_DIR/" 2>/dev/null || true
+    [ -d "$INSTALL_DIR/secrets" ] && cp -r "$INSTALL_DIR/secrets" "$BACKUP_DIR/" 2>/dev/null || true
+
+    # Safe update: pull latest code
     (cd "$INSTALL_DIR" && git fetch origin "$BRANCH" && git reset --hard "origin/$BRANCH") >>"$LOG_FILE" 2>&1 || true
-    success "Repository updated"
+
+    # Restore user data
+    log "Restoring user data..."
+    [ -f "$BACKUP_DIR/.env" ] && cp "$BACKUP_DIR/.env" "$INSTALL_DIR/" 2>/dev/null || true
+    [ -f "$BACKUP_DIR/discovered_devices.json" ] && cp "$BACKUP_DIR/discovered_devices.json" "$INSTALL_DIR/" 2>/dev/null || true
+    [ -f "$BACKUP_DIR/discovery_config.json" ] && cp "$BACKUP_DIR/discovery_config.json" "$INSTALL_DIR/" 2>/dev/null || true
+    [ -d "$BACKUP_DIR/instances" ] && cp -r "$BACKUP_DIR/instances" "$INSTALL_DIR/" 2>/dev/null || true
+    [ -d "$BACKUP_DIR/secrets" ] && cp -r "$BACKUP_DIR/secrets" "$INSTALL_DIR/" 2>/dev/null || true
+
+    # Cleanup backup
+    rm -rf "$BACKUP_DIR"
+
+    success "Repository updated (user data preserved)"
   else
     run_cmd "Cloning repository" $SUDO git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
     $SUDO chown -R "$(id -u):$(id -g)" "$INSTALL_DIR" 2>/dev/null || true
