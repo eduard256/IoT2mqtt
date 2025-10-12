@@ -21,6 +21,8 @@ CORES="2"
 OS_TEMPLATE="ubuntu-22.04-standard"
 BRIDGE="vmbr0"
 GATEWAY=""
+HOSTNAME="iot2mqtt"
+USE_DHCP=false
 
 # Functions
 error() {
@@ -74,6 +76,15 @@ get_gateway() {
     echo "${i1}.${i2}.${i3}.1"
 }
 
+get_next_free_ctid() {
+    # Find first available container ID starting from 100
+    local ctid=100
+    while pct status "$ctid" &>/dev/null; do
+        ctid=$((ctid + 1))
+    done
+    echo "$ctid"
+}
+
 download_template() {
     local template="$1"
 
@@ -97,16 +108,23 @@ create_container() {
 
     info "Creating LXC container $ctid..."
 
-    # Detect gateway from IP
-    GATEWAY=$(get_gateway "$ip")
+    # Network configuration
+    local net_config
+    if [ "$USE_DHCP" = true ]; then
+        net_config="name=eth0,bridge=${BRIDGE},ip=dhcp"
+    else
+        # Detect gateway from IP
+        GATEWAY=$(get_gateway "$ip")
+        net_config="name=eth0,bridge=${BRIDGE},ip=${ip},gw=${GATEWAY}"
+    fi
 
     pct create "$ctid" "$template_path" \
-        --hostname "iot2mqtt" \
+        --hostname "$HOSTNAME" \
         --cores "$CORES" \
         --memory "$RAM_SIZE" \
         --swap 512 \
         --rootfs local-lvm:${DISK_SIZE} \
-        --net0 name=eth0,bridge=${BRIDGE},ip=${ip},gw=${GATEWAY} \
+        --net0 "$net_config" \
         --features nesting=1 \
         --unprivileged 1 \
         --onboot 1 \
@@ -163,55 +181,115 @@ main() {
 
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
+    echo -e "${CYAN}Выберите режим установки:${NC}"
+    echo
+    echo "  1) Автоматическая установка (DHCP, автоматический ID и имя)"
+    echo "  2) Дополнительная установка (ручная настройка параметров)"
+    echo
 
-    # Get container ID
     while true; do
-        read -p "Enter container ID (e.g., 100): " CTID
+        read -p "Введите номер режима (1 или 2): " mode
 
-        if [[ ! "$CTID" =~ ^[0-9]+$ ]]; then
-            warning "Container ID must be a number"
-            continue
-        fi
+        case $mode in
+            1)
+                info "Выбран режим: Автоматическая установка"
+                USE_DHCP=true
+                CTID=$(get_next_free_ctid)
+                HOSTNAME="iot2mqtt"
+                IP_ADDR="dhcp"
+                break
+                ;;
+            2)
+                info "Выбран режим: Дополнительная установка"
+                USE_DHCP=false
 
-        if pct status "$CTID" &>/dev/null; then
-            warning "Container $CTID already exists"
-            read -p "Do you want to continue anyway? (yes/no): " confirm
-            if [[ "$confirm" != "yes" ]]; then
-                continue
-            fi
-        fi
+                # Get hostname
+                read -p "Введите имя контейнера (по умолчанию: iot2mqtt): " input_hostname
+                HOSTNAME="${input_hostname:-iot2mqtt}"
 
-        break
-    done
+                # Get container ID
+                while true; do
+                    read -p "Введите ID контейнера (например, 100): " CTID
 
-    # Get IP address
-    while true; do
-        read -p "Enter IP address with CIDR (e.g., 192.168.1.50/24): " IP_ADDR
+                    if [[ ! "$CTID" =~ ^[0-9]+$ ]]; then
+                        warning "ID контейнера должен быть числом"
+                        continue
+                    fi
 
-        if [[ ! "$IP_ADDR" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
-            warning "Invalid IP format. Use format: 192.168.1.50/24"
-            continue
-        fi
+                    if pct status "$CTID" &>/dev/null; then
+                        warning "Контейнер $CTID уже существует"
+                        read -p "Продолжить в любом случае? (yes/no): " confirm
+                        if [[ "$confirm" != "yes" ]]; then
+                            continue
+                        fi
+                    fi
 
-        break
+                    break
+                done
+
+                # Get IP address
+                while true; do
+                    read -p "Введите IP адрес с CIDR (например, 192.168.1.50/24): " IP_ADDR
+
+                    if [[ ! "$IP_ADDR" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+                        warning "Неверный формат IP. Используйте формат: 192.168.1.50/24"
+                        continue
+                    fi
+
+                    break
+                done
+
+                # Get gateway (optional)
+                local default_gw=$(get_gateway "$IP_ADDR")
+                read -p "Введите шлюз (по умолчанию: $default_gw): " input_gateway
+                GATEWAY="${input_gateway:-$default_gw}"
+
+                # Get bridge (optional)
+                read -p "Введите сетевой мост (по умолчанию: vmbr0): " input_bridge
+                BRIDGE="${input_bridge:-vmbr0}"
+
+                # Get disk size (optional)
+                read -p "Введите размер диска в GB (по умолчанию: 8): " input_disk
+                DISK_SIZE="${input_disk:-8}"
+
+                # Get RAM size (optional)
+                read -p "Введите размер RAM в MB (по умолчанию: 2048): " input_ram
+                RAM_SIZE="${input_ram:-2048}"
+
+                # Get CPU cores (optional)
+                read -p "Введите количество CPU ядер (по умолчанию: 2): " input_cores
+                CORES="${input_cores:-2}"
+
+                break
+                ;;
+            *)
+                warning "Неверный выбор. Введите 1 или 2"
+                ;;
+        esac
     done
 
     echo
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
-    info "Configuration:"
-    echo "  Container ID: $CTID"
-    echo "  IP Address:   $IP_ADDR"
-    echo "  Gateway:      $(get_gateway "$IP_ADDR")"
-    echo "  Disk:         ${DISK_SIZE}GB"
-    echo "  RAM:          ${RAM_SIZE}MB"
-    echo "  CPU Cores:    $CORES"
-    echo "  OS:           Ubuntu 22.04"
+    info "Конфигурация:"
+    echo "  Имя контейнера: $HOSTNAME"
+    echo "  ID контейнера:  $CTID"
+    if [ "$USE_DHCP" = true ]; then
+        echo "  IP адрес:       DHCP (автоматически)"
+    else
+        echo "  IP адрес:       $IP_ADDR"
+        echo "  Шлюз:           $GATEWAY"
+        echo "  Мост:           $BRIDGE"
+    fi
+    echo "  Диск:           ${DISK_SIZE}GB"
+    echo "  RAM:            ${RAM_SIZE}MB"
+    echo "  CPU ядер:       $CORES"
+    echo "  ОС:             Ubuntu 22.04"
     echo
 
-    read -p "Proceed with installation? (yes/no): " confirm
+    read -p "Продолжить установку? (yes/no): " confirm
     if [[ "$confirm" != "yes" ]]; then
-        info "Installation cancelled"
+        info "Установка отменена"
         exit 0
     fi
 
@@ -238,16 +316,17 @@ main() {
     echo
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
-    echo -e "${GREEN}${BOLD}✓ Installation Complete!${NC}"
+    echo -e "${GREEN}${BOLD}✓ Установка завершена!${NC}"
     echo
-    echo -e "  ${CYAN}Web Interface:${NC} http://${CONTAINER_IP}:8765"
-    echo -e "  ${CYAN}Container ID:${NC}  $CTID"
+    echo -e "  ${CYAN}Веб-интерфейс:${NC} http://${CONTAINER_IP}:8765"
+    echo -e "  ${CYAN}ID контейнера:${NC}  $CTID"
+    echo -e "  ${CYAN}Имя контейнера:${NC} $HOSTNAME"
     echo
-    echo -e "  ${YELLOW}Useful commands:${NC}"
-    echo -e "    pct enter $CTID          # Enter container"
-    echo -e "    pct stop $CTID           # Stop container"
-    echo -e "    pct start $CTID          # Start container"
-    echo -e "    pct status $CTID         # Check status"
+    echo -e "  ${YELLOW}Полезные команды:${NC}"
+    echo -e "    pct enter $CTID          # Войти в контейнер"
+    echo -e "    pct stop $CTID           # Остановить контейнер"
+    echo -e "    pct start $CTID          # Запустить контейнер"
+    echo -e "    pct status $CTID         # Проверить статус"
     echo
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
