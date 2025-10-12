@@ -57,15 +57,14 @@ config/oauth/*.json
 discovered_devices.json
 discovery_config.json
 
-# Docker compose с настройками
-docker-compose.yml
+# Docker compose с настройками (только переопределения игнорируются)
 docker-compose.*.yml
+docker-compose.override.yml
 *.log
 *.pid
 
 # Docker
 .dockerignore
-docker-compose.override.yml
 
 # Testing
 .coverage

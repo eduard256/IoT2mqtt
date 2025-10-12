@@ -11,7 +11,7 @@ IoT2MQTT is a revolutionary smart home integration system that runs entirely in 
 ## ✨ Key Highlights
 
 - 🐳 **100% Containerized** - No Python, Node.js or any dependencies on host
-- 🚀 **One Command Launch** - Just run `./run.sh` and you're done
+- 🚀 **One Command Launch** - Just run `./scripts/run.sh` and you're done
 - 🎨 **Beautiful Web Interface** - Premium SaaS-level UI at `http://localhost:8765`
 - ⚡ **Minimal Latency** - Direct MQTT connection without intermediate layers
 - 🌍 **Multi-language** - English, Russian, and Chinese support
@@ -30,7 +30,7 @@ Traditional smart home systems require complex installations with multiple depen
 
 **Now (IoT2MQTT):**
 - Install Docker (once)
-- Run `./run.sh`
+- Run `./scripts/run.sh`
 - Everything works
 - Updates are seamless
 - Works identically on any system
@@ -42,7 +42,7 @@ Traditional smart home systems require complex installations with multiple depen
 Runs a beautiful CLI with a live progress bar and snake mini‑game while installing everything (Docker, Compose, app, and services). When done, it prints your LAN URL.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/scripts/install.sh | bash
 ```
 
 Notes:
@@ -70,7 +70,7 @@ cd IoT2mqtt
 
 2. **Run the system**
 ```bash
-./run.sh
+./scripts/run.sh
 ```
 
 That's it! The script will:
@@ -196,7 +196,7 @@ TZ=UTC
 To use a different port:
 
 ```bash
-WEB_PORT=9000 ./run.sh
+WEB_PORT=9000 ./scripts/run.sh
 ```
 
 ## 🐳 Docker Management
@@ -214,7 +214,7 @@ docker compose down
 docker compose restart
 
 # Update system
-git pull && ./run.sh
+git pull && ./scripts/run.sh
 
 # Remove everything (including data)
 docker compose down -v
@@ -263,18 +263,25 @@ The web container has access to Docker socket (`/var/run/docker.sock`). This is 
 
 ```
 IoT2mqtt/
-├── run.sh                 # One-command launcher
-├── docker-compose.yml     # Main orchestration
-├── web/                   # Web interface container
-│   ├── frontend/         # React UI
-│   ├── backend/          # FastAPI backend
+├── scripts/              # Utility scripts
+│   ├── run.sh           # One-command launcher
+│   ├── install.sh       # Installation script
+│   └── ...
+├── tests/               # Test files
+├── docs/                # Documentation
+│   ├── features/       # Feature documentation
+│   └── archived/       # Archived docs
+├── docker-compose.yml   # Main orchestration
+├── web/                 # Web interface container
+│   ├── frontend/       # React UI
+│   ├── backend/        # FastAPI backend
 │   └── Dockerfile
-├── connectors/           # Connector definitions
+├── connectors/         # Connector definitions
 │   └── {name}/
 │       ├── connector.py
 │       ├── requirements.txt
 │       └── Dockerfile
-└── shared/              # Shared libraries
+└── shared/            # Shared libraries
 ```
 
 ## 📊 Monitoring
@@ -328,7 +335,7 @@ We welcome contributions! Since everything runs in containers:
 1. Fork the repository
 2. Create feature branch
 3. Make changes
-4. Test with `./run.sh`
+4. Test with `./scripts/run.sh`
 5. Submit pull request
 
 ## 📝 License

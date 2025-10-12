@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # IoT2MQTT Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/scripts/install.sh | bash
 
 set -euo pipefail
 
