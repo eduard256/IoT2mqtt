@@ -8,10 +8,13 @@ set -uo pipefail
 
 # Log file
 LOGFILE="/var/log/iot2mqtt_install.log"
-exec > >(tee -a "$LOGFILE") 2>&1
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE" 2>&1
+    # Also output to stdout when not in dialog mode
+    if [ -z "$DIALOG" ] || [ "${DIALOG_ACTIVE:-0}" = "0" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    fi
 }
 
 # Colors for terminal output
@@ -227,9 +230,14 @@ gauge() {
 download_template() {
     local template="$1"
 
-    if pveam list local | grep -q "$template"; then
+    log "Checking if template exists: $template"
+    if pveam list local 2>&1 | grep -q "$template"; then
+        log "Template already exists, skipping download"
+        success "Template already downloaded"
         return 0
     fi
+
+    log "Template not found, starting download"
 
     if [ -n "$DIALOG" ]; then
         (
@@ -244,20 +252,33 @@ download_template() {
             echo "Downloading Ubuntu 22.04 template..."
             echo "XXX"
 
-            pveam download local "$template" 2>&1 | while read line; do
-                echo "50"
-            done
-
-            echo "100"
-            echo "XXX"
-            echo "Download complete!"
-            echo "XXX"
+            log "Running: pveam download local $template"
+            if pveam download local "$template" >> "$LOGFILE" 2>&1; then
+                log "Template download successful"
+                echo "100"
+                echo "XXX"
+                echo "Download complete!"
+                echo "XXX"
+            else
+                log "ERROR: Template download failed"
+                echo "100"
+                echo "XXX"
+                echo "Download failed! Check $LOGFILE"
+                echo "XXX"
+                exit 1
+            fi
             sleep 1
         ) | $DIALOG --title "Downloading Template" --gauge "Please wait..." 8 $WIDTH 0
     else
         info "Downloading Ubuntu 22.04 template..."
-        pveam download local "$template" || error "Failed to download template"
-        success "Template downloaded"
+        log "Running: pveam download local $template"
+        if pveam download local "$template" 2>&1 | tee -a "$LOGFILE"; then
+            log "Template download successful"
+            success "Template downloaded"
+        else
+            log "ERROR: Template download failed"
+            error "Failed to download template"
+        fi
     fi
 }
 
@@ -275,6 +296,8 @@ create_container() {
         net_config="name=eth0,bridge=${BRIDGE},ip=${ip},gw=${GATEWAY}"
     fi
 
+    log "Creating container with: CTID=$ctid, HOSTNAME=$HOSTNAME, NET=$net_config"
+
     if [ -n "$DIALOG" ]; then
         (
             echo "20"
@@ -282,7 +305,9 @@ create_container() {
             echo "Creating LXC container $ctid..."
             echo "XXX"
 
-            pct create "$ctid" "$template_path" \
+            log "Running: pct create $ctid $template_path --hostname $HOSTNAME --cores $CORES --memory $RAM_SIZE --net0 $net_config"
+
+            if pct create "$ctid" "$template_path" \
                 --hostname "$HOSTNAME" \
                 --cores "$CORES" \
                 --memory "$RAM_SIZE" \
@@ -293,19 +318,32 @@ create_container() {
                 --unprivileged 1 \
                 --onboot 1 \
                 --start 1 \
-                2>&1 | while read line; do
-                    echo "50"
-                done
+                >> "$LOGFILE" 2>&1; then
 
-            echo "100"
-            echo "XXX"
-            echo "Container created successfully!"
-            echo "XXX"
+                log "Container created successfully"
+                echo "100"
+                echo "XXX"
+                echo "Container created successfully!"
+                echo "XXX"
+            else
+                log "ERROR: Failed to create container"
+                echo "100"
+                echo "XXX"
+                echo "Failed to create container! Check $LOGFILE"
+                echo "XXX"
+                exit 1
+            fi
             sleep 1
         ) | $DIALOG --title "Creating Container" --gauge "Please wait..." 8 $WIDTH 0
+
+        # Check if subshell failed
+        if [ $? -ne 0 ]; then
+            error "Failed to create container. Check log: $LOGFILE"
+        fi
     else
         info "Creating LXC container $ctid..."
-        pct create "$ctid" "$template_path" \
+        log "Running: pct create $ctid $template_path --hostname $HOSTNAME"
+        if pct create "$ctid" "$template_path" \
             --hostname "$HOSTNAME" \
             --cores "$CORES" \
             --memory "$RAM_SIZE" \
@@ -316,8 +354,14 @@ create_container() {
             --unprivileged 1 \
             --onboot 1 \
             --start 1 \
-            || error "Failed to create container"
-        success "Container $ctid created"
+            2>&1 | tee -a "$LOGFILE"; then
+
+            log "Container created successfully"
+            success "Container $ctid created"
+        else
+            log "ERROR: Failed to create container"
+            error "Failed to create container"
+        fi
     fi
 }
 
@@ -621,7 +665,11 @@ main() {
 
     log "========================================="
     log "Script finished successfully"
+    log "Log file: $LOGFILE"
     log "========================================="
+
+    echo ""
+    echo -e "${CYAN}📝 Full installation log saved to: $LOGFILE${NC}"
 }
 
 # Run main
