@@ -42,7 +42,7 @@ Traditional smart home systems require complex installations with multiple depen
 Runs a beautiful CLI with a live progress bar and snake mini‑game while installing everything (Docker, Compose, app, and services). When done, it prints your LAN URL.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh | bash
 ```
 
 Notes:
