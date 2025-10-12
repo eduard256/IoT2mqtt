@@ -47,8 +47,28 @@ curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh 
 
 Notes:
 - Run as root or with passwordless sudo for a fully non‑interactive setup.
-- The installer supports most Linux distros (Debian/Ubuntu, RHEL/CentOS/Fedora, openSUSE, Arch, Alpine). It uses Docker’s convenience script or native packages.
-- On completion, you’ll see the URL like `http://<your_lan_ip>:8765`.
+- The installer supports most Linux distros (Debian/Ubuntu, RHEL/CentOS/Fedora, openSUSE, Arch, Alpine). It uses Docker's convenience script or native packages.
+- On completion, you'll see the URL like `http://<your_lan_ip>:8765`.
+
+### Proxmox LXC Install
+
+For Proxmox users, install IoT2MQTT in an Ubuntu LXC container with one command:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/scripts/install_proxmox.sh)
+```
+
+The script will:
+- Ask for Container ID and IP address
+- Create Ubuntu 22.04 LXC container with Docker support
+- Automatically install IoT2MQTT inside
+- Configuration: 8GB disk, 2GB RAM, 2 CPU cores, unprivileged container
+
+Example:
+```
+Container ID: 100
+IP address: 192.168.1.50/24
+```
 
 ### Prerequisites
 
