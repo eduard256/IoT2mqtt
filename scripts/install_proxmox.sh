@@ -4,7 +4,15 @@
 # This script creates an Ubuntu LXC container and installs IoT2MQTT inside it
 # Usage: bash <(curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/scripts/install_proxmox.sh)
 
-set -euo pipefail
+set -uo pipefail
+
+# Log file
+LOGFILE="/var/log/iot2mqtt_install.log"
+exec > >(tee -a "$LOGFILE") 2>&1
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
 
 # Colors for terminal output
 RED='\033[0;31m'
@@ -44,19 +52,23 @@ CHOICE_HEIGHT=10
 
 # Functions
 error() {
+    log "ERROR: $*"
     echo -e "${RED}✗ Error: $*${NC}" >&2
     exit 1
 }
 
 success() {
+    log "SUCCESS: $*"
     echo -e "${GREEN}✓ $*${NC}"
 }
 
 info() {
+    log "INFO: $*"
     echo -e "${CYAN}ℹ $*${NC}"
 }
 
 warning() {
+    log "WARNING: $*"
     echo -e "${YELLOW}⚠ $*${NC}"
 }
 
@@ -78,6 +90,8 @@ draw_header() {
 ╚═══════════════════════════════════════════════════════════════════════════╝
 EOF
     echo -e "${NC}"
+    echo -e "${YELLOW}📝 Installation log: $LOGFILE${NC}"
+    echo ""
 }
 
 check_proxmox() {
@@ -124,16 +138,26 @@ msgbox() {
 yesno() {
     local title="$1"
     local message="$2"
+    local exit_code
+
+    log "YESNO: Showing dialog '$title'"
 
     if [ -n "$DIALOG" ]; then
         $DIALOG --title "$title" --yesno "$message" $HEIGHT $WIDTH
-        return $?
+        exit_code=$?
+        log "YESNO: User response: exit_code=$exit_code (0=yes, 1=no)"
+        return $exit_code
     else
         echo -e "\n${CYAN}${BOLD}$title${NC}"
         echo -e "$message"
         read -p "Continue? (y/n): " answer
-        [[ "$answer" =~ ^[Yy] ]]
-        return $?
+        if [[ "$answer" =~ ^[Yy] ]]; then
+            log "YESNO: User selected YES"
+            return 0
+        else
+            log "YESNO: User selected NO"
+            return 1
+        fi
     fi
 }
 
@@ -163,9 +187,18 @@ menu() {
     shift 2
     local options=("$@")
     local result
+    local exit_code
+
+    log "MENU: Showing menu '$title'"
 
     if [ -n "$DIALOG" ]; then
         result=$($DIALOG --title "$title" --menu "$message" $HEIGHT $WIDTH $CHOICE_HEIGHT "${options[@]}" 3>&1 1>&2 2>&3)
+        exit_code=$?
+        log "MENU: User selected: '$result' (exit code: $exit_code)"
+        if [ $exit_code -ne 0 ]; then
+            log "MENU: User cancelled or error occurred"
+            return 1
+        fi
         echo "$result"
     else
         echo -e "\n${CYAN}${BOLD}$title${NC}"
@@ -174,6 +207,7 @@ menu() {
             echo "  ${options[i]}) ${options[i+1]}"
         done
         read -p "Select option: " result
+        log "MENU: User selected: '$result'"
         echo "$result"
     fi
 }
@@ -507,54 +541,87 @@ Ready to proceed with installation?
 
 # Main script
 main() {
+    log "========================================="
+    log "IoT2MQTT Installer started"
+    log "========================================="
+
     draw_header
     check_proxmox
 
     sleep 1
 
     # Welcome message
+    log "Showing welcome message"
     msgbox "Welcome to IoT2MQTT Installer" "This installer will create a Proxmox LXC container\nand install IoT2MQTT inside it.\n\nFeatures:\n  • Automatic or Custom configuration\n  • DHCP or Static IP\n  • Beautiful interactive interface\n\nPress OK to continue..."
 
     # Select installation mode
+    log "Showing installation mode menu"
     mode=$(menu "Installation Mode" "Choose your installation mode:" \
         "1" "🚀 Automatic Setup (DHCP, auto ID, defaults)" \
         "2" "⚙️  Advanced Setup (full customization)")
 
+    log "Mode selected: '$mode'"
+
+    if [ -z "$mode" ]; then
+        log "ERROR: No mode selected, exiting"
+        error "Installation cancelled - no mode selected"
+    fi
+
     case $mode in
         1)
+            log "Configuring automatic mode"
             configure_automatic_mode
             ;;
         2)
+            log "Configuring advanced mode"
             configure_advanced_mode
             ;;
         *)
-            error "Invalid selection"
+            log "ERROR: Invalid mode: $mode"
+            error "Invalid selection: $mode"
             ;;
     esac
 
+    log "Configuration: CTID=$CTID, HOSTNAME=$HOSTNAME, IP=$IP_ADDR, DHCP=$USE_DHCP"
+
     # Show configuration summary and confirm
+    log "Showing configuration summary"
     if ! show_configuration_summary; then
+        log "User cancelled installation at confirmation"
         msgbox "Installation Cancelled" "Installation has been cancelled by user."
         exit 0
     fi
 
+    log "User confirmed installation, proceeding..."
+
     # Download template
+    log "Downloading template"
     download_template "${OS_TEMPLATE}_amd64.tar.zst"
 
     # Create container
+    log "Creating container $CTID"
     create_container "$CTID" "$IP_ADDR"
 
     # Wait for container to be ready
+    log "Waiting for container to start"
     wait_for_container "$CTID"
 
     # Install IoT2MQTT
+    log "Installing IoT2MQTT"
     install_iot2mqtt "$CTID"
 
     # Get container IP (actual)
+    log "Getting container IP"
     CONTAINER_IP=$(get_container_ip "$CTID")
+    log "Container IP: $CONTAINER_IP"
 
     # Show completion screen
+    log "Installation complete!"
     show_completion_screen "$CONTAINER_IP"
+
+    log "========================================="
+    log "Script finished successfully"
+    log "========================================="
 }
 
 # Run main
