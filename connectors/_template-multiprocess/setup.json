@@ -1,0 +1,149 @@
+{
+  "version": "1.0.0",
+  "display_name": "Multi-Process Template",
+  "description": "Template for connectors running multiple services (Python + Node.js + more) in a single container managed by supervisord",
+  "author": "IoT2MQTT",
+  "branding": {
+    "icon": "/assets/default-icon.svg",
+    "color": "#8B5CF6",
+    "category": "template"
+  },
+  "multi_device": {
+    "enabled": false,
+    "max_devices": 1,
+    "device_label": "Device",
+    "add_button_label": "Add Device"
+  },
+  "requirements": {
+    "network": "host",
+    "python": "3.11",
+    "nodejs": "18",
+    "supervisor": true,
+    "libraries": [
+      "flask",
+      "requests",
+      "express"
+    ]
+  },
+  "tools": {
+    "validate_config": {
+      "entry": "actions/example_validate.py",
+      "timeout": 15,
+      "network": "local",
+      "description": "Validate connector configuration"
+    }
+  },
+  "flows": [
+    {
+      "id": "basic_setup",
+      "name": "Basic Setup",
+      "description": "Configure a multi-process connector instance",
+      "default": true,
+      "steps": [
+        {
+          "id": "config_form",
+          "type": "form",
+          "title": "Connector Configuration",
+          "description": "Configure your multi-process connector. This template demonstrates running Python and Node.js services together.",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "friendly_name",
+                "label": "Instance Name",
+                "placeholder": "My Multi-Process Connector",
+                "required": true,
+                "description": "A friendly name for this connector instance"
+              },
+              {
+                "type": "text",
+                "name": "example_param",
+                "label": "Example Parameter",
+                "placeholder": "example_value",
+                "required": true,
+                "description": "Example configuration parameter (customize for your connector)"
+              },
+              {
+                "type": "number",
+                "name": "update_interval",
+                "label": "Update Interval (seconds)",
+                "default": 10,
+                "min": 1,
+                "max": 300,
+                "description": "How often to poll device state"
+              },
+              {
+                "type": "select",
+                "name": "log_level",
+                "label": "Log Level",
+                "default": "INFO",
+                "options": [
+                  {"value": "DEBUG", "label": "Debug (verbose)"},
+                  {"value": "INFO", "label": "Info (normal)"},
+                  {"value": "WARNING", "label": "Warning (important only)"},
+                  {"value": "ERROR", "label": "Error (critical only)"}
+                ],
+                "description": "Logging verbosity level"
+              }
+            ]
+          }
+        },
+        {
+          "id": "validate",
+          "type": "tool",
+          "title": "Validate Configuration",
+          "description": "Testing your configuration...",
+          "tool": "validate_config",
+          "input": {
+            "example_param": "{{ form.config_form.example_param }}"
+          },
+          "auto_advance": true
+        },
+        {
+          "id": "summary",
+          "type": "summary",
+          "title": "Review Configuration",
+          "sections": [
+            {
+              "label": "Instance Name",
+              "value": "{{ form.config_form.friendly_name }}"
+            },
+            {
+              "label": "Example Parameter",
+              "value": "{{ form.config_form.example_param }}"
+            },
+            {
+              "label": "Update Interval",
+              "value": "{{ form.config_form.update_interval }}s"
+            },
+            {
+              "label": "Services",
+              "value": "Python Service + Node.js Service + MQTT Bridge"
+            }
+          ]
+        },
+        {
+          "id": "create",
+          "type": "instance",
+          "instance": {
+            "instance_id": "{{ form.config_form.friendly_name | slugify }}",
+            "friendly_name": "{{ form.config_form.friendly_name }}",
+            "connector_type": "multiprocess-template",
+            "update_interval": "{{ form.config_form.update_interval }}",
+            "config": {
+              "example_param": "{{ form.config_form.example_param }}",
+              "log_level": "{{ form.config_form.log_level }}"
+            },
+            "devices": [
+              {
+                "device_id": "demo_device",
+                "name": "Demo Device",
+                "enabled": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

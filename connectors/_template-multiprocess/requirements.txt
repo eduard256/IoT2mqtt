@@ -1,0 +1,18 @@
+# Multi-Process Connector Template Requirements
+
+# Flask for Python backend service
+flask==3.0.0
+
+# Requests for HTTP communication between MQTT bridge and services
+requests==2.31.0
+
+# Additional dependencies that may be useful in real connectors:
+# paho-mqtt is NOT needed here - we use shared/mqtt_client.py which includes it
+# Add your connector-specific dependencies below:
+
+# Example dependencies (uncomment as needed):
+# opencv-python==4.8.1.78  # For video processing
+# numpy==1.24.3            # For numerical operations
+# pillow==10.0.0           # For image processing
+# tensorflow==2.13.0       # For ML/AI workloads (large dependency)
+# torch==2.0.1             # Alternative ML framework
