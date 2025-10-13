@@ -1,0 +1,157 @@
+{
+  "version": "1.0.0",
+  "display_name": "Sensor Hub Example",
+  "description": "Multi-process sensor hub demonstrating complex connector architecture with multiple protocol handlers.",
+  "author": "IoT2MQTT",
+  "branding": {
+    "icon": "/assets/default-icon.svg",
+    "color": "#10B981",
+    "category": "sensors"
+  },
+  "multi_device": {
+    "enabled": true,
+    "max_devices": 50,
+    "device_label": "Sensor",
+    "add_button_label": "Add Another Sensor"
+  },
+  "requirements": {
+    "network": "host",
+    "python": "3.11",
+    "libraries": ["flask", "requests", "paho-mqtt", "express"]
+  },
+  "tools": {
+    "validate_setup": {
+      "entry": "actions/validate_setup.py",
+      "timeout": 10,
+      "description": "Validate configuration consistency"
+    }
+  },
+  "flows": [
+    {
+      "id": "manual_setup",
+      "name": "Manual Configuration",
+      "description": "Configure sensor hub with custom settings",
+      "default": true,
+      "steps": [
+        {
+          "id": "global_config",
+          "type": "form",
+          "title": "Global Settings",
+          "description": "Configure global connector settings",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "instance_id",
+                "label": "Instance ID",
+                "placeholder": "sensor_hub_01",
+                "required": true,
+                "description": "Unique identifier for this sensor hub instance"
+              },
+              {
+                "type": "number",
+                "name": "update_interval",
+                "label": "Update Interval (seconds)",
+                "default": 10,
+                "min": 5,
+                "max": 300,
+                "description": "How often to poll and publish sensor states"
+              },
+              {
+                "type": "number",
+                "name": "cache_ttl",
+                "label": "Cache TTL (seconds)",
+                "default": 10,
+                "min": 5,
+                "max": 60,
+                "advanced": true,
+                "description": "How long to cache sensor readings in state aggregator"
+              }
+            ]
+          }
+        },
+        {
+          "id": "sensor_config",
+          "type": "form",
+          "title": "Sensor Configuration",
+          "description": "Add sensors to monitor",
+          "schema": {
+            "fields": [
+              {
+                "type": "select",
+                "name": "sensor_type",
+                "label": "Sensor Type",
+                "required": true,
+                "options": [
+                  {"value": "temperature", "label": "Temperature Sensor"},
+                  {"value": "humidity", "label": "Humidity Sensor"},
+                  {"value": "motion", "label": "Motion Detector"}
+                ]
+              },
+              {
+                "type": "text",
+                "name": "sensor_id",
+                "label": "Sensor ID",
+                "placeholder": "temp_living_room",
+                "required": true,
+                "description": "Unique identifier for this sensor"
+              },
+              {
+                "type": "text",
+                "name": "friendly_name",
+                "label": "Friendly Name",
+                "placeholder": "Living Room Temperature",
+                "required": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "validate",
+          "type": "tool",
+          "title": "Validate Configuration",
+          "description": "Check configuration for errors",
+          "tool": "validate_setup",
+          "input": {
+            "global_config": "{{ form.global_config }}",
+            "sensors": "{{ form.sensor_config }}"
+          },
+          "auto_advance": true
+        },
+        {
+          "id": "summary",
+          "type": "summary",
+          "title": "Configuration Summary",
+          "sections": [
+            {
+              "label": "Instance ID",
+              "value": "{{ form.global_config.instance_id }}"
+            },
+            {
+              "label": "Update Interval",
+              "value": "{{ form.global_config.update_interval }} seconds"
+            },
+            {
+              "label": "Sensors Configured",
+              "value": "{{ form.sensor_config | length }} sensors"
+            }
+          ]
+        },
+        {
+          "id": "create_instance",
+          "type": "instance",
+          "instance": {
+            "instance_id": "{{ form.global_config.instance_id }}",
+            "friendly_name": "Sensor Hub - {{ form.global_config.instance_id }}",
+            "connector_type": "sensor-hub",
+            "update_interval": "{{ form.global_config.update_interval }}",
+            "config": {
+              "cache_ttl": "{{ form.global_config.cache_ttl }}",
+              "sensors": "{{ form.sensor_config }}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

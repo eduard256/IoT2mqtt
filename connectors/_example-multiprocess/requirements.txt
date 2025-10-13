@@ -1,0 +1,4 @@
+# Main requirements for MQTT bridge
+# Uses shared MQTTClient from IoT2MQTT platform
+requests==2.31.0
+paho-mqtt==2.1.0

@@ -1,0 +1,47 @@
+{
+  "domain": "sensor-hub",
+  "name": "Multi-Process Sensor Hub Example",
+  "version": "1.0.0",
+  "author": "IoT2MQTT",
+  "documentation": "https://github.com/eduard256/IoT2mqtt/wiki/sensor-hub-example",
+  "description": "Reference implementation demonstrating multi-process connector architecture with multiple protocol handlers",
+  "type": "multi-process",
+  "iot_class": "local_polling",
+  "integration_type": "device",
+  "supported_brands": ["Generic"],
+  "capabilities": [
+    "temperature_monitoring",
+    "humidity_monitoring",
+    "motion_detection",
+    "multi_protocol_support"
+  ],
+  "services": {
+    "serial-handler": {
+      "name": "Serial Protocol Handler",
+      "language": "python",
+      "description": "Handles temperature and humidity sensors via simulated serial protocol"
+    },
+    "http-poller": {
+      "name": "HTTP Protocol Handler",
+      "language": "nodejs",
+      "description": "Polls motion detectors via HTTP endpoints"
+    },
+    "state-aggregator": {
+      "name": "State Aggregation Service",
+      "language": "python",
+      "description": "Coordinates data from protocol handlers with caching"
+    },
+    "mqtt-bridge": {
+      "name": "MQTT Bridge",
+      "language": "python",
+      "description": "Implements IoT2MQTT contract",
+      "required": true
+    }
+  },
+  "requirements": {
+    "min_memory": "256MB",
+    "min_cpu": "0.5",
+    "python": "3.11+",
+    "nodejs": "18+"
+  }
+}
