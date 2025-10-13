@@ -120,7 +120,7 @@ get_gateway() {
 get_next_free_ctid() {
     # Find first available container ID starting from 100
     local ctid=100
-    while pct status "$ctid" &>/dev/null; do
+    while pct list | awk 'NR>1 {print $1}' | grep -q "^${ctid}$"; do
         ctid=$((ctid + 1))
     done
     echo "$ctid"
@@ -228,106 +228,45 @@ gauge() {
     fi
 }
 
-download_template() {
-    local template="$1"
-
-    log "Checking if template exists: $template"
-    if pveam list local 2>&1 | grep -q "$template"; then
-        log "Template already exists, skipping download"
-        success "Template already downloaded"
-        return 0
-    fi
-
-    log "Template not found, starting download"
-
-    if [ -n "$DIALOG" ]; then
-        (
-            echo "10"
-            echo "XXX"
-            echo "Updating template list..."
-            echo "XXX"
-            sleep 1
-
-            echo "30"
-            echo "XXX"
-            echo "Downloading Ubuntu 22.04 template..."
-            echo "XXX"
-
-            log "Running: pveam download local $template"
-            if pveam download local "$template" >> "$LOGFILE" 2>&1; then
-                log "Template download successful"
-                echo "100"
-                echo "XXX"
-                echo "Download complete!"
-                echo "XXX"
-            else
-                log "ERROR: Template download failed"
-                echo "100"
-                echo "XXX"
-                echo "Download failed! Check $LOGFILE"
-                echo "XXX"
-                exit 1
-            fi
-            sleep 1
-        ) | $DIALOG --title "Downloading Template" --gauge "Please wait..." 8 $WIDTH 0
-    else
-        info "Downloading Ubuntu 22.04 template..."
-        log "Running: pveam download local $template"
-        if pveam download local "$template" 2>&1 | tee -a "$LOGFILE"; then
-            log "Template download successful"
-            success "Template downloaded"
-        else
-            log "ERROR: Template download failed"
-            error "Failed to download template"
-        fi
-    fi
-}
-
-create_container() {
+create_ubuntu_container() {
     local ctid="$1"
     local ip="$2"
-    local template_path="local:vztmpl/${OS_TEMPLATE}_amd64.tar.zst"
 
-    # Network configuration
-    local net_config
+    log "Creating Ubuntu container using tteck's script"
+
+    # Prepare environment variables for tteck's script
+    export CTID="$ctid"
+    export PCT_HOSTNAME="$HOSTNAME"
+    export PCT_DISK_SIZE="$DISK_SIZE"
+    export PCT_RAM="$RAM_SIZE"
+    export PCT_CORES="$CORES"
+    export PCT_BRIDGE="$BRIDGE"
+
     if [ "$USE_DHCP" = true ]; then
-        net_config="name=eth0,bridge=${BRIDGE},ip=dhcp"
+        export PCT_IP="dhcp"
     else
-        GATEWAY=$(get_gateway "$ip")
-        net_config="name=eth0,bridge=${BRIDGE},ip=${ip},gw=${GATEWAY}"
+        export PCT_IP="$ip"
+        export PCT_GW="$(get_gateway "$ip")"
     fi
-
-    log "Creating container with: CTID=$ctid, HOSTNAME=$HOSTNAME, NET=$net_config"
 
     if [ -n "$DIALOG" ]; then
         (
             echo "20"
             echo "XXX"
-            echo "Creating LXC container $ctid..."
+            echo "Creating Ubuntu LXC container..."
             echo "XXX"
 
-            log "Running: pct create $ctid $template_path --hostname $HOSTNAME --cores $CORES --memory $RAM_SIZE --net0 $net_config"
+            log "Running tteck's Ubuntu installer with CTID=$ctid"
 
-            if pct create "$ctid" "$template_path" \
-                --hostname "$HOSTNAME" \
-                --cores "$CORES" \
-                --memory "$RAM_SIZE" \
-                --swap 512 \
-                --rootfs local-lvm:${DISK_SIZE} \
-                --net0 "$net_config" \
-                --features nesting=1 \
-                --unprivileged 1 \
-                --onboot 1 \
-                --start 1 \
-                >> "$LOGFILE" 2>&1; then
-
+            # Run tteck's script with our environment variables
+            if bash -c "$(wget -qLO - https://github.com/tteck/Proxmox/raw/main/ct/ubuntu.sh)" >> "$LOGFILE" 2>&1; then
                 log "Container created successfully"
                 echo "100"
                 echo "XXX"
                 echo "Container created successfully!"
                 echo "XXX"
             else
-                log "ERROR: Failed to create container"
+                log "ERROR: Failed to create container using tteck's script"
                 echo "100"
                 echo "XXX"
                 echo "Failed to create container! Check $LOGFILE"
@@ -342,29 +281,19 @@ create_container() {
             error "Failed to create container. Check log: $LOGFILE"
         fi
     else
-        info "Creating LXC container $ctid..."
-        log "Running: pct create $ctid $template_path --hostname $HOSTNAME"
-        if pct create "$ctid" "$template_path" \
-            --hostname "$HOSTNAME" \
-            --cores "$CORES" \
-            --memory "$RAM_SIZE" \
-            --swap 512 \
-            --rootfs local-lvm:${DISK_SIZE} \
-            --net0 "$net_config" \
-            --features nesting=1 \
-            --unprivileged 1 \
-            --onboot 1 \
-            --start 1 \
-            2>&1 | tee -a "$LOGFILE"; then
+        info "Creating Ubuntu LXC container $ctid using tteck's script..."
+        log "Running tteck's Ubuntu installer with CTID=$ctid"
 
+        if bash -c "$(wget -qLO - https://github.com/tteck/Proxmox/raw/main/ct/ubuntu.sh)" 2>&1 | tee -a "$LOGFILE"; then
             log "Container created successfully"
             success "Container $ctid created"
         else
-            log "ERROR: Failed to create container"
+            log "ERROR: Failed to create container using tteck's script"
             error "Failed to create container"
         fi
     fi
 }
+
 
 wait_for_container() {
     local ctid="$1"
@@ -639,13 +568,9 @@ main() {
 
     log "User confirmed installation, proceeding..."
 
-    # Download template
-    log "Downloading template"
-    download_template "${OS_TEMPLATE}_amd64.tar.zst"
-
-    # Create container
+    # Create container using tteck's script
     log "Creating container $CTID"
-    create_container "$CTID" "$IP_ADDR"
+    create_ubuntu_container "$CTID" "$IP_ADDR"
 
     # Wait for container to be ready
     log "Waiting for container to start"
