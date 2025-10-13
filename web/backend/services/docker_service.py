@@ -288,9 +288,17 @@ class DockerService:
         # Create new container using existing method
         return self.create_container(connector_name, instance_id, config)
     
-    def create_container(self, connector_name: str, instance_id: str, 
+    def create_container(self, connector_name: str, instance_id: str,
                         config: Dict[str, Any]) -> Optional[str]:
-        """Create and start a container for an instance"""
+        """Create and start a container for an instance
+
+        Environment variables injected into the container:
+        - INSTANCE_NAME: Instance identifier
+        - CONNECTOR_TYPE: Connector type for logging and validation
+        - MODE: Execution mode (production/development)
+        - PYTHONUNBUFFERED: Python logging configuration
+        - IOT2MQTT_PATH: Base path inside container
+        """
         container_name = f"{self.prefix}{connector_name}_{instance_id}"
         
         # Check if container already exists
@@ -320,6 +328,8 @@ class DockerService:
             "restart_policy": {"Name": "unless-stopped"},
             "environment": [
                 f"INSTANCE_NAME={instance_id}",
+                # Connector type for logging, validation, and debugging
+                f"CONNECTOR_TYPE={connector_name}",
                 "MODE=production",
                 "PYTHONUNBUFFERED=1",
                 f"IOT2MQTT_PATH=/app"
