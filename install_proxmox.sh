@@ -48,27 +48,27 @@ fi
 
 log() {
   local prefix="${CYAN}▸${RESET}"
-  echo -e "${prefix} $*" | tee -a "$LOG_FILE"
+  echo -e "${prefix} $*" | tee -a "$LOG_FILE" >&2
 }
 
 success() {
   local prefix="${GREEN}✓${RESET}"
-  echo -e "${prefix} ${GREEN}$*${RESET}" | tee -a "$LOG_FILE"
+  echo -e "${prefix} ${GREEN}$*${RESET}" | tee -a "$LOG_FILE" >&2
 }
 
 error() {
   local prefix="${RED}✗${RESET}"
-  echo -e "${prefix} ${RED}$*${RESET}" | tee -a "$LOG_FILE"
+  echo -e "${prefix} ${RED}$*${RESET}" | tee -a "$LOG_FILE" >&2
 }
 
 warning() {
   local prefix="${YELLOW}⚠${RESET}"
-  echo -e "${prefix} ${YELLOW}$*${RESET}" | tee -a "$LOG_FILE"
+  echo -e "${prefix} ${YELLOW}$*${RESET}" | tee -a "$LOG_FILE" >&2
 }
 
 step() {
-  echo ""
-  echo -e "${BOLD}${BLUE}━━━ $* ━━━${RESET}" | tee -a "$LOG_FILE"
+  echo "" >&2
+  echo -e "${BOLD}${BLUE}━━━ $* ━━━${RESET}" | tee -a "$LOG_FILE" >&2
 }
 
 show_header() {
@@ -149,7 +149,6 @@ check_dependencies() {
 
 get_next_free_ctid() {
   local ctid=100
-  log "Scanning for available container ID..."
 
   while true; do
     # Check if ID exists in VMs
@@ -245,7 +244,6 @@ ensure_template() {
   # Check if any Ubuntu template already exists
   if pvesm list "$storage" 2>/dev/null | grep -q "ubuntu.*standard"; then
     local existing=$(pvesm list "$storage" 2>/dev/null | grep "ubuntu.*standard" | head -1 | awk '{print $1}')
-    success "Found existing template: $existing"
     echo "$existing"
     return 0
   fi
@@ -254,17 +252,13 @@ ensure_template() {
   local template=$(find_ubuntu_template "$storage")
 
   if [ -z "$template" ]; then
-    error "Could not find Ubuntu template"
     return 1
   fi
-
-  log "Template not found, will download: $template"
 
   if download_template "$storage" "$template"; then
     echo "$storage:vztmpl/$template"
     return 0
   else
-    error "Failed to download template"
     return 1
   fi
 }
@@ -548,6 +542,7 @@ run_automatic_installation() {
   local ctid storage template_path ram
 
   # Get next free CTID
+  log "Scanning for available container ID..."
   ctid=$(get_next_free_ctid)
   success "Selected Container ID: $ctid"
 
@@ -560,11 +555,13 @@ run_automatic_installation() {
   success "Using storage: $storage"
 
   # Ensure template exists
+  log "Checking for Ubuntu template..."
   template_path=$(ensure_template "$storage")
   if [ -z "$template_path" ]; then
     error "Failed to get Ubuntu template"
     exit 1
   fi
+  success "Template ready: $template_path"
 
   # Calculate RAM
   ram=$(get_max_safe_ram)
@@ -607,11 +604,13 @@ run_advanced_installation() {
 
   # Ensure template exists
   local template_path
+  log "Checking for Ubuntu template..."
   template_path=$(ensure_template "$STORAGE")
   if [ -z "$template_path" ]; then
     error "Failed to get Ubuntu template"
     exit 1
   fi
+  success "Template ready: $template_path"
 
   # Create container
   if ! create_container "$CTID" "$STORAGE" "$template_path" "$DISK" "$RAM" "$CORES" "$PRIVILEGED" "$IP" "$GATEWAY"; then
