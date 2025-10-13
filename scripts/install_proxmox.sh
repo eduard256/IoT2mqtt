@@ -4,8 +4,33 @@
 # Based on tteck's Proxmox scripts architecture
 # Usage: bash <(curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/scripts/install_proxmox.sh)
 
-# Source tteck's build functions
-source <(curl -s https://raw.githubusercontent.com/tteck/Proxmox/main/misc/build.func)
+# Disable version check and source tteck's build functions
+YW=$(echo "\033[33m")
+BL=$(echo "\033[36m")
+RD=$(echo "\033[01;31m")
+BGN=$(echo "\033[4;92m")
+GN=$(echo "\033[1;92m")
+DGN=$(echo "\033[32m")
+CL=$(echo "\033[m")
+RETRY_NUM=10
+RETRY_EVERY=3
+NUM=$RETRY_NUM
+CM="${GN}✓${CL}"
+CROSS="${RD}✗${CL}"
+BFR="\\r\\033[K"
+HOLD="-"
+set -Eeuo pipefail
+trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
+function error_handler() {
+  local exit_code="$?"
+  local line_number="$1"
+  local command="$2"
+  local error_message="${RD}[ERROR]${CL} in line ${RD}$line_number${CL}: exit code ${RD}$exit_code${CL}: while executing command ${YW}$command${CL}"
+  echo -e "\n$error_message\n"
+}
+
+# Source tteck's build functions (skipping version check)
+source <(curl -s https://raw.githubusercontent.com/tteck/Proxmox/main/misc/build.func 2>/dev/null | sed '/pve_check/d')
 
 function header_info {
 clear
