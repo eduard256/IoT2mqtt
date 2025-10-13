@@ -392,6 +392,9 @@ EOF
   echo ""
   echo -e "${DIM}Installation log: ${LOG_FILE}${RESET}"
   echo ""
+
+  # Completion marker for Proxmox installer
+  echo "### IOT2MQTT_INSTALL_COMPLETE ###"
 }
 
 # ============================================================================

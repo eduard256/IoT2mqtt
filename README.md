@@ -52,23 +52,39 @@ Notes:
 
 ### Proxmox LXC Install
 
-For Proxmox users, install IoT2MQTT in an Ubuntu LXC container with one command:
+Install IoT2MQTT in a Proxmox LXC container with a beautiful interactive installer:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/scripts/install_proxmox.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install_proxmox.sh)
 ```
 
-The script will:
-- Ask for Container ID and IP address
-- Create Ubuntu 22.04 LXC container with Docker support
-- Automatically install IoT2MQTT inside
-- Configuration: 8GB disk, 2GB RAM, 2 CPU cores, unprivileged container
+**Features:**
+- 🎨 Beautiful CLI with interactive navigation menu
+- 🚀 Automatic mode: zero configuration needed
+- ⚙️ Advanced mode: full control over all parameters
+- ✅ Supports Proxmox VE 7.x, 8.x, and 9.x
+- 🐳 Pre-configured for Docker (nested containers enabled)
 
-Example:
-```
-Container ID: 100
-IP address: 192.168.1.50/24
-```
+**The installer will:**
+1. Show interactive menu to choose installation mode
+2. Auto-detect free container ID (or let you choose)
+3. Download Ubuntu 22.04 LXC template if needed
+4. Create unprivileged container with Docker support
+5. Run IoT2MQTT installation inside
+6. Display the access URL when complete
+
+**Default configuration (Automatic mode):**
+- Ubuntu 22.04 LXC (unprivileged)
+- 10GB disk, 4GB RAM, all CPU cores
+- DHCP networking (auto-configured)
+- Docker-ready (nesting enabled)
+
+**Advanced mode allows you to customize:**
+- Container ID
+- Network configuration (DHCP or static IP)
+- Storage selection
+- Disk size, RAM, and CPU allocation
+- Privileged/unprivileged mode
 
 ### Prerequisites
 
