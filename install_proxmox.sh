@@ -263,6 +263,66 @@ ensure_template() {
 }
 
 # ============================================================================
+# Storage Management
+# ============================================================================
+
+MIN_SPACE_GB=15
+MIN_SPACE_MB=$((MIN_SPACE_GB * 1024))  # 15360 MB
+
+get_rootdir_storage_with_space() {
+  # Get list of storage with rootdir support and their available space
+  # Returns: name available_mb
+  pvesm status -content rootdir 2>/dev/null | awk 'NR>1 && $3=="active" {
+    # Convert KB to MB
+    available_mb = int($5 / 1024)
+    print $1, available_mb
+  }'
+}
+
+get_best_rootdir_storage() {
+  local best_storage=""
+  local best_space=0
+  local found_suitable=0
+
+  while read -r name available_mb; do
+    # Check if storage has enough space
+    if [ "$available_mb" -ge "$MIN_SPACE_MB" ]; then
+      found_suitable=1
+
+      # Prefer certain storage types in order: local-lvm > local-zfs > others
+      if [[ "$name" == "local-lvm" ]]; then
+        echo "$name"
+        return 0
+      elif [[ "$name" == "local-zfs" ]] && [[ "$best_storage" != "local-lvm" ]]; then
+        best_storage="$name"
+        best_space="$available_mb"
+      elif [ -z "$best_storage" ] || [ "$available_mb" -gt "$best_space" ]; then
+        best_storage="$name"
+        best_space="$available_mb"
+      fi
+    fi
+  done < <(get_rootdir_storage_with_space)
+
+  if [ -n "$best_storage" ]; then
+    echo "$best_storage"
+    return 0
+  fi
+
+  return 1
+}
+
+format_size_mb() {
+  local mb="$1"
+  local gb=$((mb / 1024))
+
+  if [ "$gb" -gt 0 ]; then
+    echo "${gb}GB"
+  else
+    echo "${mb}MB"
+  fi
+}
+
+# ============================================================================
 # Resource Checks
 # ============================================================================
 
@@ -301,7 +361,7 @@ show_main_menu() {
 }
 
 show_advanced_menu() {
-  local ctid ip gateway disk ram cores privileged storage
+  local ctid ip gateway disk ram cores privileged rootfs_storage
 
   # Get default free CTID
   local default_ctid=$(get_next_free_ctid)
@@ -332,19 +392,35 @@ show_advanced_menu() {
     if [ $? -ne 0 ]; then return 1; fi
   fi
 
-  # Storage selection
+  # Rootfs storage selection with available space
   local storage_options=()
-  while IFS= read -r stor; do
-    storage_options+=("$stor" "")
-  done < <(pvesm status -content vztmpl 2>/dev/null | awk 'NR>1 {print $1}')
+  while read -r name available_mb; do
+    local formatted=$(format_size_mb "$available_mb")
+    local status="$formatted free"
+
+    # Mark if insufficient space
+    if [ "$available_mb" -lt "$MIN_SPACE_MB" ]; then
+      status="$status (insufficient)"
+    fi
+
+    storage_options+=("$name" "$status")
+  done < <(get_rootdir_storage_with_space)
 
   if [ ${#storage_options[@]} -eq 0 ]; then
-    error "No storage available for containers"
+    whiptail --msgbox "ERROR: No storage available for containers!\n\nPlease configure storage with rootdir support." 12 60
     return 1
   fi
 
-  storage=$(whiptail --menu "Select storage:" 15 60 5 "${storage_options[@]}" 3>&1 1>&2 2>&3)
+  rootfs_storage=$(whiptail --menu "Select container storage:" 18 70 10 "${storage_options[@]}" 3>&1 1>&2 2>&3)
   if [ $? -ne 0 ]; then return 1; fi
+
+  # Validate selected storage has enough space
+  local selected_space
+  selected_space=$(get_rootdir_storage_with_space | grep "^${rootfs_storage} " | awk '{print $2}')
+  if [ "$selected_space" -lt "$MIN_SPACE_MB" ]; then
+    whiptail --msgbox "ERROR: Selected storage has less than ${MIN_SPACE_GB}GB free space!\n\nAvailable: $(format_size_mb $selected_space)\nRequired: ${MIN_SPACE_GB}GB" 12 60
+    return 1
+  fi
 
   # Disk size
   disk=$(whiptail --inputbox "Enter disk size (GB):" 10 60 "$DEFAULT_DISK_SIZE" 3>&1 1>&2 2>&3)
@@ -371,7 +447,7 @@ show_advanced_menu() {
   echo "CTID=$ctid"
   echo "IP=$ip"
   echo "GATEWAY=$gateway"
-  echo "STORAGE=$storage"
+  echo "ROOTFS_STORAGE=$rootfs_storage"
   echo "DISK=$disk"
   echo "RAM=$ram"
   echo "CORES=$cores"
@@ -384,8 +460,8 @@ show_advanced_menu() {
 
 create_container() {
   local ctid="$1"
-  local storage="$2"
-  local template="$3"
+  local template="$2"
+  local rootfs_storage="$3"
   local disk="$4"
   local ram="$5"
   local cores="$6"
@@ -397,7 +473,7 @@ create_container() {
 
   log "Container ID: $ctid"
   log "Template: $template"
-  log "Storage: $storage"
+  log "Rootfs Storage: $rootfs_storage"
   log "Disk: ${disk}GB"
   log "RAM: ${ram}MB"
   log "Cores: $cores"
@@ -406,8 +482,7 @@ create_container() {
 
   # Build pct create command
   local pct_cmd="pct create $ctid $template"
-  pct_cmd+=" --storage $storage"
-  pct_cmd+=" --rootfs $storage:$disk"
+  pct_cmd+=" --rootfs $rootfs_storage:$disk"
   pct_cmd+=" --memory $ram"
   pct_cmd+=" --swap $DEFAULT_SWAP"
   pct_cmd+=" --cores $cores"
@@ -538,29 +613,44 @@ get_container_ip() {
 # ============================================================================
 
 run_automatic_installation() {
-  local ctid storage template_path ram cores
+  local ctid template_storage template_path rootfs_storage ram cores
 
   # Get next free CTID
   log "Scanning for available container ID..."
   ctid=$(get_next_free_ctid)
   success "Selected Container ID: $ctid"
 
-  # Get storage
-  storage=$(get_storage_list)
-  if [ -z "$storage" ]; then
+  # Get template storage
+  template_storage=$(get_storage_list)
+  if [ -z "$template_storage" ]; then
     error "No storage found for container templates"
     exit 1
   fi
-  success "Using storage: $storage"
+  success "Template storage: $template_storage"
 
   # Ensure template exists
   log "Checking for Ubuntu template..."
-  template_path=$(ensure_template "$storage")
+  template_path=$(ensure_template "$template_storage")
   if [ -z "$template_path" ]; then
     error "Failed to get Ubuntu template"
     exit 1
   fi
   success "Template ready: $template_path"
+
+  # Get best rootfs storage with space check
+  log "Finding suitable storage for container..."
+  rootfs_storage=$(get_best_rootdir_storage)
+  if [ -z "$rootfs_storage" ]; then
+    error "No suitable storage found with at least ${MIN_SPACE_GB}GB free space"
+    error "Please free up space or add additional storage"
+    exit 1
+  fi
+
+  # Get available space for display
+  local available_space
+  available_space=$(get_rootdir_storage_with_space | grep "^${rootfs_storage} " | awk '{print $2}')
+  local formatted_space=$(format_size_mb "$available_space")
+  success "Container storage: $rootfs_storage ($formatted_space available)"
 
   # Calculate RAM
   ram=$(get_max_safe_ram)
@@ -571,7 +661,7 @@ run_automatic_installation() {
   success "Allocating CPU cores: ${cores}"
 
   # Create container
-  if ! create_container "$ctid" "$storage" "$template_path" "$DEFAULT_DISK_SIZE" "$ram" "$cores" "0" "dhcp" ""; then
+  if ! create_container "$ctid" "$template_path" "$rootfs_storage" "$DEFAULT_DISK_SIZE" "$ram" "$cores" "0" "dhcp" ""; then
     error "Failed to create container"
     exit 1
   fi
@@ -593,7 +683,7 @@ run_automatic_installation() {
 }
 
 run_advanced_installation() {
-  local settings
+  local settings template_storage template_path
 
   settings=$(show_advanced_menu)
 
@@ -605,10 +695,16 @@ run_advanced_installation() {
   # Parse settings
   eval "$settings"
 
+  # Get template storage
+  template_storage=$(get_storage_list)
+  if [ -z "$template_storage" ]; then
+    error "No storage found for container templates"
+    exit 1
+  fi
+
   # Ensure template exists
-  local template_path
   log "Checking for Ubuntu template..."
-  template_path=$(ensure_template "$STORAGE")
+  template_path=$(ensure_template "$template_storage")
   if [ -z "$template_path" ]; then
     error "Failed to get Ubuntu template"
     exit 1
@@ -616,7 +712,7 @@ run_advanced_installation() {
   success "Template ready: $template_path"
 
   # Create container
-  if ! create_container "$CTID" "$STORAGE" "$template_path" "$DISK" "$RAM" "$CORES" "$PRIVILEGED" "$IP" "$GATEWAY"; then
+  if ! create_container "$CTID" "$template_path" "$ROOTFS_STORAGE" "$DISK" "$RAM" "$CORES" "$PRIVILEGED" "$IP" "$GATEWAY"; then
     error "Failed to create container"
     exit 1
   fi
