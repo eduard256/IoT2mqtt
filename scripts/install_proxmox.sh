@@ -1,36 +1,29 @@
 #!/usr/bin/env bash
 
 # IoT2MQTT Proxmox LXC Installer
-# Based on tteck's Proxmox scripts architecture
 # Usage: bash <(curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/scripts/install_proxmox.sh)
 
-# Disable version check and source tteck's build functions
-YW=$(echo "\033[33m")
-BL=$(echo "\033[36m")
-RD=$(echo "\033[01;31m")
-BGN=$(echo "\033[4;92m")
-GN=$(echo "\033[1;92m")
-DGN=$(echo "\033[32m")
-CL=$(echo "\033[m")
-RETRY_NUM=10
-RETRY_EVERY=3
-NUM=$RETRY_NUM
-CM="${GN}✓${CL}"
-CROSS="${RD}✗${CL}"
-BFR="\\r\\033[K"
-HOLD="-"
-set -Eeuo pipefail
-trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
-function error_handler() {
-  local exit_code="$?"
-  local line_number="$1"
-  local command="$2"
-  local error_message="${RD}[ERROR]${CL} in line ${RD}$line_number${CL}: exit code ${RD}$exit_code${CL}: while executing command ${YW}$command${CL}"
-  echo -e "\n$error_message\n"
+set -euo pipefail
+
+# Colors
+YW='\033[33m'
+BL='\033[36m'
+RD='\033[01;31m'
+GN='\033[1;92m'
+CL='\033[m'
+
+function msg_info() {
+    echo -e "${BL}[INFO]${CL} $1"
 }
 
-# Source tteck's build functions (skipping version check)
-source <(curl -s https://raw.githubusercontent.com/tteck/Proxmox/main/misc/build.func 2>/dev/null | sed '/pve_check/d')
+function msg_ok() {
+    echo -e "${GN}[OK]${CL} $1"
+}
+
+function msg_error() {
+    echo -e "${RD}[ERROR]${CL} $1"
+    exit 1
+}
 
 function header_info {
 clear
@@ -46,76 +39,110 @@ cat <<"EOF"
 EOF
 }
 
+# Check if running on Proxmox
+function check_proxmox() {
+    if ! command -v pct &> /dev/null; then
+        msg_error "This script must be run on a Proxmox host"
+    fi
+    if [[ $EUID -ne 0 ]]; then
+        msg_error "This script must be run as root"
+    fi
+}
+
+# Get next free container/VM ID
+function get_next_id() {
+    local id=100
+    while true; do
+        if qm list 2>/dev/null | awk 'NR>1 {print $1}' | grep -q "^${id}$"; then
+            id=$((id + 1))
+            continue
+        fi
+        if pct list 2>/dev/null | awk 'NR>1 {print $1}' | grep -q "^${id}$"; then
+            id=$((id + 1))
+            continue
+        fi
+        echo "$id"
+        break
+    done
+}
+
+# Main installation
 header_info
-echo -e "Loading..."
+echo ""
+check_proxmox
 
-# Application settings
+# Configuration
 APP="IoT2MQTT"
-var_disk="8"
-var_cpu="2"
-var_ram="2048"
-var_os="ubuntu"
-var_version="22.04"
+CTID=$(get_next_id)
+HOSTNAME="iot2mqtt"
+DISK_SIZE="8"
+RAM="2048"
+CORES="2"
+OS_TEMPLATE="ubuntu-22.04-standard"
+BRIDGE="vmbr0"
 
-# Load tteck's variables and functions
-variables
-color
-catch_errors
+msg_info "Configuration:"
+echo "  Container ID: $CTID"
+echo "  Hostname: $HOSTNAME"
+echo "  Disk: ${DISK_SIZE}GB"
+echo "  RAM: ${RAM}MB"
+echo "  CPU Cores: $CORES"
+echo "  Network: DHCP"
+echo ""
 
-function default_settings() {
-  CT_TYPE="1"
-  PW=""
-  CT_ID=$NEXTID
-  HN=$NSAPP
-  DISK_SIZE="$var_disk"
-  CORE_COUNT="$var_cpu"
-  RAM_SIZE="$var_ram"
-  BRG="vmbr0"
-  NET="dhcp"
-  GATE=""
-  APT_CACHER=""
-  APT_CACHER_IP=""
-  DISABLEIP6="no"
-  MTU=""
-  SD=""
-  NS=""
-  MAC=""
-  VLAN=""
-  SSH="no"
-  VERB="no"
-  echo_default
-}
+read -p "Continue with installation? (y/n): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    msg_error "Installation cancelled"
+fi
 
-function update_script() {
-  header_info
-  if [[ ! -d /opt/iot2mqtt ]]; then
-    msg_error "No ${APP} Installation Found!"
-    exit
-  fi
-  msg_info "Updating ${APP}"
-  cd /opt/iot2mqtt
-  git pull &>/dev/null
-  msg_ok "Updated ${APP}"
-  exit
-}
+# Check if template exists
+msg_info "Checking for Ubuntu template..."
+TEMPLATE_FILE="${OS_TEMPLATE}_amd64.tar.zst"
+if ! pveam list local | grep -q "$TEMPLATE_FILE"; then
+    msg_info "Downloading Ubuntu 22.04 template..."
+    pveam download local "$TEMPLATE_FILE" || msg_error "Failed to download template"
+fi
+msg_ok "Template ready"
 
-# Post-installation: Install IoT2MQTT
-function install_iot2mqtt() {
-  msg_info "Installing IoT2MQTT application"
+# Create container
+msg_info "Creating LXC container $CTID..."
+pct create "$CTID" "local:vztmpl/$TEMPLATE_FILE" \
+    --hostname "$HOSTNAME" \
+    --cores "$CORES" \
+    --memory "$RAM" \
+    --swap 512 \
+    --rootfs local-lvm:${DISK_SIZE} \
+    --net0 name=eth0,bridge=${BRIDGE},ip=dhcp \
+    --features nesting=1 \
+    --unprivileged 1 \
+    --onboot 1 \
+    --start 1 || msg_error "Failed to create container"
+msg_ok "Container created"
 
-  # Install IoT2MQTT using the main install script
-  $STD bash <(curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh)
+# Wait for container to start
+msg_info "Waiting for container to start..."
+sleep 10
 
-  msg_ok "Installed IoT2MQTT"
-}
+# Install IoT2MQTT
+msg_info "Installing IoT2MQTT..."
+pct exec "$CTID" -- bash -c "curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh | bash" || msg_error "Failed to install IoT2MQTT"
+msg_ok "IoT2MQTT installed"
 
-# Build and configure container
-start
-build_container
-description
+# Get container IP
+CONTAINER_IP=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}')
 
-# Install IoT2MQTT after container is created
-install_iot2mqtt
-
-msg_ok "Completed Successfully!\n"
-echo -e "${APP} is running on: ${BL}http://${IP}:8765${CL}\n"
+# Show completion message
+echo ""
+msg_ok "Installation completed successfully!"
+echo ""
+echo "  Container ID: $CTID"
+echo "  Hostname: $HOSTNAME"
+echo "  IP Address: $CONTAINER_IP"
+echo "  Web Interface: http://${CONTAINER_IP}:8765"
+echo ""
+echo "Useful commands:"
+echo "  pct enter $CTID    - Enter container"
+echo "  pct stop $CTID     - Stop container"
+echo "  pct start $CTID    - Start container"
+echo ""
