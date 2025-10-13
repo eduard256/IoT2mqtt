@@ -20,7 +20,6 @@ LOG_FILE="/tmp/iot2mqtt-proxmox-install-$$.log"
 DEFAULT_DISK_SIZE="10"          # GB
 DEFAULT_RAM="4096"               # MB
 DEFAULT_SWAP="512"               # MB
-DEFAULT_CORES="0"                # 0 = unlimited
 DEFAULT_BRIDGE="vmbr0"
 UBUNTU_VERSION="22.04"           # Ubuntu LTS version
 
@@ -358,7 +357,7 @@ show_advanced_menu() {
 
   # CPU Cores
   local max_cores=$(nproc)
-  cores=$(whiptail --inputbox "Enter CPU cores (0 = unlimited):\n\nAvailable: ${max_cores}" 12 60 "$DEFAULT_CORES" 3>&1 1>&2 2>&3)
+  cores=$(whiptail --inputbox "Enter CPU cores:\n\nAvailable: ${max_cores}" 12 60 "$max_cores" 3>&1 1>&2 2>&3)
   if [ $? -ne 0 ]; then return 1; fi
 
   # Privileged/Unprivileged
@@ -539,7 +538,7 @@ get_container_ip() {
 # ============================================================================
 
 run_automatic_installation() {
-  local ctid storage template_path ram
+  local ctid storage template_path ram cores
 
   # Get next free CTID
   log "Scanning for available container ID..."
@@ -567,8 +566,12 @@ run_automatic_installation() {
   ram=$(get_max_safe_ram)
   success "Allocating RAM: ${ram}MB"
 
+  # Get all available CPU cores
+  cores=$(nproc)
+  success "Allocating CPU cores: ${cores}"
+
   # Create container
-  if ! create_container "$ctid" "$storage" "$template_path" "$DEFAULT_DISK_SIZE" "$ram" "$DEFAULT_CORES" "0" "dhcp" ""; then
+  if ! create_container "$ctid" "$storage" "$template_path" "$DEFAULT_DISK_SIZE" "$ram" "$cores" "0" "dhcp" ""; then
     error "Failed to create container"
     exit 1
   fi

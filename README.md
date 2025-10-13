@@ -75,7 +75,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/inst
 
 **Default configuration (Automatic mode):**
 - Ubuntu 22.04 LXC (unprivileged)
-- 10GB disk, 4GB RAM, all CPU cores
+- 10GB disk, 4GB RAM
+- All available CPU cores (auto-detected)
 - DHCP networking (auto-configured)
 - Docker-ready (nesting enabled)
 
