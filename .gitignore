@@ -81,3 +81,6 @@ coverage.xml
 *.bak
 *.backup
 *.old
+
+# AI Prompts (work in progress, not for version control)
+prompts/
