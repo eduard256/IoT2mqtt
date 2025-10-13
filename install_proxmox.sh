@@ -750,8 +750,9 @@ show_success_message() {
   echo -e "  ${BOLD}Container ID:${RESET} ${CYAN}${ctid}${RESET}"
 
   if [ -n "$ip" ] && [ "$ip" != "127.0.0.1" ]; then
+    local url="http://${ip}:8765"
     echo -e "  ${BOLD}IP Address:${RESET} ${CYAN}${ip}${RESET}"
-    echo -e "  ${BOLD}Web Interface:${RESET} ${CYAN}${BOLD}http://${ip}:8765${RESET}"
+    echo -e "  ${BOLD}Web Interface:${RESET} \033]8;;${url}\033\\${CYAN}${BOLD}${url}${RESET}\033]8;;\033\\"
   else
     echo -e "  ${YELLOW}Note: Unable to detect container IP automatically${RESET}"
     echo -e "  ${DIM}Check container network configuration with: pct exec $ctid ip addr${RESET}"
