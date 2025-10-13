@@ -10,10 +10,11 @@ set -uo pipefail
 LOGFILE="/var/log/iot2mqtt_install.log"
 
 log() {
+    # Always write to log file, and redirect to /dev/null to avoid stdout pollution
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE" 2>&1
-    # Also output to stdout when not in dialog mode
+    # Also output to stderr when not in dialog mode (stderr won't interfere with command substitution)
     if [ -z "$DIALOG" ] || [ "${DIALOG_ACTIVE:-0}" = "0" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2
     fi
 }
 
