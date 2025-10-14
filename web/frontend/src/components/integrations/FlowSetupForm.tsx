@@ -201,6 +201,18 @@ export default function FlowSetupForm({
     }
   }, [visibleSteps, currentStepIndex])
 
+  // Jump to instance step in edit mode to show device list
+  useEffect(() => {
+    if (mode === 'edit' && schema && visibleSteps.length > 0 && initialDevices.length > 0 && currentStepIndex === 0) {
+      // Find instance step index in visibleSteps
+      const instanceStepIndex = visibleSteps.findIndex(step => step.type === 'instance')
+      if (instanceStepIndex !== -1) {
+        // Jump to instance step to show device list
+        setCurrentStepIndex(instanceStepIndex)
+      }
+    }
+  }, [mode, schema, visibleSteps, initialDevices, currentStepIndex])
+
   const currentStep = visibleSteps[currentStepIndex]
 
   useEffect(() => {
