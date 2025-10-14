@@ -647,16 +647,34 @@ export default function FlowSetupForm({
   }
 
   function handleAddAnotherDevice() {
+    console.log('[handleAddAnotherDevice] START', {
+      mode,
+      collectedDevicesCount: collectedDevices.length,
+      collectedDevices: [...collectedDevices],
+      multiDeviceEnabled: schema?.multi_device?.enabled,
+      currentStepIndex,
+      currentStepId: visibleSteps[currentStepIndex]?.id
+    })
+
     if (!schema?.multi_device?.enabled) return
 
     // Build and save current device
     const currentDevice = buildCurrentDevice()
+    console.log('[handleAddAnotherDevice] currentDevice built:', currentDevice)
+
     if (currentDevice && !isDuplicateDevice(currentDevice, collectedDevices)) {
+      console.log('[handleAddAnotherDevice] Adding current device to collected list')
       setCollectedDevices(prev => [...prev, currentDevice])
+    } else if (currentDevice) {
+      console.log('[handleAddAnotherDevice] Current device is duplicate, not adding')
+    } else {
+      console.log('[handleAddAnotherDevice] No current device to add (forms are empty)')
     }
 
     // Clear loop step forms
     const loopSteps = getLoopSteps()
+    console.log('[handleAddAnotherDevice] Loop steps to clear:', loopSteps)
+
     setFlowState(prev => {
       const newForm = { ...prev.form }
       loopSteps.forEach(stepId => {
@@ -678,21 +696,59 @@ export default function FlowSetupForm({
     const targetStepIndex = visibleSteps.findIndex(
       s => s.id === schema.multi_device!.loop_from_step
     )
+    console.log('[handleAddAnotherDevice] Target step search:', {
+      loop_from_step: schema.multi_device!.loop_from_step,
+      targetStepIndex,
+      visibleStepsCount: visibleSteps.length,
+      visibleStepsIds: visibleSteps.map(s => s.id)
+    })
+
     if (targetStepIndex !== -1) {
+      console.log('[handleAddAnotherDevice] Navigating to step index:', targetStepIndex)
       setCurrentStepIndex(targetStepIndex)
       setError(null)
+    } else {
+      console.error('[handleAddAnotherDevice] Target step NOT FOUND in visibleSteps!')
     }
   }
 
   function handleRemoveDevice(index: number) {
-    setCollectedDevices(prev => prev.filter((_, i) => i !== index))
+    const deviceToRemove = collectedDevices[index]
+    console.log('[handleRemoveDevice] Removing device:', {
+      index,
+      device: deviceToRemove,
+      collectedDevicesCount: collectedDevices.length,
+      collectedDevicesBefore: [...collectedDevices]
+    })
+
+    setCollectedDevices(prev => {
+      const newDevices = prev.filter((_, i) => i !== index)
+      console.log('[handleRemoveDevice] After removal:', {
+        newCount: newDevices.length,
+        newDevices: [...newDevices]
+      })
+      return newDevices
+    })
   }
 
   function handleEditDevice(index: number) {
+    console.log('[handleEditDevice] START', {
+      index,
+      collectedDevicesCount: collectedDevices.length,
+      multiDeviceEnabled: schema?.multi_device?.enabled,
+      currentStepIndex,
+      currentStepId: visibleSteps[currentStepIndex]?.id
+    })
+
     if (!schema?.multi_device?.enabled) return
 
     const deviceToEdit = collectedDevices[index]
-    if (!deviceToEdit) return
+    console.log('[handleEditDevice] Device to edit:', deviceToEdit)
+
+    if (!deviceToEdit) {
+      console.error('[handleEditDevice] Device not found at index:', index)
+      return
+    }
 
     // Pre-fill forms with device data
     const ipFormData = {
@@ -705,6 +761,11 @@ export default function FlowSetupForm({
       // Add any other fields that might be in the device
       ...deviceToEdit
     }
+
+    console.log('[handleEditDevice] Pre-filling forms:', {
+      ipFormData,
+      deviceConfigData
+    })
 
     // Update flowState with pre-filled data
     setFlowState(prev => ({
@@ -727,15 +788,26 @@ export default function FlowSetupForm({
     }
 
     // Remove device from collected list (will be re-added after editing)
+    console.log('[handleEditDevice] Removing device from collected list temporarily')
     setCollectedDevices(prev => prev.filter((_, i) => i !== index))
 
     // Navigate back to the beginning of the loop
     const targetStepIndex = visibleSteps.findIndex(
       s => s.id === schema.multi_device!.loop_from_step
     )
+    console.log('[handleEditDevice] Target step search:', {
+      loop_from_step: schema.multi_device!.loop_from_step,
+      targetStepIndex,
+      visibleStepsCount: visibleSteps.length,
+      visibleStepsIds: visibleSteps.map(s => s.id)
+    })
+
     if (targetStepIndex !== -1) {
+      console.log('[handleEditDevice] Navigating to step index:', targetStepIndex)
       setCurrentStepIndex(targetStepIndex)
       setError(null)
+    } else {
+      console.error('[handleEditDevice] Target step NOT FOUND in visibleSteps!')
     }
   }
 
