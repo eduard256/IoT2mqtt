@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { Loader2, ExternalLink, Play, X } from 'lucide-react'
+import { Loader2, ExternalLink, Play, X, Pencil } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,10 @@ import { cn } from '@/lib/utils'
 
 interface FlowSetupFormProps {
   integration: { name: string; display_name?: string }
+  mode?: 'create' | 'edit'
+  existingInstanceId?: string
+  initialDevices?: any[]
+  initialConfig?: any
   onCancel: () => void
   onSuccess: () => void
 }
@@ -42,7 +46,15 @@ const initialFlowState: FlowState = {
   oauth: {}
 }
 
-export default function FlowSetupForm({ integration, onCancel, onSuccess }: FlowSetupFormProps) {
+export default function FlowSetupForm({
+  integration,
+  mode = 'create',
+  existingInstanceId,
+  initialDevices = [],
+  initialConfig = {},
+  onCancel,
+  onSuccess
+}: FlowSetupFormProps) {
   const [schema, setSchema] = useState<FlowSetupSchema | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -57,6 +69,13 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
   const abortControllerRef = useRef<AbortController | null>(null)
   const isChangingFlow = useRef(false)
   const flowStateRef = useRef<FlowState>(initialFlowState)
+
+  // Initialize collectedDevices in edit mode
+  useEffect(() => {
+    if (mode === 'edit' && initialDevices.length > 0) {
+      setCollectedDevices(initialDevices)
+    }
+  }, [mode, initialDevices])
 
   useEffect(() => {
     const load = async () => {
@@ -657,6 +676,57 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     setCollectedDevices(prev => prev.filter((_, i) => i !== index))
   }
 
+  function handleEditDevice(index: number) {
+    if (!schema?.multi_device?.enabled) return
+
+    const deviceToEdit = collectedDevices[index]
+    if (!deviceToEdit) return
+
+    // Pre-fill forms with device data
+    const ipFormData = {
+      ip: deviceToEdit.ip,
+      port: deviceToEdit.port || 55443
+    }
+
+    const deviceConfigData = {
+      friendly_name: deviceToEdit.name,
+      // Add any other fields that might be in the device
+      ...deviceToEdit
+    }
+
+    // Update flowState with pre-filled data
+    setFlowState(prev => ({
+      ...prev,
+      form: {
+        ...prev.form,
+        ip_form: ipFormData,
+        device_config: deviceConfigData
+      }
+    }))
+
+    // Update flowStateRef immediately for synchronous access
+    flowStateRef.current = {
+      ...flowStateRef.current,
+      form: {
+        ...flowStateRef.current.form,
+        ip_form: ipFormData,
+        device_config: deviceConfigData
+      }
+    }
+
+    // Remove device from collected list (will be re-added after editing)
+    setCollectedDevices(prev => prev.filter((_, i) => i !== index))
+
+    // Navigate back to the beginning of the loop
+    const targetStepIndex = visibleSteps.findIndex(
+      s => s.id === schema.multi_device!.loop_from_step
+    )
+    if (targetStepIndex !== -1) {
+      setCurrentStepIndex(targetStepIndex)
+      setError(null)
+    }
+  }
+
   async function createInstance(step: FlowStep) {
     if (!step.instance) {
       setError('Instance step missing configuration')
@@ -736,8 +806,15 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
         })
       }
       const token = getAuthToken()
-      const response = await fetch('/api/instances', {
-        method: 'POST',
+
+      // Use PUT for edit mode, POST for create mode
+      const method = mode === 'edit' ? 'PUT' : 'POST'
+      const url = mode === 'edit'
+        ? `/api/instances/${resolved.connector_type ?? integration.name}/${existingInstanceId}`
+        : '/api/instances'
+
+      const response = await fetch(url, {
+        method,
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -746,7 +823,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
       })
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
-        throw new Error(data?.detail ?? 'Failed to create instance')
+        throw new Error(data?.detail ?? `Failed to ${mode === 'edit' ? 'update' : 'create'} instance`)
       }
       onSuccess()
     } catch (e: any) {
@@ -1087,11 +1164,13 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
     device,
     index,
     onRemove,
+    onEdit,
     canRemove = true
   }: {
     device: any
     index: number
     onRemove: () => void
+    onEdit?: () => void
     canRemove?: boolean
   }) {
     return (
@@ -1102,16 +1181,28 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
             {device.ip}:{device.port}
           </div>
         </div>
-        {canRemove && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRemove}
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        )}
+        <div className="flex gap-1">
+          {onEdit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onEdit}
+              className="hover:bg-primary/10"
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+          {canRemove && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRemove}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
     )
   }
@@ -1154,6 +1245,7 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
                   device={device}
                   index={index}
                   onRemove={() => handleRemoveDevice(index)}
+                  onEdit={() => handleEditDevice(index)}
                   canRemove={multiDevice?.enabled === true || allDevices.length > 1}
                 />
               ))}
@@ -1328,7 +1420,8 @@ export default function FlowSetupForm({ integration, onCancel, onSuccess }: Flow
           )}
           {currentStep.type === 'instance' ? (
             <Button key={`finish-${currentFlowId}-${currentStepIndex}`} disabled={busy} onClick={() => createInstance(currentStep)}>
-              {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Finish
+              {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {mode === 'edit' ? 'Save Changes' : 'Finish'}
             </Button>
           ) : (
             <Button key={`next-${currentFlowId}-${currentStepIndex}`} disabled={busy} onClick={handleNext}>

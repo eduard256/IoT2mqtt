@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/hooks/use-toast'
 import BrandIcon from './BrandIcon'
+import EditInstanceDialog from './EditInstanceDialog'
 
 interface IntegrationInstance {
   instance_id: string
@@ -35,6 +36,7 @@ export default function IntegrationInstancesPage({ integrationName, onBack }: In
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [instanceToDelete, setInstanceToDelete] = useState<string | null>(null)
+  const [editingInstanceId, setEditingInstanceId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchInstances()
@@ -317,10 +319,10 @@ export default function IntegrationInstancesPage({ integrationName, onBack }: In
                     )}
                   </Button>
                   
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="outline"
-                    onClick={() => setSelectedInstance(instance)}
+                    onClick={() => setEditingInstanceId(instance.instance_id)}
                   >
                     <Settings className="w-3 h-3" />
                   </Button>
@@ -396,6 +398,19 @@ export default function IntegrationInstancesPage({ integrationName, onBack }: In
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Instance Dialog */}
+      {editingInstanceId && (
+        <EditInstanceDialog
+          integration={integrationName}
+          instanceId={editingInstanceId}
+          onClose={() => setEditingInstanceId(null)}
+          onSuccess={() => {
+            fetchInstances()
+            setEditingInstanceId(null)
+          }}
+        />
+      )}
     </div>
   )
 }

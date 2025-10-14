@@ -230,49 +230,54 @@ async def create_and_start_container(connector_type: str, instance_id: str, conf
 
 
 @router.put("/api/instances/{connector}/{instance_id}")
-async def update_instance(connector: str, instance_id: str, request: UpdateInstanceRequest):
+async def update_instance(connector: str, instance_id: str, request: CreateInstanceRequest):
     """Update instance configuration and restart container"""
     try:
-        # Load existing configuration
+        # Load existing configuration to preserve metadata
         existing = config_service.load_instance_with_secrets(connector, instance_id)
         if not existing:
             raise HTTPException(status_code=404, detail="Instance not found")
-        
-        # Update fields
-        if request.friendly_name is not None:
-            existing["friendly_name"] = request.friendly_name
-        if request.config is not None:
-            existing.setdefault("connection", {})
-            existing["connection"].update(request.config)
+
+        # Prepare updated instance configuration (full replacement)
+        instance_config = {
+            "instance_id": instance_id,  # Keep the same ID
+            "instance_type": existing.get("instance_type", "device"),
+            "connector_type": connector,
+            "friendly_name": request.friendly_name,
+            "connection": request.config,
+            "devices": request.devices,  # Complete replacement
+            "enabled": request.enabled,
+            "update_interval": request.update_interval,
+            "created_at": existing.get("created_at", datetime.now().isoformat()),  # Preserve original
+            "updated_at": datetime.now().isoformat()  # Update timestamp
+        }
+
+        # Maintain backwards compatibility: expose connection keys at top-level
+        if isinstance(request.config, dict):
             for key, value in request.config.items():
-                if key not in existing or key in {"effect_type", "discovery_enabled", "cloud_credentials", "token"}:
-                    existing[key] = value
-        if request.devices is not None:
-            existing["devices"] = request.devices
-        if request.enabled is not None:
-            existing["enabled"] = request.enabled
-        if request.update_interval is not None:
-            existing["update_interval"] = request.update_interval
-        
-        existing["updated_at"] = datetime.now().isoformat()
-        
-        # Save updated configuration
-        config_service.save_instance_with_secrets(connector, instance_id, existing)
-        
-        # Restart container
+                if key not in instance_config:
+                    instance_config[key] = value
+
+        # Save updated configuration with secrets
+        config_service.save_instance_with_secrets(
+            connector,
+            instance_id,
+            instance_config,
+            request.secrets
+        )
+
+        # Restart container to apply new configuration
         container_name = f"iot2mqtt_{connector}_{instance_id}"
-        if docker_service.restart_container(container_name):
-            return {
-                "success": True,
-                "message": "Instance updated and container restarted"
-            }
-        else:
-            return {
-                "success": True,
-                "message": "Instance updated but container restart failed",
-                "warning": True
-            }
-        
+        restart_success = docker_service.restart_container(container_name)
+
+        return {
+            "success": True,
+            "message": "Instance updated and container restarted" if restart_success
+                       else "Instance updated but container restart failed",
+            "container_restarted": restart_success,
+            "warning": not restart_success
+        }
+
     except HTTPException:
         raise
     except Exception as e:
