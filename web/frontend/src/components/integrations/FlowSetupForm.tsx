@@ -1294,16 +1294,19 @@ export default function FlowSetupForm({
   function renderInstance(step: FlowStep) {
     // Multi-device support
     const multiDevice = schema?.multi_device
-    const allDevices = [...collectedDevices]
 
-    // Add current device if exists and not duplicate
-    const currentDevice = buildCurrentDevice()
-    if (currentDevice && !isDuplicateDevice(currentDevice, allDevices)) {
-      allDevices.push(currentDevice)
-    }
+    // ONLY show collectedDevices - NOT currentDevice
+    // This ensures Edit/Remove buttons work with correct indices
+    const devicesToShow = [...collectedDevices]
 
     const maxDevices = multiDevice?.max_devices ?? 100
-    const canAddMore = multiDevice?.enabled === true && allDevices.length < maxDevices
+    const canAddMore = multiDevice?.enabled === true && devicesToShow.length < maxDevices
+
+    // Calculate total devices including currentDevice for display purposes only
+    const currentDevice = buildCurrentDevice()
+    const totalDeviceCount = currentDevice && !isDuplicateDevice(currentDevice, devicesToShow)
+      ? devicesToShow.length + 1
+      : devicesToShow.length
 
     return (
       <Card>
@@ -1312,25 +1315,25 @@ export default function FlowSetupForm({
           {step.description && <CardDescription>{step.description}</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Universal device list - always shown after first pass */}
+          {/* Device list - shows ONLY collectedDevices */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold text-foreground">
                 {multiDevice?.enabled
-                  ? `${multiDevice.device_label ?? 'Devices'} (${allDevices.length}/${maxDevices})`
+                  ? `${multiDevice.device_label ?? 'Devices'} (${totalDeviceCount}/${maxDevices})`
                   : 'Device Configuration'
                 }
               </h4>
             </div>
             <div className="space-y-2">
-              {allDevices.map((device, index) => (
+              {devicesToShow.map((device, index) => (
                 <DeviceListItem
                   key={`${device.device_id}-${index}`}
                   device={device}
                   index={index}
                   onRemove={() => handleRemoveDevice(index)}
                   onEdit={() => handleEditDevice(index)}
-                  canRemove={multiDevice?.enabled === true || allDevices.length > 1}
+                  canRemove={multiDevice?.enabled === true || devicesToShow.length > 1}
                 />
               ))}
             </div>
@@ -1349,7 +1352,7 @@ export default function FlowSetupForm({
           )}
 
           <p className="text-sm text-muted-foreground">
-            Press Finish to create the connector instance with {allDevices.length} device{allDevices.length > 1 ? 's' : ''}.
+            Press Finish to create the connector instance with {totalDeviceCount} device{totalDeviceCount > 1 ? 's' : ''}.
           </p>
         </CardContent>
       </Card>
