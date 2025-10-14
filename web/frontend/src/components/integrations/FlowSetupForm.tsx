@@ -1253,7 +1253,7 @@ export default function FlowSetupForm({
   }: {
     device: any
     index: number
-    onRemove: () => void
+    onRemove?: () => void
     onEdit?: () => void
     canRemove?: boolean
   }) {
@@ -1276,7 +1276,7 @@ export default function FlowSetupForm({
               <Pencil className="h-3 w-3" />
             </Button>
           )}
-          {canRemove && (
+          {canRemove && onRemove && (
             <Button
               variant="ghost"
               size="sm"
@@ -1295,18 +1295,23 @@ export default function FlowSetupForm({
     // Multi-device support
     const multiDevice = schema?.multi_device
 
-    // ONLY show collectedDevices - NOT currentDevice
-    // This ensures Edit/Remove buttons work with correct indices
+    // Build current device from forms (if being edited/added)
+    const currentDevice = buildCurrentDevice()
+
+    // For display: show collected devices + current device (if exists and not duplicate)
+    const allDevices = [...collectedDevices]
+    const hasCurrentDevice = currentDevice && !isDuplicateDevice(currentDevice, allDevices)
+    if (hasCurrentDevice) {
+      allDevices.push(currentDevice)
+    }
+
+    // For buttons: ONLY use collectedDevices indices (not allDevices)
+    // currentDevice is handled separately - it's being edited, not in the list yet
     const devicesToShow = [...collectedDevices]
 
     const maxDevices = multiDevice?.max_devices ?? 100
-    const canAddMore = multiDevice?.enabled === true && devicesToShow.length < maxDevices
-
-    // Calculate total devices including currentDevice for display purposes only
-    const currentDevice = buildCurrentDevice()
-    const totalDeviceCount = currentDevice && !isDuplicateDevice(currentDevice, devicesToShow)
-      ? devicesToShow.length + 1
-      : devicesToShow.length
+    const canAddMore = multiDevice?.enabled === true && allDevices.length < maxDevices
+    const totalDeviceCount = allDevices.length
 
     return (
       <Card>
@@ -1315,7 +1320,7 @@ export default function FlowSetupForm({
           {step.description && <CardDescription>{step.description}</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Device list - shows ONLY collectedDevices */}
+          {/* Device list */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold text-foreground">
@@ -1326,16 +1331,24 @@ export default function FlowSetupForm({
               </h4>
             </div>
             <div className="space-y-2">
-              {devicesToShow.map((device, index) => (
-                <DeviceListItem
-                  key={`${device.device_id}-${index}`}
-                  device={device}
-                  index={index}
-                  onRemove={() => handleRemoveDevice(index)}
-                  onEdit={() => handleEditDevice(index)}
-                  canRemove={multiDevice?.enabled === true || devicesToShow.length > 1}
-                />
-              ))}
+              {/* Show all devices (collected + current if exists) */}
+              {allDevices.map((device, index) => {
+                // Check if this is the current device (last in allDevices if hasCurrentDevice)
+                const isCurrentDevice = hasCurrentDevice && index === allDevices.length - 1
+
+                return (
+                  <DeviceListItem
+                    key={`${device.device_id}-${index}`}
+                    device={device}
+                    index={index}
+                    // If it's current device, don't allow edit/remove (it's being edited right now)
+                    // Otherwise, use the index from collectedDevices
+                    onRemove={isCurrentDevice ? undefined : () => handleRemoveDevice(index)}
+                    onEdit={isCurrentDevice ? undefined : () => handleEditDevice(index)}
+                    canRemove={!isCurrentDevice && (multiDevice?.enabled === true || allDevices.length > 1)}
+                  />
+                )
+              })}
             </div>
           </div>
 
