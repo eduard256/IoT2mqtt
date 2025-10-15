@@ -579,10 +579,32 @@ export default function FlowSetupForm({
 
     setCurrentStepIndex(nextIndex)
 
-    // Reset manual adding flag when reaching instance step
+    // Reset manual adding flag and clear loop forms when reaching instance step
     const nextStep = visibleSteps[nextIndex]
     if (nextStep?.type === 'instance') {
       isManuallyAddingDevice.current = false
+
+      // Clear loop forms so buildCurrentDevice() returns null
+      // This ensures newly added devices show edit/remove buttons
+      const loopSteps = getLoopSteps()
+      if (loopSteps.length > 0) {
+        setFlowState(prev => {
+          const newForm = { ...prev.form }
+          loopSteps.forEach(stepId => {
+            delete newForm[stepId]
+          })
+          return { ...prev, form: newForm }
+        })
+
+        // Also update the ref
+        flowStateRef.current = {
+          ...flowStateRef.current,
+          form: { ...flowStateRef.current.form }
+        }
+        loopSteps.forEach(stepId => {
+          delete flowStateRef.current.form[stepId]
+        })
+      }
     }
 
     // Check if the new step needs auto-execution after React updates
