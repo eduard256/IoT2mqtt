@@ -69,6 +69,7 @@ export default function FlowSetupForm({
   const abortControllerRef = useRef<AbortController | null>(null)
   const isChangingFlow = useRef(false)
   const flowStateRef = useRef<FlowState>(initialFlowState)
+  const isManuallyAddingDevice = useRef(false)
 
   // Initialize collectedDevices in edit mode
   useEffect(() => {
@@ -203,7 +204,7 @@ export default function FlowSetupForm({
 
   // Jump to instance step in edit mode to show device list
   useEffect(() => {
-    if (mode === 'edit' && schema && visibleSteps.length > 0 && initialDevices.length > 0 && currentStepIndex === 0) {
+    if (mode === 'edit' && schema && visibleSteps.length > 0 && initialDevices.length > 0 && currentStepIndex === 0 && !isManuallyAddingDevice.current) {
       // Find instance step index in visibleSteps
       const instanceStepIndex = visibleSteps.findIndex(step => step.type === 'instance')
       if (instanceStepIndex !== -1) {
@@ -578,8 +579,13 @@ export default function FlowSetupForm({
 
     setCurrentStepIndex(nextIndex)
 
-    // Check if the new step needs auto-execution after React updates
+    // Reset manual adding flag when reaching instance step
     const nextStep = visibleSteps[nextIndex]
+    if (nextStep?.type === 'instance') {
+      isManuallyAddingDevice.current = false
+    }
+
+    // Check if the new step needs auto-execution after React updates
     if (nextStep && nextStep.type === 'tool' && nextStep.auto_advance && !autoRanSteps.current.has(nextStep.id)) {
       // executeTool will get fresh state via Promise-based approach
       void executeTool(nextStep)
@@ -657,6 +663,9 @@ export default function FlowSetupForm({
     })
 
     if (!schema?.multi_device?.enabled) return
+
+    // Set flag to prevent auto-jump back to instance step
+    isManuallyAddingDevice.current = true
 
     // Build and save current device
     const currentDevice = buildCurrentDevice()
@@ -741,6 +750,9 @@ export default function FlowSetupForm({
     })
 
     if (!schema?.multi_device?.enabled) return
+
+    // Set flag to prevent auto-jump back to instance step
+    isManuallyAddingDevice.current = true
 
     const deviceToEdit = collectedDevices[index]
     console.log('[handleEditDevice] Device to edit:', deviceToEdit)
