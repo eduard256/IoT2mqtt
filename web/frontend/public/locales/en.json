@@ -52,7 +52,13 @@
     "disconnected": "Disconnected",
     "enabled": "Enabled",
     "disabled": "Disabled",
-    "copied": "Copied"
+    "copied": "Copied",
+    "yes": "Yes",
+    "no": "No",
+    "logout": "Logout",
+    "no_auth_token": "No authentication token",
+    "no_auth_token_found": "No authentication token found",
+    "failed_to_load_data": "Failed to load data"
   },
   "auth": {
     "title": "Welcome to IoT2MQTT",
@@ -74,7 +80,10 @@
       "test_connection": "Test Connection",
       "testing": "Testing...",
       "connection_success": "Connection successful",
-      "connection_failed": "Connection failed"
+      "connection_failed": "Connection failed",
+      "broker_settings": "MQTT Broker Settings",
+      "authentication_optional": "Authentication (Optional)",
+      "topics_format": "Topics will be created as: {{format}}"
     }
   },
   "dashboard": {
@@ -85,7 +94,8 @@
     "system_status": "System Status",
     "mqtt_status": "MQTT Status",
     "containers_running": "Containers Running",
-    "total_devices": "Total Devices"
+    "total_devices": "Total Devices",
+    "welcome_message": "Welcome to your smart home control center"
   },
   "integrations": {
     "title": "Integrations",
@@ -96,7 +106,28 @@
     "instances_plural": "{{count}} instances",
     "no_instances": "No instances",
     "setup": "Setup",
-    "manage": "Manage"
+    "manage": "Manage",
+    "manage_description": "Manage your device integrations",
+    "search_configured": "Search configured integrations...",
+    "discovered": "Discovered",
+    "configured": "Configured",
+    "no_match": "No integrations found matching your search",
+    "no_configured_yet": "No integrations configured yet. Click \"Add Integration\" to get started.",
+    "enter_instance_id": "Enter instance ID (e.g., living_room):",
+    "enter_friendly_name": "Enter friendly name:",
+    "device_added": "Device added",
+    "device_added_success": "Device has been successfully added",
+    "failed_to_add_device": "Failed to add device",
+    "device_ignored": "Device ignored",
+    "device_removed_from_list": "Device has been removed from discovered list",
+    "failed_to_ignore_device": "Failed to ignore device",
+    "failed_to_load_available": "Failed to load available integrations",
+    "auto": "Auto",
+    "version": "Version",
+    "no_available": "No integrations available",
+    "flow": {
+      "follow_instructions": "Follow the instructions to continue."
+    }
   },
   "devices": {
     "title": "Devices",
@@ -109,7 +140,24 @@
     "rgb_color": "RGB Color",
     "power": "Power",
     "on": "On",
-    "off": "Off"
+    "off": "Off",
+    "description": "Control and monitor your IoT devices",
+    "all_devices": "All Devices",
+    "search_placeholder": "Search devices...",
+    "no_devices_found": "No devices found",
+    "no_match": "No devices match your search",
+    "add_first_device": "Add your first device from the Integrations page",
+    "device_options": "Device Options",
+    "view_history": "View History",
+    "remove": "Remove",
+    "color": "Color",
+    "effects": "Effects",
+    "total_devices_label": "Total Devices",
+    "active": "Active",
+    "rooms": "Rooms",
+    "failed_to_load": "Failed to load devices",
+    "command_sent": "Command sent to device",
+    "failed_to_control": "Failed to control device"
   },
   "mqtt_explorer": {
     "title": "MQTT Explorer",
@@ -124,7 +172,26 @@
     "timestamp": "Timestamp",
     "command_encyclopedia": "Command Encyclopedia",
     "payload_copied": "Payload copied to clipboard",
-    "insert_hint": "Click any command to insert it into the payload field"
+    "insert_hint": "Click any command to insert it into the payload field",
+    "description": "Browse and interact with MQTT topics",
+    "search_topics": "Search topics...",
+    "no_topics": "No topics discovered yet",
+    "details": "Details",
+    "publish_tab": "Publish",
+    "messages": "Messages",
+    "topic_path": "Topic Path",
+    "path_copied": "Topic path copied to clipboard",
+    "last_update": "Last Update",
+    "select_topic": "Select a topic to view details",
+    "select_device": "Select device",
+    "search_devices": "Search devices...",
+    "qos_0": "0 - At most once",
+    "qos_1": "1 - At least once",
+    "qos_2": "2 - Exactly once",
+    "publish_message": "Publish Message",
+    "no_messages": "No messages received yet",
+    "message_published": "Message published",
+    "failed_to_publish": "Failed to publish message"
   },
   "containers": {
     "title": "Containers",
@@ -136,7 +203,30 @@
     "view_logs": "View Logs",
     "clear_logs": "Clear",
     "follow_logs": "Follow",
-    "filter_level": "Filter by level"
+    "filter_level": "Filter by level",
+    "description": "Monitor and manage Docker containers",
+    "loading": "Loading containers...",
+    "failed_to_fetch": "Failed to fetch containers",
+    "count": "containers",
+    "no_containers": "No containers found",
+    "container_id": "Container ID",
+    "created": "Created",
+    "ports": "Ports",
+    "resource_usage": "Resource Usage",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "network_rx": "Network RX",
+    "network_tx": "Network TX",
+    "container_logs": "Container Logs",
+    "select_container": "Select a container",
+    "click_to_view": "Click on a container to view details and logs",
+    "delete_container": "Delete Container",
+    "confirm_delete": "Are you sure you want to delete",
+    "action_cannot_undone": "This action cannot be undone.",
+    "deleted_successfully": "Container deleted successfully",
+    "failed_to_delete": "Failed to delete container",
+    "action_success": "Container {{action}} successfully",
+    "action_failed": "Failed to {{action}} container"
   },
   "settings": {
     "title": "Settings",

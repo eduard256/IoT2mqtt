@@ -133,7 +133,7 @@ export default function Layout({ children }: LayoutProps) {
                   className="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-accent w-full text-red-600 dark:text-red-400"
                 >
                   <LogOut className="h-5 w-5" />
-                  <span className="text-sm">Logout</span>
+                  <span className="text-sm">{t('common.logout')}</span>
                 </button>
               </div>
             </div>

@@ -117,8 +117,8 @@ export default function Containers() {
     } catch (error) {
       if (error instanceof Error && error.message !== 'No authentication token') {
         toast({
-          title: t('Error'),
-          description: t('Failed to fetch containers'),
+          title: t('common.error'),
+          description: t('containers.failed_to_fetch'),
           variant: 'destructive'
         })
       }
@@ -140,8 +140,8 @@ export default function Containers() {
     const token = getAuthToken()
     if (!token) {
       toast({
-        title: t('Error'),
-        description: t('No authentication token'),
+        title: t('common.error'),
+        description: t('common.no_auth_token'),
         variant: 'destructive'
       })
       return
@@ -214,16 +214,16 @@ export default function Containers() {
       }
 
       toast({
-        title: t('Success'),
-        description: `Container ${action}ed successfully`,
+        title: t('common.success'),
+        description: t('containers.action_success', { action }),
       })
-      
+
       // Refresh container list
       await fetchContainers()
     } catch (error) {
       toast({
-        title: t('Error'),
-        description: `Failed to ${action} container`,
+        title: t('common.error'),
+        description: t('containers.action_failed', { action }),
         variant: 'destructive'
       })
     }
@@ -265,16 +265,16 @@ export default function Containers() {
       }
       
       toast({
-        title: t('Success'),
-        description: t('Container deleted successfully'),
+        title: t('common.success'),
+        description: t('containers.deleted_successfully'),
       })
-      
+
       setShowDeleteDialog(false)
       setContainerToDelete(null)
     } catch (error) {
       toast({
-        title: t('Error'),
-        description: t('Failed to delete container'),
+        title: t('common.error'),
+        description: t('containers.failed_to_delete'),
         variant: 'destructive'
       })
     }
@@ -335,7 +335,7 @@ export default function Containers() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <Container className="h-12 w-12 animate-pulse text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">{t('Loading containers...')}</p>
+          <p className="text-muted-foreground">{t('containers.loading')}</p>
         </div>
       </div>
     )
@@ -348,14 +348,14 @@ export default function Containers() {
         <div>
           <h1 className="text-3xl font-bold">{t('containers.title')}</h1>
           <p className="text-muted-foreground mt-1">
-            {t('Monitor and manage Docker containers')}
+            {t('containers.description')}
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="gap-2">
             <Container className="h-3 w-3" />
-            {containers.length} {t('containers')}
+            {containers.length} {t('containers.count')}
           </Badge>
           <Button
             variant="outline"
@@ -373,7 +373,7 @@ export default function Containers() {
         {/* Container List */}
         <Card className="lg:col-span-1 flex flex-col">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">{t('Containers')}</CardTitle>
+            <CardTitle className="text-base">{t('containers.title')}</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 p-0">
             <ScrollArea className="h-[600px]">
@@ -435,7 +435,7 @@ export default function Containers() {
                 {containers.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
                     <Container className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>{t('No containers found')}</p>
+                    <p>{t('containers.no_containers')}</p>
                   </div>
                 )}
               </div>
@@ -468,7 +468,7 @@ export default function Containers() {
                             onClick={() => handleContainerAction(selectedContainer, 'stop')}
                           >
                             <Pause className="mr-2 h-4 w-4" />
-                            {t('Stop')}
+                            {t('common.stop')}
                           </Button>
                           <Button
                             variant="outline"
@@ -476,7 +476,7 @@ export default function Containers() {
                             onClick={() => handleContainerAction(selectedContainer, 'restart')}
                           >
                             <RotateCw className="mr-2 h-4 w-4" />
-                            {t('Restart')}
+                            {t('common.restart')}
                           </Button>
                         </>
                       ) : (
@@ -486,7 +486,7 @@ export default function Containers() {
                           onClick={() => handleContainerAction(selectedContainer, 'start')}
                         >
                           <Play className="mr-2 h-4 w-4" />
-                          {t('Start')}
+                          {t('common.start')}
                         </Button>
                       )}
                       <Button
@@ -505,24 +505,24 @@ export default function Containers() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm text-muted-foreground">{t('Container ID')}</p>
+                      <p className="text-sm text-muted-foreground">{t('containers.container_id')}</p>
                       <p className="font-mono text-sm">{selectedContainer.id.substring(0, 12)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">{t('Created')}</p>
+                      <p className="text-sm text-muted-foreground">{t('containers.created')}</p>
                       <p className="text-sm">
                         {new Date(selectedContainer.created).toLocaleDateString()}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">{t('Status')}</p>
+                      <p className="text-sm text-muted-foreground">{t('containers.status')}</p>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(selectedContainer.status)}
                         <span className="text-sm capitalize">{selectedContainer.status}</span>
                       </div>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">{t('Ports')}</p>
+                      <p className="text-sm text-muted-foreground">{t('containers.ports')}</p>
                       <p className="text-sm font-mono">
                         {Object.entries(selectedContainer.ports)
                           .map(([port, mapping]) => 
@@ -538,24 +538,24 @@ export default function Containers() {
                   {selectedContainer.stats && selectedContainer.status === 'running' && (
                     <>
                       <div className="mt-4 pt-4 border-t">
-                        <p className="text-sm font-medium mb-3">{t('Resource Usage')}</p>
+                        <p className="text-sm font-medium mb-3">{t('containers.resource_usage')}</p>
                         <div className="space-y-3">
                           <div>
                             <div className="flex items-center justify-between text-sm mb-1">
                               <span className="flex items-center gap-2">
                                 <Cpu className="h-4 w-4" />
-                                {t('CPU')}
+                                {t('containers.cpu')}
                               </span>
                               <span>{selectedContainer.stats.cpu_percent.toFixed(1)}%</span>
                             </div>
                             <Progress value={selectedContainer.stats.cpu_percent} className="h-2" />
                           </div>
-                          
+
                           <div>
                             <div className="flex items-center justify-between text-sm mb-1">
                               <span className="flex items-center gap-2">
                                 <HardDrive className="h-4 w-4" />
-                                {t('Memory')}
+                                {t('containers.memory')}
                               </span>
                               <span>
                                 {formatBytes(selectedContainer.stats.memory_usage)} / 
@@ -570,13 +570,13 @@ export default function Containers() {
                           
                           <div className="grid grid-cols-2 gap-4 pt-2">
                             <div>
-                              <p className="text-xs text-muted-foreground">{t('Network RX')}</p>
+                              <p className="text-xs text-muted-foreground">{t('containers.network_rx')}</p>
                               <p className="text-sm font-mono">
                                 {formatBytes(selectedContainer.stats.network_rx)}
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs text-muted-foreground">{t('Network TX')}</p>
+                              <p className="text-xs text-muted-foreground">{t('containers.network_tx')}</p>
                               <p className="text-sm font-mono">
                                 {formatBytes(selectedContainer.stats.network_tx)}
                               </p>
@@ -595,7 +595,7 @@ export default function Containers() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Terminal className="h-4 w-4" />
-                      {t('Container Logs')}
+                      {t('containers.container_logs')}
                     </CardTitle>
                     <Button
                       variant="outline"
@@ -630,9 +630,9 @@ export default function Containers() {
             <Card className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <Container className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-lg font-medium mb-2">{t('Select a container')}</p>
+                <p className="text-lg font-medium mb-2">{t('containers.select_container')}</p>
                 <p className="text-muted-foreground">
-                  {t('Click on a container to view details and logs')}
+                  {t('containers.click_to_view')}
                 </p>
               </div>
             </Card>
@@ -644,18 +644,18 @@ export default function Containers() {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('Delete Container')}</AlertDialogTitle>
+            <AlertDialogTitle>{t('containers.delete_container')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('Are you sure you want to delete')} {containerToDelete?.name}? 
-              {t('This action cannot be undone.')}
+              {t('containers.confirm_delete')} {containerToDelete?.name}?
+              {t('containers.action_cannot_undone')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setContainerToDelete(null)}>
-              {t('Cancel')}
+              {t('common.cancel')}
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteContainer}>
-              {t('Delete')}
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

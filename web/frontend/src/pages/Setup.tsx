@@ -98,9 +98,9 @@ export default function Setup() {
         
         <Card>
           <CardHeader>
-            <CardTitle>MQTT Broker Settings</CardTitle>
+            <CardTitle>{t('setup.mqtt.broker_settings')}</CardTitle>
             <CardDescription>
-              Configure connection to your MQTT broker
+              {t('setup.mqtt.description')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -132,7 +132,7 @@ export default function Setup() {
             
             {/* Authentication */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold">Authentication (Optional)</h3>
+              <h3 className="text-sm font-semibold">{t('setup.mqtt.authentication_optional')}</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
@@ -170,7 +170,7 @@ export default function Setup() {
                 placeholder="IoT2mqtt"
               />
               <p className="text-xs text-muted-foreground">
-                Topics will be created as: {config.base_topic}/v1/instances/...
+                {t('setup.mqtt.topics_format', { format: `${config.base_topic}/v1/instances/...` })}
               </p>
             </div>
             

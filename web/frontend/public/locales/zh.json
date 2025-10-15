@@ -52,7 +52,13 @@
     "disconnected": "已断开",
     "enabled": "已启用",
     "disabled": "已禁用",
-    "copied": "已复制"
+    "copied": "已复制",
+    "yes": "是",
+    "no": "否",
+    "logout": "退出",
+    "no_auth_token": "无认证令牌",
+    "no_auth_token_found": "未找到认证令牌",
+    "failed_to_load_data": "加载数据失败"
   },
   "auth": {
     "title": "欢迎使用 IoT2MQTT",
@@ -74,7 +80,10 @@
       "test_connection": "测试连接",
       "testing": "测试中...",
       "connection_success": "连接成功",
-      "connection_failed": "连接失败"
+      "connection_failed": "连接失败",
+      "broker_settings": "MQTT 代理设置",
+      "authentication_optional": "认证（可选）",
+      "topics_format": "主题将创建为: {{format}}"
     }
   },
   "dashboard": {
@@ -85,7 +94,8 @@
     "system_status": "系统状态",
     "mqtt_status": "MQTT 状态",
     "containers_running": "运行中的容器",
-    "total_devices": "设备总数"
+    "total_devices": "设备总数",
+    "welcome_message": "欢迎来到智能家居控制中心"
   },
   "integrations": {
     "title": "集成",
@@ -96,7 +106,28 @@
     "instances_plural": "{{count}} 个实例",
     "no_instances": "无实例",
     "setup": "设置",
-    "manage": "管理"
+    "manage": "管理",
+    "manage_description": "管理您的设备集成",
+    "search_configured": "搜索已配置的集成...",
+    "discovered": "已发现",
+    "configured": "已配置",
+    "no_match": "未找到匹配的集成",
+    "no_configured_yet": "尚未配置集成。点击\"添加集成\"开始。",
+    "enter_instance_id": "输入实例 ID（例如：living_room）：",
+    "enter_friendly_name": "输入友好名称：",
+    "device_added": "设备已添加",
+    "device_added_success": "设备已成功添加",
+    "failed_to_add_device": "添加设备失败",
+    "device_ignored": "设备已忽略",
+    "device_removed_from_list": "设备已从发现列表中移除",
+    "failed_to_ignore_device": "忽略设备失败",
+    "failed_to_load_available": "加载可用集成失败",
+    "auto": "自动",
+    "version": "版本",
+    "no_available": "无可用集成",
+    "flow": {
+      "follow_instructions": "按照说明继续。"
+    }
   },
   "devices": {
     "title": "设备",
@@ -109,7 +140,24 @@
     "rgb_color": "RGB 颜色",
     "power": "电源",
     "on": "开",
-    "off": "关"
+    "off": "关",
+    "description": "控制和监控您的 IoT 设备",
+    "all_devices": "所有设备",
+    "search_placeholder": "搜索设备...",
+    "no_devices_found": "未找到设备",
+    "no_match": "没有设备匹配您的搜索",
+    "add_first_device": "从集成页面添加您的第一个设备",
+    "device_options": "设备选项",
+    "view_history": "查看历史",
+    "remove": "移除",
+    "color": "颜色",
+    "effects": "效果",
+    "total_devices_label": "设备总数",
+    "active": "活动",
+    "rooms": "房间",
+    "failed_to_load": "加载设备失败",
+    "command_sent": "命令已发送到设备",
+    "failed_to_control": "控制设备失败"
   },
   "mqtt_explorer": {
     "title": "MQTT 浏览器",
@@ -124,7 +172,26 @@
     "timestamp": "时间戳",
     "command_encyclopedia": "命令百科",
     "payload_copied": "负载已复制到剪贴板",
-    "insert_hint": "点击任意命令即可将其插入到负载字段"
+    "insert_hint": "点击任意命令即可将其插入到负载字段",
+    "description": "浏览并与 MQTT 主题交互",
+    "search_topics": "搜索主题...",
+    "no_topics": "尚未发现主题",
+    "details": "详情",
+    "publish_tab": "发布",
+    "messages": "消息",
+    "topic_path": "主题路径",
+    "path_copied": "主题路径已复制到剪贴板",
+    "last_update": "最后更新",
+    "select_topic": "选择主题查看详情",
+    "select_device": "选择设备",
+    "search_devices": "搜索设备...",
+    "qos_0": "0 - 最多一次",
+    "qos_1": "1 - 至少一次",
+    "qos_2": "2 - 恰好一次",
+    "publish_message": "发布消息",
+    "no_messages": "尚未收到消息",
+    "message_published": "消息已发布",
+    "failed_to_publish": "发布消息失败"
   },
   "containers": {
     "title": "容器",
@@ -136,7 +203,30 @@
     "view_logs": "查看日志",
     "clear_logs": "清除",
     "follow_logs": "跟踪",
-    "filter_level": "按级别筛选"
+    "filter_level": "按级别筛选",
+    "description": "监控和管理 Docker 容器",
+    "loading": "加载容器中...",
+    "failed_to_fetch": "获取容器失败",
+    "count": "个容器",
+    "no_containers": "未找到容器",
+    "container_id": "容器 ID",
+    "created": "创建时间",
+    "ports": "端口",
+    "resource_usage": "资源使用",
+    "cpu": "CPU",
+    "memory": "内存",
+    "network_rx": "网络接收",
+    "network_tx": "网络发送",
+    "container_logs": "容器日志",
+    "select_container": "选择容器",
+    "click_to_view": "点击容器查看详情和日志",
+    "delete_container": "删除容器",
+    "confirm_delete": "您确定要删除",
+    "action_cannot_undone": "此操作无法撤销。",
+    "deleted_successfully": "容器已成功删除",
+    "failed_to_delete": "删除容器失败",
+    "action_success": "容器{{action}}成功",
+    "action_failed": "{{action}}容器失败"
   },
   "settings": {
     "title": "设置",

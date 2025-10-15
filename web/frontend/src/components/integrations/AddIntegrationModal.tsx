@@ -53,8 +53,8 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
       }
     } catch (error) {
       toast({
-        title: t('Error'),
-        description: t('Failed to load available integrations'),
+        title: t('common.error'),
+        description: t('integrations.failed_to_load_available'),
         variant: 'destructive'
       })
     } finally {
@@ -140,9 +140,9 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
           ) : filteredIntegrations.length === 0 ? (
             <Alert>
               <AlertDescription>
-                {searchQuery 
-                  ? t('No integrations found matching your search')
-                  : t('No integrations available')}
+                {searchQuery
+                  ? t('integrations.no_match')
+                  : t('integrations.no_available')}
               </AlertDescription>
             </Alert>
           ) : (
@@ -167,17 +167,17 @@ export default function AddIntegrationModal({ onClose, onIntegrationAdded }: Add
                             <h4 className="font-semibold truncate">{integration.display_name}</h4>
                             {integration.discovery && (
                               <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-                                {t('Auto')}
+                                {t('integrations.auto')}
                               </Badge>
                             )}
                           </div>
-                          
+
                           <p className="text-sm text-muted-foreground line-clamp-2">
                             {integration.description}
                           </p>
 
                           <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                            <span>{t('Version')}: {integration.version}</span>
+                            <span>{t('integrations.version')}: {integration.version}</span>
                             {integration.branding?.category && (
                               <Badge variant="outline" className="text-xs">
                                 {integration.branding.category as string}

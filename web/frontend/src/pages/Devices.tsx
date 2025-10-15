@@ -100,8 +100,8 @@ export default function Devices() {
     } catch (error) {
       if (error instanceof Error && error.message !== 'No authentication token') {
         toast({
-          title: t('Error'),
-          description: t('Failed to load devices'),
+          title: t('common.error'),
+          description: t('devices.failed_to_load'),
           variant: 'destructive'
         })
       }
@@ -154,16 +154,16 @@ export default function Devices() {
       }
 
       toast({
-        title: t('Success'),
-        description: t('Command sent to device'),
+        title: t('common.success'),
+        description: t('devices.command_sent'),
       })
     } catch (error) {
       // Revert optimistic update on error
       await fetchDevices()
-      
+
       toast({
-        title: t('Error'),
-        description: t('Failed to control device'),
+        title: t('common.error'),
+        description: t('devices.failed_to_control'),
         variant: 'destructive'
       })
     }
@@ -247,32 +247,32 @@ export default function Devices() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>{t('Device Options')}</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('devices.device_options')}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <Settings className="mr-2 h-4 w-4" />
-                  {t('Settings')}
+                  {t('settings.title')}
                 </DropdownMenuItem>
                 <DropdownMenuItem>
-                  {t('View History')}
+                  {t('devices.view_history')}
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-red-600">
-                  {t('Remove')}
+                  {t('devices.remove')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          
+
           <div className="flex items-center gap-2 mt-2">
             {device.online ? (
               <Badge variant="outline" className="text-xs">
                 <Wifi className="mr-1 h-3 w-3" />
-                {t('Online')}
+                {t('common.online')}
               </Badge>
             ) : (
               <Badge variant="destructive" className="text-xs">
                 <WifiOff className="mr-1 h-3 w-3" />
-                {t('Offline')}
+                {t('common.offline')}
               </Badge>
             )}
             {device.manufacturer && (
@@ -286,7 +286,7 @@ export default function Devices() {
         <CardContent className="space-y-4">
           {/* Power Switch */}
           <div className="flex items-center justify-between">
-            <Label htmlFor={`power-${device.device_id}`}>{t('Power')}</Label>
+            <Label htmlFor={`power-${device.device_id}`}>{t('devices.power')}</Label>
             <Switch
               id={`power-${device.device_id}`}
               checked={device.state?.power || false}
@@ -294,12 +294,12 @@ export default function Devices() {
               disabled={!device.online}
             />
           </div>
-          
+
           {/* Brightness Slider for Lights */}
           {isLight && device.capabilities?.brightness && device.state?.power && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>{t('Brightness')}</Label>
+                <Label>{t('devices.brightness')}</Label>
                 <span className="text-sm text-muted-foreground">{device.state?.brightness || 0}%</span>
               </div>
               <Slider
@@ -317,7 +317,7 @@ export default function Devices() {
           {isLight && device.capabilities?.color_temp && device.state?.power && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>{t('Color Temperature')}</Label>
+                <Label>{t('devices.color_temp')}</Label>
                 <span className="text-sm text-muted-foreground">{device.state?.color_temp || 3000}K</span>
               </div>
               <Slider
@@ -335,7 +335,7 @@ export default function Devices() {
           {/* RGB Color Picker for RGB Lights */}
           {isLight && device.capabilities?.rgb && device.state?.power && (
             <div className="space-y-2">
-              <Label>{t('Color')}</Label>
+              <Label>{t('devices.color')}</Label>
               <div className="flex gap-2">
                 <input
                   type="color"
@@ -347,11 +347,11 @@ export default function Devices() {
               </div>
             </div>
           )}
-          
+
           {/* Effects for Lights */}
           {isLight && device.capabilities?.effects && device.state?.power && (
             <div className="space-y-2">
-              <Label>{t('Effects')}</Label>
+              <Label>{t('devices.effects')}</Label>
               <div className="grid grid-cols-2 gap-2">
                 {device.capabilities.effects.map((effect) => (
                   <Button
@@ -387,7 +387,7 @@ export default function Devices() {
         <div>
           <h1 className="text-3xl font-bold">{t('devices.title')}</h1>
           <p className="text-muted-foreground mt-1">
-            {t('Control and monitor your IoT devices')}
+            {t('devices.description')}
           </p>
         </div>
         
@@ -402,7 +402,7 @@ export default function Devices() {
       <Tabs value={selectedRoom} onValueChange={setSelectedRoom}>
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="all">
-            {t('All Devices')} ({devices.length})
+            {t('devices.all_devices')} ({devices.length})
           </TabsTrigger>
           {rooms.map((room) => {
             const RoomIcon = room.icon
@@ -419,7 +419,7 @@ export default function Devices() {
         <div className="mt-4">
           <Input
             type="text"
-            placeholder={t('Search devices...')}
+            placeholder={t('devices.search_placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="max-w-sm"
@@ -431,11 +431,11 @@ export default function Devices() {
           {filteredDevices.length === 0 ? (
             <Card className="p-12 text-center">
               <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-lg font-semibold mb-2">{t('No devices found')}</p>
+              <p className="text-lg font-semibold mb-2">{t('devices.no_devices_found')}</p>
               <p className="text-muted-foreground">
-                {searchQuery 
-                  ? t('No devices match your search')
-                  : t('Add your first device from the Integrations page')
+                {searchQuery
+                  ? t('devices.no_match')
+                  : t('devices.add_first_device')
                 }
               </p>
             </Card>
@@ -457,19 +457,19 @@ export default function Devices() {
               <Power className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">{t('Total Devices')}</p>
+              <p className="text-sm text-muted-foreground">{t('devices.total_devices_label')}</p>
               <p className="text-2xl font-bold">{devices.length}</p>
             </div>
           </div>
         </Card>
-        
+
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-500/10 rounded-lg">
               <Wifi className="h-5 w-5 text-green-500" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">{t('Online')}</p>
+              <p className="text-sm text-muted-foreground">{t('common.online')}</p>
               <p className="text-2xl font-bold">
                 {devices.filter(d => d.online).length}
               </p>
@@ -483,7 +483,7 @@ export default function Devices() {
               <Sun className="h-5 w-5 text-yellow-500" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">{t('Active')}</p>
+              <p className="text-sm text-muted-foreground">{t('devices.active')}</p>
               <p className="text-2xl font-bold">
                 {devices.filter(d => d.state?.power).length}
               </p>
@@ -497,7 +497,7 @@ export default function Devices() {
               <Home className="h-5 w-5 text-blue-500" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">{t('Rooms')}</p>
+              <p className="text-sm text-muted-foreground">{t('devices.rooms')}</p>
               <p className="text-2xl font-bold">{rooms.length}</p>
             </div>
           </div>

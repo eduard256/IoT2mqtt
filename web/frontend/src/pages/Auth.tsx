@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 
 export default function Auth() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const login = useAuthStore(state => state.login)
   const checkAuth = useAuthStore(state => state.checkAuth)
@@ -163,12 +163,9 @@ export default function Auth() {
             </button>
             <span>•</span>
             <select
-              onChange={(e) => {
-                const { i18n } = useTranslation()
-                i18n.changeLanguage(e.target.value)
-              }}
+              onChange={(e) => i18n.changeLanguage(e.target.value)}
               className="bg-transparent outline-none hover:text-foreground transition-colors cursor-pointer"
-              defaultValue={localStorage.getItem('i18nextLng') || 'en'}
+              value={i18n.language}
             >
               <option value="en">English</option>
               <option value="ru">Русский</option>

@@ -94,7 +94,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl font-bold">{t('dashboard.title')}</h1>
           <p className="text-muted-foreground mt-1">
-            Welcome to your smart home control center
+            {t('dashboard.welcome_message')}
           </p>
         </div>
         

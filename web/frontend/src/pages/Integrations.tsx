@@ -140,8 +140,8 @@ export default function Integrations() {
 
     } catch (error) {
       toast({
-        title: t('Error'),
-        description: t('Failed to load data'),
+        title: t('common.error'),
+        description: t('common.failed_to_load_data'),
         variant: 'destructive'
       })
     } finally {
@@ -150,10 +150,10 @@ export default function Integrations() {
   }
 
   const handleAddDevice = async (device: DiscoveredDevice) => {
-    const instanceId = prompt(t('Enter instance ID (e.g., living_room):'))
+    const instanceId = prompt(t('integrations.enter_instance_id'))
     if (!instanceId) return
 
-    const friendlyName = prompt(t('Enter friendly name:'), device.name)
+    const friendlyName = prompt(t('integrations.enter_friendly_name'), device.name)
     if (!friendlyName) return
 
     try {
@@ -173,8 +173,8 @@ export default function Integrations() {
 
       if (response.ok) {
         toast({
-          title: t('Device added'),
-          description: t('Device has been successfully added')
+          title: t('integrations.device_added'),
+          description: t('integrations.device_added_success')
         })
         fetchData() // Refresh data
       } else {
@@ -182,8 +182,8 @@ export default function Integrations() {
       }
     } catch (error) {
       toast({
-        title: t('Error'),
-        description: t('Failed to add device'),
+        title: t('common.error'),
+        description: t('integrations.failed_to_add_device'),
         variant: 'destructive'
       })
     }
@@ -202,15 +202,15 @@ export default function Integrations() {
 
       if (response.ok) {
         toast({
-          title: t('Device ignored'),
-          description: t('Device has been removed from discovered list')
+          title: t('integrations.device_ignored'),
+          description: t('integrations.device_removed_from_list')
         })
         fetchData()
       }
     } catch (error) {
       toast({
-        title: t('Error'),
-        description: t('Failed to ignore device'),
+        title: t('common.error'),
+        description: t('integrations.failed_to_ignore_device'),
         variant: 'destructive'
       })
     }
@@ -249,9 +249,9 @@ export default function Integrations() {
       {/* Header with Search */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{t('Integrations')}</h1>
+          <h1 className="text-3xl font-bold">{t('integrations.title')}</h1>
           <p className="text-muted-foreground mt-1">
-            {t('Manage your device integrations')}
+            {t('integrations.manage_description')}
           </p>
         </div>
       </div>
@@ -261,7 +261,7 @@ export default function Integrations() {
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
         <Input
           type="text"
-          placeholder={t('Search configured integrations...')}
+          placeholder={t('integrations.search_configured')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-10"
@@ -271,7 +271,7 @@ export default function Integrations() {
       {/* Discovered Devices Section */}
       {discoveredDevices.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-xl font-semibold">{t('Discovered')}</h2>
+          <h2 className="text-xl font-semibold">{t('integrations.discovered')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {discoveredDevices.map((device) => (
               <DiscoveredDeviceCard
@@ -287,15 +287,15 @@ export default function Integrations() {
 
       {/* Configured Integrations Section */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">{t('Configured')}</h2>
-        
+        <h2 className="text-xl font-semibold">{t('integrations.configured')}</h2>
+
         {filteredIntegrations.length === 0 ? (
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {searchQuery 
-                ? t('No integrations found matching your search')
-                : t('No integrations configured yet. Click "Add Integration" to get started.')}
+              {searchQuery
+                ? t('integrations.no_match')
+                : t('integrations.no_configured_yet')}
             </AlertDescription>
           </Alert>
         ) : (

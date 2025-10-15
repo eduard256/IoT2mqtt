@@ -117,8 +117,8 @@ export default function MQTTExplorer() {
     const token = getAuthToken()
     if (!token) {
       toast({
-        title: t('Error'),
-        description: t('No authentication token found'),
+        title: t('common.error'),
+        description: t('common.no_auth_token_found'),
         variant: 'destructive'
       })
       return
@@ -319,16 +319,16 @@ export default function MQTTExplorer() {
       }))
       
       toast({
-        title: t('Success'),
-        description: t('Message published'),
+        title: t('common.success'),
+        description: t('mqtt_explorer.message_published'),
       })
-      
+
       // Clear form
       setPublishPayload('')
     } catch (error) {
       toast({
-        title: t('Error'),
-        description: t('Failed to publish message'),
+        title: t('common.error'),
+        description: t('mqtt_explorer.failed_to_publish'),
         variant: 'destructive'
       })
     }
@@ -442,15 +442,15 @@ export default function MQTTExplorer() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{t('MQTT Explorer')}</h1>
+          <h1 className="text-3xl font-bold">{t('mqtt_explorer.title')}</h1>
           <p className="text-muted-foreground mt-1">
-            {t('Browse and interact with MQTT topics')}
+            {t('mqtt_explorer.description')}
           </p>
         </div>
-        
+
         <Badge variant={connected ? "default" : "destructive"} className="gap-2">
           {connected ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-          {connected ? t('Connected') : t('Disconnected')}
+          {connected ? t('common.connected') : t('common.disconnected')}
         </Badge>
       </div>
 
@@ -458,10 +458,10 @@ export default function MQTTExplorer() {
         {/* Topic Tree */}
         <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>{t('Topics')}</CardTitle>
+            <CardTitle>{t('mqtt_explorer.topics')}</CardTitle>
             <Input
               type="text"
-              placeholder={t('Search topics...')}
+              placeholder={t('mqtt_explorer.search_topics')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="mt-2"
@@ -473,7 +473,7 @@ export default function MQTTExplorer() {
                 renderTopicTree(filteredTopics)
               ) : (
                 <p className="text-muted-foreground text-center py-8">
-                  {t('No topics discovered yet')}
+                  {t('mqtt_explorer.no_topics')}
                 </p>
               )}
             </ScrollArea>
@@ -485,9 +485,9 @@ export default function MQTTExplorer() {
           <Tabs defaultValue="details">
             <CardHeader>
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="details">{t('Details')}</TabsTrigger>
-                <TabsTrigger value="publish">{t('Publish')}</TabsTrigger>
-                <TabsTrigger value="messages">{t('Messages')}</TabsTrigger>
+                <TabsTrigger value="details">{t('mqtt_explorer.details')}</TabsTrigger>
+                <TabsTrigger value="publish">{t('mqtt_explorer.publish_tab')}</TabsTrigger>
+                <TabsTrigger value="messages">{t('mqtt_explorer.messages')}</TabsTrigger>
               </TabsList>
             </CardHeader>
             
@@ -496,7 +496,7 @@ export default function MQTTExplorer() {
                 {selectedTopic ? (
                   <>
                     <div>
-                      <Label>{t('Topic Path')}</Label>
+                      <Label>{t('mqtt_explorer.topic_path')}</Label>
                       <div className="flex items-center gap-2 mt-1">
                         <Input value={selectedTopic.path} readOnly className="font-mono" />
                         <Button
@@ -505,8 +505,8 @@ export default function MQTTExplorer() {
                           onClick={() => {
                             navigator.clipboard.writeText(selectedTopic.path)
                             toast({
-                              title: t('Copied'),
-                              description: t('Topic path copied to clipboard'),
+                              title: t('common.copied'),
+                              description: t('mqtt_explorer.path_copied'),
                             })
                           }}
                         >
@@ -514,11 +514,11 @@ export default function MQTTExplorer() {
                         </Button>
                       </div>
                     </div>
-                    
+
                     {selectedTopic.value !== undefined && (
                       <>
                         <div>
-                          <Label>{t('Value')}</Label>
+                          <Label>{t('mqtt_explorer.value')}</Label>
                           <pre className="mt-1 p-3 bg-muted rounded text-sm overflow-auto max-h-96">
                             {typeof selectedTopic.value === 'object'
                               ? JSON.stringify(selectedTopic.value, null, 2)
@@ -528,18 +528,18 @@ export default function MQTTExplorer() {
                         
                         {selectedTopic.timestamp && (
                           <div>
-                            <Label>{t('Last Update')}</Label>
+                            <Label>{t('mqtt_explorer.last_update')}</Label>
                             <p className="text-sm text-muted-foreground mt-1">
                               {new Date(selectedTopic.timestamp).toLocaleString()}
                             </p>
                           </div>
                         )}
-                        
+
                         {selectedTopic.retained !== undefined && (
                           <div>
-                            <Label>{t('Retained')}</Label>
+                            <Label>{t('mqtt_explorer.retained')}</Label>
                             <p className="text-sm mt-1">
-                              {selectedTopic.retained ? t('Yes') : t('No')}
+                              {selectedTopic.retained ? t('common.yes') : t('common.no')}
                             </p>
                           </div>
                         )}
@@ -548,14 +548,14 @@ export default function MQTTExplorer() {
                   </>
                 ) : (
                   <p className="text-muted-foreground text-center py-8">
-                    {t('Select a topic to view details')}
+                    {t('mqtt_explorer.select_topic')}
                   </p>
                 )}
               </TabsContent>
               
               <TabsContent value="publish" className="space-y-4">
                 <div>
-                  <Label htmlFor="publish-topic">{t('Topic')}</Label>
+                  <Label htmlFor="publish-topic">{t('mqtt_explorer.topic')}</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       id="publish-topic"
@@ -568,17 +568,17 @@ export default function MQTTExplorer() {
                       size="icon"
                       variant="outline"
                       onClick={() => setShowDeviceSelector(!showDeviceSelector)}
-                      title={t('Select device')}
+                      title={t('mqtt_explorer.select_device')}
                     >
                       <Search className="h-4 w-4" />
                     </Button>
                   </div>
-                  
+
                   {showDeviceSelector && (
                     <Card className="mt-2 p-3">
                       <Input
                         type="text"
-                        placeholder={t('Search devices...')}
+                        placeholder={t('mqtt_explorer.search_devices')}
                         value={deviceSearchQuery}
                         onChange={(e) => setDeviceSearchQuery(e.target.value)}
                         className="mb-2"
@@ -611,7 +611,7 @@ export default function MQTTExplorer() {
                                   </div>
                                 </div>
                                 {device.online && (
-                                  <Badge variant="default" className="text-xs">Online</Badge>
+                                  <Badge variant="default" className="text-xs">{t('common.online')}</Badge>
                                 )}
                               </div>
                             ))
@@ -621,10 +621,10 @@ export default function MQTTExplorer() {
                     </Card>
                   )}
                 </div>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="publish-payload">{t('Payload')}</Label>
+                    <Label htmlFor="publish-payload">{t('mqtt_explorer.payload')}</Label>
                     <textarea
                       id="publish-payload"
                       value={publishPayload}
@@ -643,19 +643,19 @@ export default function MQTTExplorer() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="publish-qos">{t('QoS')}</Label>
+                    <Label htmlFor="publish-qos">{t('mqtt_explorer.qos')}</Label>
                     <Select value={publishQos} onValueChange={setPublishQos}>
                       <SelectTrigger id="publish-qos">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="0">0 - At most once</SelectItem>
-                        <SelectItem value="1">1 - At least once</SelectItem>
-                        <SelectItem value="2">2 - Exactly once</SelectItem>
+                        <SelectItem value="0">{t('mqtt_explorer.qos_0')}</SelectItem>
+                        <SelectItem value="1">{t('mqtt_explorer.qos_1')}</SelectItem>
+                        <SelectItem value="2">{t('mqtt_explorer.qos_2')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="flex items-end gap-2">
                     <Checkbox
                       id="publish-retain"
@@ -663,14 +663,14 @@ export default function MQTTExplorer() {
                       onCheckedChange={(checked) => setPublishRetain(checked as boolean)}
                     />
                     <Label htmlFor="publish-retain" className="cursor-pointer">
-                      {t('Retain')}
+                      {t('mqtt_explorer.retained')}
                     </Label>
                   </div>
                 </div>
-                
+
                 <Button onClick={handlePublish} className="w-full">
                   <Send className="mr-2 h-4 w-4" />
-                  {t('Publish Message')}
+                  {t('mqtt_explorer.publish_message')}
                 </Button>
               </TabsContent>
               
@@ -703,7 +703,7 @@ export default function MQTTExplorer() {
                     </div>
                   ) : (
                     <p className="text-muted-foreground text-center py-8">
-                      {t('No messages received yet')}
+                      {t('mqtt_explorer.no_messages')}
                     </p>
                   )}
                 </ScrollArea>

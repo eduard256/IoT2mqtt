@@ -52,7 +52,13 @@
     "disconnected": "Отключено",
     "enabled": "Включено",
     "disabled": "Выключено",
-    "copied": "Скопировано"
+    "copied": "Скопировано",
+    "yes": "Да",
+    "no": "Нет",
+    "logout": "Выйти",
+    "no_auth_token": "Нет токена аутентификации",
+    "no_auth_token_found": "Токен аутентификации не найден",
+    "failed_to_load_data": "Не удалось загрузить данные"
   },
   "auth": {
     "title": "Добро пожаловать в IoT2MQTT",
@@ -74,7 +80,10 @@
       "test_connection": "Проверить соединение",
       "testing": "Проверка...",
       "connection_success": "Соединение успешно",
-      "connection_failed": "Ошибка соединения"
+      "connection_failed": "Ошибка соединения",
+      "broker_settings": "Настройки MQTT брокера",
+      "authentication_optional": "Аутентификация (необязательно)",
+      "topics_format": "Топики будут созданы как: {{format}}"
     }
   },
   "dashboard": {
@@ -85,7 +94,8 @@
     "system_status": "Статус системы",
     "mqtt_status": "Статус MQTT",
     "containers_running": "Контейнеров запущено",
-    "total_devices": "Всего устройств"
+    "total_devices": "Всего устройств",
+    "welcome_message": "Добро пожаловать в центр управления умным домом"
   },
   "integrations": {
     "title": "Интеграции",
@@ -96,7 +106,28 @@
     "instances_plural": "{{count}} экземпляров",
     "no_instances": "Нет экземпляров",
     "setup": "Настройка",
-    "manage": "Управление"
+    "manage": "Управление",
+    "manage_description": "Управление интеграциями устройств",
+    "search_configured": "Поиск настроенных интеграций...",
+    "discovered": "Обнаружено",
+    "configured": "Настроено",
+    "no_match": "Интеграции не найдены",
+    "no_configured_yet": "Интеграции еще не настроены. Нажмите \"Добавить интеграцию\" для начала.",
+    "enter_instance_id": "Введите ID экземпляра (например, living_room):",
+    "enter_friendly_name": "Введите понятное имя:",
+    "device_added": "Устройство добавлено",
+    "device_added_success": "Устройство успешно добавлено",
+    "failed_to_add_device": "Не удалось добавить устройство",
+    "device_ignored": "Устройство проигнорировано",
+    "device_removed_from_list": "Устройство удалено из списка обнаруженных",
+    "failed_to_ignore_device": "Не удалось проигнорировать устройство",
+    "failed_to_load_available": "Не удалось загрузить доступные интеграции",
+    "auto": "Авто",
+    "version": "Версия",
+    "no_available": "Нет доступных интеграций",
+    "flow": {
+      "follow_instructions": "Следуйте инструкциям для продолжения."
+    }
   },
   "devices": {
     "title": "Устройства",
@@ -109,7 +140,24 @@
     "rgb_color": "RGB цвет",
     "power": "Питание",
     "on": "Вкл",
-    "off": "Выкл"
+    "off": "Выкл",
+    "description": "Управление и мониторинг IoT устройств",
+    "all_devices": "Все устройства",
+    "search_placeholder": "Поиск устройств...",
+    "no_devices_found": "Устройства не найдены",
+    "no_match": "Нет устройств, соответствующих поиску",
+    "add_first_device": "Добавьте первое устройство на странице Интеграции",
+    "device_options": "Параметры устройства",
+    "view_history": "История",
+    "remove": "Удалить",
+    "color": "Цвет",
+    "effects": "Эффекты",
+    "total_devices_label": "Всего устройств",
+    "active": "Активных",
+    "rooms": "Комнат",
+    "failed_to_load": "Не удалось загрузить устройства",
+    "command_sent": "Команда отправлена на устройство",
+    "failed_to_control": "Не удалось управлять устройством"
   },
   "mqtt_explorer": {
     "title": "MQTT Проводник",
@@ -124,7 +172,26 @@
     "timestamp": "Время",
     "command_encyclopedia": "Энциклопедия команд",
     "payload_copied": "Полезная нагрузка скопирована в буфер обмена",
-    "insert_hint": "Нажмите любую команду, чтобы вставить её в поле данных"
+    "insert_hint": "Нажмите любую команду, чтобы вставить её в поле данных",
+    "description": "Просмотр и взаимодействие с MQTT топиками",
+    "search_topics": "Поиск топиков...",
+    "no_topics": "Топики еще не обнаружены",
+    "details": "Детали",
+    "publish_tab": "Публикация",
+    "messages": "Сообщения",
+    "topic_path": "Путь топика",
+    "path_copied": "Путь топика скопирован в буфер обмена",
+    "last_update": "Последнее обновление",
+    "select_topic": "Выберите топик для просмотра деталей",
+    "select_device": "Выбрать устройство",
+    "search_devices": "Поиск устройств...",
+    "qos_0": "0 - Не более одного раза",
+    "qos_1": "1 - Не менее одного раза",
+    "qos_2": "2 - Ровно один раз",
+    "publish_message": "Опубликовать сообщение",
+    "no_messages": "Сообщения еще не получены",
+    "message_published": "Сообщение опубликовано",
+    "failed_to_publish": "Не удалось опубликовать сообщение"
   },
   "containers": {
     "title": "Контейнеры",
@@ -136,7 +203,30 @@
     "view_logs": "Просмотр логов",
     "clear_logs": "Очистить",
     "follow_logs": "Следить",
-    "filter_level": "Фильтр по уровню"
+    "filter_level": "Фильтр по уровню",
+    "description": "Мониторинг и управление Docker контейнерами",
+    "loading": "Загрузка контейнеров...",
+    "failed_to_fetch": "Не удалось загрузить контейнеры",
+    "count": "контейнеров",
+    "no_containers": "Контейнеры не найдены",
+    "container_id": "ID контейнера",
+    "created": "Создан",
+    "ports": "Порты",
+    "resource_usage": "Использование ресурсов",
+    "cpu": "ЦП",
+    "memory": "Память",
+    "network_rx": "Сеть RX",
+    "network_tx": "Сеть TX",
+    "container_logs": "Логи контейнера",
+    "select_container": "Выберите контейнер",
+    "click_to_view": "Нажмите на контейнер для просмотра деталей и логов",
+    "delete_container": "Удалить контейнер",
+    "confirm_delete": "Вы уверены, что хотите удалить",
+    "action_cannot_undone": "Это действие необратимо.",
+    "deleted_successfully": "Контейнер успешно удален",
+    "failed_to_delete": "Не удалось удалить контейнер",
+    "action_success": "Контейнер {{action}} успешно",
+    "action_failed": "Не удалось {{action}} контейнер"
   },
   "settings": {
     "title": "Настройки",
