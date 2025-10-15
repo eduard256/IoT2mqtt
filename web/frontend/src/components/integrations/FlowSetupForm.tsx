@@ -853,17 +853,53 @@ export default function FlowSetupForm({
     setBusy(true)
     setError(null)
     try {
-      // Build fresh context for instance creation
-      const freshContext = buildContext(flowState, currentFlow)
-      const resolved = resolveDeepWithContext(step.instance, freshContext)
+      let instanceId: string
+      let friendlyName: string
+      let config: any
+      let connectorType: string
+      let enabled: boolean
+      let updateInterval: number
+      let secrets: any
 
-      // Auto-generate instance_id if empty or "auto"
-      let instanceId = resolved.instance_id
-      if (!instanceId || instanceId.trim() === '' || instanceId.trim().toLowerCase() === 'auto') {
-        if (!resolved.friendly_name) {
-          throw new Error('Friendly name is required to auto-generate instance ID')
+      // In edit mode: use existing instance data, don't regenerate instance_id
+      if (mode === 'edit') {
+        // Use existing instance_id - NEVER regenerate it
+        instanceId = existingInstanceId!
+
+        // Try to get friendly_name from forms first, fallback to existing data
+        const formFriendlyName = flowState.form.device_config?.friendly_name
+        friendlyName = formFriendlyName || initialConfig.friendly_name || instanceId
+
+        // Use existing config as base, potentially updated by forms
+        const freshContext = buildContext(flowState, currentFlow)
+        const resolved = resolveDeepWithContext(step.instance, freshContext)
+        config = resolved.config ?? initialConfig.config ?? {}
+
+        // Keep other existing properties
+        connectorType = integration.name
+        enabled = initialConfig.enabled ?? true
+        updateInterval = initialConfig.update_interval ?? 15
+        secrets = resolved.secrets ?? initialConfig.secrets ?? undefined
+      } else {
+        // Create mode: use templates from setup.json
+        const freshContext = buildContext(flowState, currentFlow)
+        const resolved = resolveDeepWithContext(step.instance, freshContext)
+
+        // Auto-generate instance_id if empty or "auto"
+        instanceId = resolved.instance_id
+        if (!instanceId || instanceId.trim() === '' || instanceId.trim().toLowerCase() === 'auto') {
+          if (!resolved.friendly_name) {
+            throw new Error('Friendly name is required to auto-generate instance ID')
+          }
+          instanceId = generateInstanceId(resolved.friendly_name)
         }
-        instanceId = generateInstanceId(resolved.friendly_name)
+
+        friendlyName = resolved.friendly_name ?? instanceId
+        config = resolved.config ?? {}
+        connectorType = resolved.connector_type ?? integration.name
+        enabled = resolved.enabled ?? true
+        updateInterval = resolved.update_interval ?? 15
+        secrets = resolved.secrets ?? undefined
       }
 
       // Collect devices: multi-device mode vs single device
@@ -876,19 +912,25 @@ export default function FlowSetupForm({
           devices.push(currentDevice)
         }
       } else {
-        // Single device mode: use resolved devices from template
-        devices = resolved.devices ?? []
+        // Single device mode: use resolved devices from template (create mode only)
+        if (mode === 'edit') {
+          devices = collectedDevices
+        } else {
+          const freshContext = buildContext(flowState, currentFlow)
+          const resolved = resolveDeepWithContext(step.instance, freshContext)
+          devices = resolved.devices ?? []
+        }
       }
 
       const payload = {
         instance_id: instanceId,
-        connector_type: resolved.connector_type ?? integration.name,
-        friendly_name: resolved.friendly_name ?? instanceId,
-        config: resolved.config ?? {},
+        connector_type: connectorType,
+        friendly_name: friendlyName,
+        config: config,
         devices: devices,
-        enabled: resolved.enabled ?? true,
-        update_interval: resolved.update_interval ?? 15,
-        secrets: resolved.secrets ?? undefined
+        enabled: enabled,
+        update_interval: updateInterval,
+        secrets: secrets
       }
       if (!payload.instance_id) {
         throw new Error('Instance id is required to create connector instance')
@@ -928,7 +970,7 @@ export default function FlowSetupForm({
       // Use PUT for edit mode, POST for create mode
       const method = mode === 'edit' ? 'PUT' : 'POST'
       const url = mode === 'edit'
-        ? `/api/instances/${resolved.connector_type ?? integration.name}/${existingInstanceId}`
+        ? `/api/instances/${connectorType}/${existingInstanceId}`
         : '/api/instances'
 
       const response = await fetch(url, {
