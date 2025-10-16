@@ -104,7 +104,7 @@ show_dev_warning() {
   echo -e "${RED}${BOLD}║                                                                  ║${RESET}"
   echo -e "${RED}${BOLD}╚══════════════════════════════════════════════════════════════════╝${RESET}"
   echo ""
-  echo -e "${YELLOW}You are about to install the DEVELOPMENT version of IoT2MQTT.${RESET}"
+  echo -e "${YELLOW}Installing DEVELOPMENT version of IoT2MQTT.${RESET}"
   echo ""
   echo -e "${YELLOW}This version:${RESET}"
   echo -e "  ${RED}•${RESET} May contain bugs and breaking changes"
@@ -115,14 +115,8 @@ show_dev_warning() {
   echo -e "${GREEN}For stable version, use:${RESET}"
   echo -e "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh | bash${RESET}"
   echo ""
-  echo -ne "${BOLD}Continue with development installation? [y/N]: ${RESET}"
-
-  read -r response
-  if [[ ! "$response" =~ ^[Yy]$ ]]; then
-    echo ""
-    echo -e "${YELLOW}Installation cancelled.${RESET}"
-    exit 0
-  fi
+  echo -e "${YELLOW}Proceeding with installation in 3 seconds...${RESET}"
+  sleep 3
   echo ""
 }
 
