@@ -109,7 +109,7 @@
 
 /* Chinese (Simplified) language support */
 html[lang="zh"] {
-  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'SimHei', sans-serif;
+  font-family: 'Noto Sans SC', sans-serif;
 }
 
 html[lang="zh"] body {
