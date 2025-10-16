@@ -111,34 +111,3 @@
 html[lang="zh"] {
   font-family: 'Noto Sans SC', sans-serif;
 }
-
-html[lang="zh"] body {
-  font-size: 18px;
-  line-height: 1.7;
-  letter-spacing: 0.01em;
-}
-
-/* Increase heading sizes for Chinese */
-html[lang="zh"] h1 {
-  font-size: 2.5rem;
-  line-height: 1.3;
-}
-
-html[lang="zh"] h2 {
-  font-size: 2rem;
-  line-height: 1.4;
-}
-
-html[lang="zh"] h3 {
-  font-size: 1.75rem;
-  line-height: 1.4;
-}
-
-/* Adjust small text sizes for better readability */
-html[lang="zh"] .text-sm {
-  font-size: 1rem;
-}
-
-html[lang="zh"] .text-xs {
-  font-size: 0.9rem;
-}
