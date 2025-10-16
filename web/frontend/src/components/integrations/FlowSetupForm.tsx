@@ -577,10 +577,30 @@ export default function FlowSetupForm({
       return
     }
 
+    // Before moving to instance step, save current device if it exists
+    const nextStep = visibleSteps[nextIndex]
+    if (nextStep?.type === 'instance' && !isManuallyAddingDevice.current) {
+      // Build current device from forms before clearing
+      const currentDevice = buildCurrentDevice()
+
+      if (currentDevice && !isDuplicateDevice(currentDevice, collectedDevices)) {
+        console.log('[advanceStep] Saving current device before moving to instance step:', currentDevice)
+        // Save device immediately - don't use setState as we need it synchronous
+        setCollectedDevices(prev => {
+          const newDevices = [...prev, currentDevice]
+          console.log('[advanceStep] Updated collectedDevices:', newDevices)
+          return newDevices
+        })
+      } else if (currentDevice) {
+        console.log('[advanceStep] Current device is duplicate, not saving')
+      } else {
+        console.log('[advanceStep] No current device to save (forms incomplete)')
+      }
+    }
+
     setCurrentStepIndex(nextIndex)
 
     // Reset manual adding flag and clear loop forms when reaching instance step
-    const nextStep = visibleSteps[nextIndex]
     if (nextStep?.type === 'instance') {
       isManuallyAddingDevice.current = false
 

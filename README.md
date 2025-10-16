@@ -17,6 +17,17 @@ IoT2MQTT is a revolutionary smart home integration system that runs entirely in 
 - 🌍 **Multi-language** - English, Russian, and Chinese support
 - 📱 **PWA Support** - Install as mobile app
 
+## 📌 Branches & Releases
+
+IoT2MQTT uses a two-branch development model:
+
+- **`main`** - Stable releases. Recommended for production use. Tagged releases available.
+- **`develop`** - Active development. Latest features but unstable. API may change at any time. Use only for testing!
+
+Current release: **v0.1.0** (Pre-release)
+
+⚠️ **Note:** This is a pre-release version. API is not stable and breaking changes are expected in future releases.
+
 ## 🎯 Why IoT2MQTT?
 
 Traditional smart home systems require complex installations with multiple dependencies on your host system. IoT2MQTT changes this:
@@ -39,10 +50,20 @@ Traditional smart home systems require complex installations with multiple depen
 
 ### One‑Line Install (any Linux)
 
+**Stable Version (Recommended):**
+
 Runs a beautiful CLI with a live progress bar and snake mini‑game while installing everything (Docker, Compose, app, and services). When done, it prints your LAN URL.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/main/install.sh | bash
+```
+
+**Development Version (Latest Features, Unstable):**
+
+⚠️ **WARNING:** Development branch contains latest features but may be unstable. API can change at any time. Use only for testing!
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eduard256/IoT2mqtt/develop/install-dev.sh | bash
 ```
 
 Notes:
