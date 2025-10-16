@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 // Pages
 import Auth from '@/pages/Auth'
@@ -38,7 +39,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   const theme = useThemeStore(state => state.theme)
-  
+  const { i18n } = useTranslation()
+
   useEffect(() => {
     // Apply theme
     if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -47,6 +49,11 @@ function App() {
       document.documentElement.classList.remove('dark')
     }
   }, [theme])
+
+  useEffect(() => {
+    // Update lang attribute when language changes
+    document.documentElement.lang = i18n.language
+  }, [i18n.language])
   
   return (
     <QueryClientProvider client={queryClient}>
