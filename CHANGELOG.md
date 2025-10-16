@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This is the initial pre-release version of IoT2MQTT. The project is functional but considered **alpha/beta** quality. API is **unstable** and breaking changes are expected in future releases.
 
+### Bug Fixes
+
+- **Fixed device not appearing on instance step** - When manually adding a device through the Yeelight setup flow, the device was not appearing on the final instance step, causing "Friendly name is required to auto-generate instance ID" error. Now devices are properly saved when advancing through setup steps.
+
 ### Features
 
 #### Core Architecture
