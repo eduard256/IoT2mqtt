@@ -908,10 +908,7 @@ export default function FlowSetupForm({
         // Auto-generate instance_id if empty or "auto"
         instanceId = resolved.instance_id
         if (!instanceId || instanceId.trim() === '' || instanceId.trim().toLowerCase() === 'auto') {
-          if (!resolved.friendly_name) {
-            throw new Error('Friendly name is required to auto-generate instance ID')
-          }
-          instanceId = generateInstanceId(resolved.friendly_name)
+          instanceId = generateInstanceId('')
         }
 
         friendlyName = resolved.friendly_name ?? instanceId
