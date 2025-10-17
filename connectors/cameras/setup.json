@@ -1,0 +1,143 @@
+{
+  "version": "1.0.0",
+  "display_name": "IP Cameras",
+  "description": "Connect IP cameras via RTSP, ONVIF, or HTTP streams",
+  "author": "IoT2MQTT",
+  "branding": {
+    "icon": "/assets/brands/camera.svg",
+    "color": "#4A90E2",
+    "category": "security"
+  },
+  "multi_device": {
+    "enabled": true,
+    "max_devices": 50,
+    "device_label": "Camera",
+    "add_button_label": "Add Another Camera",
+    "loop_from_step": "camera_form",
+    "loop_to_step": "stream_scan"
+  },
+  "requirements": {
+    "network": "host",
+    "python": "3.11",
+    "libraries": []
+  },
+  "tools": {
+    "validate_stream": {
+      "entry": "actions/validate_stream.py",
+      "timeout": 30,
+      "network": "local"
+    }
+  },
+  "flows": [
+    {
+      "id": "manual_entry",
+      "name": "Manual",
+      "description": "Configure cameras manually",
+      "default": true,
+      "steps": [
+        {
+          "id": "camera_form",
+          "type": "form",
+          "title": "Camera Details",
+          "description": "Enter camera manufacturer and credentials",
+          "schema": {
+            "fields": [
+              {
+                "type": "camera_model_picker",
+                "name": "model",
+                "label": "Make",
+                "placeholder": "Start typing the camera manufacturer or model",
+                "description": "Start typing and select from available options",
+                "required": true
+              },
+              {
+                "type": "text",
+                "name": "username",
+                "label": "Camera Username",
+                "placeholder": "admin"
+              },
+              {
+                "type": "password",
+                "name": "password",
+                "label": "Camera Password"
+              },
+              {
+                "type": "number",
+                "name": "channel",
+                "label": "Channel",
+                "default": 0,
+                "description": "Usually only used by DVRs. Default is 0",
+                "advanced": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "network_form",
+          "type": "form",
+          "title": "Network Address",
+          "description": "Specify the camera's network address",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "address",
+                "label": "Network Address",
+                "placeholder": "http://192.168.0.0",
+                "description": "Examples: http://192.168.1.2:80, https://some.dyn.url:8082. Make sure your network camera has a static IP address on your network",
+                "required": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "stream_scan",
+          "type": "form",
+          "title": "Connections",
+          "description": "Scanning for available camera streams...",
+          "schema": {
+            "fields": [
+              {
+                "type": "camera_stream_scanner",
+                "name": "selected_stream",
+                "label": "Available Connections",
+                "required": true,
+                "config": {
+                  "model": "{{ form.camera_form.model }}",
+                  "address": "{{ form.network_form.address }}",
+                  "username": "{{ form.camera_form.username }}",
+                  "password": "{{ form.camera_form.password }}",
+                  "channel": "{{ form.camera_form.channel }}"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "validate_stream",
+          "type": "tool",
+          "title": "Validating stream",
+          "description": "Testing selected stream configuration...",
+          "tool": "validate_stream",
+          "input": {
+            "stream_url": "{{ form.stream_scan.selected_stream.full_url }}",
+            "stream_type": "{{ form.stream_scan.selected_stream.type }}"
+          },
+          "auto_advance": true
+        },
+        {
+          "id": "create_instance",
+          "type": "instance",
+          "instance": {
+            "instance_id": "cameras",
+            "friendly_name": "Cameras",
+            "connector_type": "cameras",
+            "update_interval": 30,
+            "config": {},
+            "devices": []
+          }
+        }
+      ]
+    }
+  ]
+}

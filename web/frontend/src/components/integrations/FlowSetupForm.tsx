@@ -8,6 +8,7 @@ import type { FlowSetupSchema, FlowAction, FlowStep } from '@/types/integration'
 // Import registries and registration functions
 import { registerStandardFields } from './flow-setup/fields/standard'
 import { registerStandardSteps, stepRegistry } from './flow-setup/steps'
+import './flow-setup/fields/custom'  // Register custom fields
 
 // Import hooks
 import { useFlowState } from './flow-setup/hooks/useFlowState'
