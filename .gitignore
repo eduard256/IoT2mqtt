@@ -84,3 +84,6 @@ coverage.xml
 
 # AI Prompts (work in progress, not for version control)
 prompts/
+
+# Camera database parsers (local only - run manually)
+connectors/cameras/parsers/
