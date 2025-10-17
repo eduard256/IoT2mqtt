@@ -1,25 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { Loader2, ExternalLink, Play, X, Pencil } from 'lucide-react'
-
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { Loader2, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-
 import { getAuthToken } from '@/utils/auth'
-import type {
-  FlowSetupSchema,
-  FlowDefinition,
-  FlowStep,
-  FlowAction,
-  FormField,
-  FlowStepType
-} from '@/types/integration'
-import { cn } from '@/lib/utils'
+import type { FlowSetupSchema, FlowAction, FlowStep } from '@/types/integration'
 
+// Import registries and registration functions
+import { registerStandardFields } from './flow-setup/fields/standard'
+import { registerStandardSteps, stepRegistry } from './flow-setup/steps'
+
+// Import hooks
+import { useFlowState } from './flow-setup/hooks/useFlowState'
+import { useFlowNavigation } from './flow-setup/hooks/useFlowNavigation'
+import { useTemplateResolver } from './flow-setup/hooks/useTemplateResolver'
+import { useDeviceManager } from './flow-setup/hooks/useDeviceManager'
+
+// Import step components for instance (needs special handling)
+import { InstanceStep } from './flow-setup/steps/InstanceStep'
+
+// Props
 interface FlowSetupFormProps {
   integration: { name: string; display_name?: string }
   mode?: 'create' | 'edit'
@@ -30,20 +29,12 @@ interface FlowSetupFormProps {
   onSuccess: () => void
 }
 
-type FlowState = {
-  form: Record<string, Record<string, any>>
-  tools: Record<string, any>
-  selection: Record<string, any>
-  shared: Record<string, any>
-  oauth: Record<string, any>
-}
-
-const initialFlowState: FlowState = {
-  form: {},
-  tools: {},
-  selection: {},
-  shared: {},
-  oauth: {}
+// Initialize registries once
+let registriesInitialized = false
+if (!registriesInitialized) {
+  registerStandardFields()
+  registerStandardSteps()
+  registriesInitialized = true
 }
 
 export default function FlowSetupForm({
@@ -55,29 +46,15 @@ export default function FlowSetupForm({
   onCancel,
   onSuccess
 }: FlowSetupFormProps) {
+  // Schema loading
   const [schema, setSchema] = useState<FlowSetupSchema | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [flowState, setFlowState] = useState<FlowState>(initialFlowState)
-  const [currentFlowId, setCurrentFlowId] = useState<string | null>(null)
-  const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [oauthSession, setOauthSession] = useState<{ id: string; provider: string } | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [collectedDevices, setCollectedDevices] = useState<Array<any>>([])
-  const autoRanSteps = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const isChangingFlow = useRef(false)
-  const flowStateRef = useRef<FlowState>(initialFlowState)
-  const isManuallyAddingDevice = useRef(false)
 
-  // Initialize collectedDevices in edit mode
-  useEffect(() => {
-    if (mode === 'edit' && initialDevices.length > 0) {
-      setCollectedDevices(initialDevices)
-    }
-  }, [mode, initialDevices])
-
+  // Load schema
   useEffect(() => {
     const load = async () => {
       setLoading(true)
@@ -93,11 +70,6 @@ export default function FlowSetupForm({
           throw new Error('Integration does not expose any setup flows')
         }
         setSchema(data)
-        const defaultFlow = data.flows.find(flow => flow.default) ?? data.flows[0]
-        setCurrentFlowId(defaultFlow.id)
-        setCurrentStepIndex(0)
-        setFlowState(initialFlowState)
-        autoRanSteps.current = new Set()
       } catch (e: any) {
         setError(e?.message ?? 'Failed to load setup metadata')
       } finally {
@@ -108,446 +80,75 @@ export default function FlowSetupForm({
     load()
   }, [integration.name])
 
-  const currentFlow: FlowDefinition | undefined = useMemo(() => {
-    if (!schema || !currentFlowId) return undefined
-    return schema.flows.find(flow => flow.id === currentFlowId) ?? schema.flows[0]
-  }, [schema, currentFlowId])
+  // Flow state management
+  const { flowState, flowStateRef, updateFlowState, context, resetFlowState, updateFormValue } =
+    useFlowState(integration, undefined)
 
-  // Unified context builder - single source of truth
-  const buildContext = useCallback((state: FlowState, flow: FlowDefinition | undefined) => {
-    const enrichedForm: Record<string, any> = {}
+  // Navigation
+  const {
+    currentFlow,
+    currentFlowId,
+    currentStep,
+    currentStepIndex,
+    visibleSteps,
+    autoRanSteps,
+    setCurrentFlowId,
+    setCurrentStepIndex,
+    goToFlow,
+    advanceStep,
+    goToStepById
+  } = useFlowNavigation(schema, flowState, context, v => v)
 
-    if (flow) {
-      for (const step of flow.steps) {
-        if (step.type === 'form' && step.id) {
-          // Find the form step schema
-          const formStep = flow.steps.find(s => s.id === step.id && s.type === 'form')
-          const formData = state.form[step.id] || {}
-          const enrichedData: Record<string, any> = {}
+  // Template resolver
+  const { resolveTemplate, resolveDeep } = useTemplateResolver(context)
 
-          if (formStep?.schema?.fields) {
-            // Apply defaults for all fields
-            for (const field of formStep.schema.fields) {
-              const currentValue = formData[field.name]
+  // Device manager
+  const { collectedDevices, setCollectedDevices, isManuallyAddingDevice, addCurrentDevice, removeDevice, editDevice, clearLoopForms } =
+    useDeviceManager(flowState, updateFlowState, initialDevices)
 
-              // IMPORTANT: Check if field exists in formData (even if value is null)
-              const fieldExistsInFormData = field.name in formData
-
-              if (fieldExistsInFormData) {
-                // Use the value from formData, even if it's null or empty
-                // This is the actual user input
-                if (field.type === 'number' && typeof currentValue === 'string') {
-                  const parsed = parseFloat(currentValue)
-                  enrichedData[field.name] = isNaN(parsed) ? (field.default ?? 0) : parsed
-                } else {
-                  enrichedData[field.name] = currentValue
-                }
-              }
-              // Only use default if field was never set in formData
-              else if (field.default !== undefined) {
-                enrichedData[field.name] = field.default
-              }
-              // Don't add fields without values or defaults - they should not appear in context
-            }
-          }
-
-          enrichedForm[step.id] = Object.keys(enrichedData).length > 0 ? enrichedData : formData
-        } else if (state.form[step.id]) {
-          // Keep non-form step data as-is
-          enrichedForm[step.id] = state.form[step.id]
-        }
-      }
-    }
-
-    return {
-      integration,
-      form: enrichedForm,
-      tools: state.tools,
-      selection: state.selection,
-      shared: state.shared,
-      oauth: state.oauth
-    }
-  }, [integration])
-
-  const context = useMemo(() => buildContext(flowState, currentFlow), [buildContext, flowState, currentFlow])
-
-  const visibleSteps: FlowStep[] = useMemo(() => {
-    if (!currentFlow) return []
-    return currentFlow.steps.filter(step => {
-      // Check visibility conditions
-      if (!evaluateConditions(step.conditions)) return false
-
-      // Hide tool steps with auto_advance that completed successfully
-      if (step.type === 'tool' && step.auto_advance) {
-        const storageKey = step.output_key ?? step.tool ?? step.id
-        const result = flowState.tools[storageKey]
-        // Hide only if result is successful (ok: true)
-        if (result && result.ok === true) {
-          return false
-        }
-      }
-
-      // Hide all summary steps (they'll be shown inside instance step)
-      if (step.type === 'summary') {
-        return false
-      }
-
-      return true
-    })
-  }, [currentFlow, flowState, context])
-
+  // Jump to instance step in edit mode
   useEffect(() => {
-    if (currentStepIndex >= visibleSteps.length) {
-      setCurrentStepIndex(visibleSteps.length > 0 ? visibleSteps.length - 1 : 0)
-    }
-  }, [visibleSteps, currentStepIndex])
-
-  // Jump to instance step in edit mode to show device list
-  useEffect(() => {
-    if (mode === 'edit' && schema && visibleSteps.length > 0 && initialDevices.length > 0 && currentStepIndex === 0 && !isManuallyAddingDevice.current) {
-      // Find instance step index in visibleSteps
+    if (
+      mode === 'edit' &&
+      schema &&
+      visibleSteps.length > 0 &&
+      initialDevices.length > 0 &&
+      currentStepIndex === 0 &&
+      !isManuallyAddingDevice.current
+    ) {
       const instanceStepIndex = visibleSteps.findIndex(step => step.type === 'instance')
       if (instanceStepIndex !== -1) {
-        // Jump to instance step to show device list
         setCurrentStepIndex(instanceStepIndex)
       }
     }
   }, [mode, schema, visibleSteps, initialDevices, currentStepIndex])
 
-  const currentStep = visibleSteps[currentStepIndex]
-
-  useEffect(() => {
+  // Handle next step
+  const handleNext = useCallback(async () => {
     if (!currentStep) return
-    // Disabled auto_advance in useEffect - tools should only run through handleNext
-    // to ensure context is properly updated with form data
-    // if (currentStep.type === 'tool' && currentStep.auto_advance && !autoRanSteps.current.has(currentStep.id)) {
-    //   console.log('[useEffect] Auto-running tool step:', currentStep.id)
-    //   void executeTool(currentStep)
-    // }
-  }, [currentStep])
+    if (isChangingFlow.current) return
 
-  useEffect(() => {
-    const listener = (event: MessageEvent) => {
-      if (!event.data || typeof event.data !== 'object') return
-      if (!('status' in event.data)) return
-      if (event.data.status === 'authorized' && event.data.session_id) {
-        void fetchOAuthSession(event.data.session_id)
-      }
-    }
-    window.addEventListener('message', listener)
-    return () => window.removeEventListener('message', listener)
-  }, [])
-
-  const fetchOAuthSession = useCallback(async (sessionId: string) => {
-    try {
-      const token = getAuthToken()
-      const response = await fetch(`/api/oauth/session/${sessionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (!response.ok) throw new Error('Failed to load OAuth session')
-      const session = await response.json()
-      setFlowState(prev => ({
-        ...prev,
-        oauth: {
-          ...prev.oauth,
-          [session.provider]: session
-        }
-      }))
-      setOauthSession(null)
-      if (currentStep?.auto_advance) {
-        void handleNext()
-      }
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to fetch OAuth session')
-    }
-  }, [currentStep])
-
-  function evaluateConditions(conditions?: Record<string, unknown>): boolean {
-    if (!conditions) return true
-    return Object.entries(conditions).every(([path, expected]) => {
-      const actual = readContextPath(path)
-      const expectedValue = typeof expected === 'string' ? resolveTemplate(expected) : expected
-      if (Array.isArray(expectedValue)) {
-        return Array.isArray(actual) && expectedValue.every(item => actual.includes(item))
-      }
-      return actual === expectedValue
-    })
-  }
-
-  function readContextPath(path: string): any {
-    const segments = path.split('.')
-      .map(segment => segment.trim())
-      .filter(segment => segment)
-    let cursor: any = context
-    for (const segment of segments) {
-      if (cursor == null) return undefined
-      cursor = cursor[segment as keyof typeof cursor]
-    }
-    return cursor
-  }
-
-  function resolveTemplateWithContext(value: unknown, contextToUse: any, extra: Record<string, unknown> = {}): any {
-    if (typeof value !== 'string') return value
-    const singleMatch = value.match(/^{{\s*([^}]+)\s*}}$/)
-    if (singleMatch) {
-      const rawPath = singleMatch[1]
-      const combined = { ...contextToUse, ...extra }
-      const segments = rawPath.split('.')
-        .map(segment => segment.trim())
-        .filter(segment => segment)
-      let pointer: any = combined
-      for (let i = 0; i < segments.length; i++) {
-        const segment = segments[i]
-        if (pointer == null) {
-          return ''
-        }
-        pointer = pointer[segment]
-      }
-      // Preserve null values - only convert undefined to empty string
-      const result = pointer !== undefined ? pointer : ''
-      return result
-    }
-
-    const matcher = /{{\s*([^}]+)\s*}}/g
-    return value.replace(matcher, (_, rawPath) => {
-      const path = rawPath.trim()
-      const combined = { ...contextToUse, ...extra }
-      const segments = path.split('.')
-        .map(segment => segment.trim())
-        .filter(segment => segment)
-      let pointer: any = combined
-      for (const segment of segments) {
-        if (pointer == null) return ''
-        pointer = pointer[segment]
-      }
-      if (pointer == null) return ''
-      if (typeof pointer === 'object') return JSON.stringify(pointer)
-      return String(pointer)
-    })
-  }
-
-  function resolveTemplate(value: unknown, extra: Record<string, unknown> = {}): any {
-    if (typeof value !== 'string') return value
-    const singleMatch = value.match(/^{{\s*([^}]+)\s*}}$/)
-    if (singleMatch) {
-      const rawPath = singleMatch[1]
-      const combined = { ...context, ...extra }
-      const segments = rawPath.split('.')
-        .map(segment => segment.trim())
-        .filter(segment => segment)
-      let pointer: any = combined
-      for (const segment of segments) {
-        if (pointer == null) {
-          return ''
-        }
-        pointer = pointer[segment]
-      }
-      const result = pointer ?? ''
-      return result
-    }
-
-    const matcher = /{{\s*([^}]+)\s*}}/g
-    return value.replace(matcher, (_, rawPath) => {
-      const path = rawPath.trim()
-      const combined = { ...context, ...extra }
-      const segments = path.split('.')
-        .map(segment => segment.trim())
-        .filter(segment => segment)
-      let pointer: any = combined
-      for (const segment of segments) {
-        if (pointer == null) return ''
-        pointer = pointer[segment]
-      }
-      if (pointer == null) return ''
-      if (typeof pointer === 'object') return JSON.stringify(pointer)
-      return String(pointer)
-    })
-  }
-
-  function resolveDeep<T = any>(payload: T, extra: Record<string, unknown> = {}): T {
-    // Always use fresh context built from current state
-    const freshContext = buildContext(flowState, currentFlow)
-    return resolveDeepWithContext(payload, freshContext, extra)
-  }
-
-  function resolveDeepWithContext<T = any>(payload: T, contextToUse: any, extra: Record<string, unknown> = {}): T {
-    if (payload == null) return payload
-    if (typeof payload === 'string') {
-      return resolveTemplateWithContext(payload, contextToUse, extra) as T
-    }
-    if (Array.isArray(payload)) {
-      return payload.map(item => resolveDeepWithContext(item, contextToUse, extra)) as T
-    }
-    if (typeof payload === 'object') {
-      const result: Record<string, any> = {}
-      for (const [key, val] of Object.entries(payload)) {
-        result[key] = resolveDeepWithContext(val, contextToUse, extra)
-      }
-      return result as T
-    }
-    return payload
-  }
-
-
-  function updateFormValue(stepId: string, field: FormField, value: any) {
-    setFlowState(prev => {
-      // Get current form data for this step
-      const currentStepData = prev.form[stepId] ?? {}
-
-      // Update the specific field value
-      const updatedStepData = {
-        ...currentStepData,
-        [field.name]: value
-      }
-
-      // Find the form step to get all field definitions
-      const formStep = currentFlow?.steps.find(s => s.id === stepId && s.type === 'form')
-
-      // Apply defaults for fields that haven't been set yet
-      if (formStep?.schema?.fields) {
-        for (const f of formStep.schema.fields) {
-          // Skip the field we're currently updating
-          if (f.name === field.name) continue
-
-          // Only apply default if field was never set (not just empty)
-          if (!(f.name in updatedStepData) && f.default !== undefined) {
-            updatedStepData[f.name] = f.default
-          }
-        }
-      }
-
-      const newState = {
-        ...prev,
-        form: {
-          ...prev.form,
-          [stepId]: updatedStepData
-        }
-      }
-
-      // IMPORTANT: Update ref immediately so executeTool can access fresh data
-      flowStateRef.current = newState
-
-      return newState
-    })
-  }
-
-  async function executeTool(step: FlowStep) {
-    if (!schema) return
-    if (!step.tool) {
-      setError('Tool step missing tool name')
-      return
-    }
-
-    // Don't update state if we're in the middle of changing flows
-    if (isChangingFlow.current) {
-      return
-    }
-
-    // Prevent duplicate runs - mark as running immediately
-    if (autoRanSteps.current.has(step.id)) {
-      return
-    }
-    autoRanSteps.current.add(step.id)
-
-    setBusy(true)
-    setError(null)
-
-    // Create new AbortController for this request
-    abortControllerRef.current = new AbortController()
-
-    try {
-      const token = getAuthToken()
-
-      // IMPORTANT: Use ref to get the absolute latest state
-      // This bypasses React's async state updates
-      const currentState = flowStateRef.current
-
-      const contextToUse = buildContext(currentState, currentFlow)
-
-      const inputPayload = resolveDeepWithContext(step.input ?? {}, contextToUse)
-
-      // Validate required fields
-      if (step.tool === 'validate_device' || step.tool === 'validate_connection') {
-        if (!inputPayload.host && !inputPayload.ip) {
-          throw new Error('Host/IP address is required for validation')
-        }
-      }
-
-      const response = await fetch(`/api/integrations/${integration.name}/tools/execute`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ tool: step.tool, input: inputPayload }),
-        signal: abortControllerRef.current.signal
-      })
-
-      // Don't update state if we switched flows while request was in flight
-      if (isChangingFlow.current) {
-        return
-      }
-
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || data.ok === false) {
-        throw new Error(data?.error?.message ?? data?.detail ?? 'Tool execution failed')
-      }
-
-      // Don't update state if we switched flows
-      if (isChangingFlow.current) {
-        return
-      }
-
-      const storageKey = step.output_key ?? step.tool
-      setFlowState(prev => ({
-        ...prev,
-        tools: {
-          ...prev.tools,
-          [storageKey]: data
-        }
-      }))
-      if (step.auto_advance) {
-        if (!isChangingFlow.current) {
-          setBusy(false)
-        }
-        await handleNext()
-        return
-      }
-    } catch (e: any) {
-      // Don't show error if request was aborted (user switched flows)
-      if (e.name === 'AbortError') {
-        if (!isChangingFlow.current) setBusy(false)
-        return
-      }
-      console.error('[executeTool] Error:', e)
-      if (!isChangingFlow.current) setError(e?.message ?? 'Tool execution failed')
-    }
-    if (!isChangingFlow.current) setBusy(false)
-  }
-
-  async function handleNext() {
-    if (!currentStep) return
-    if (isChangingFlow.current) {
-      return
-    }
-
+    // Validate form step
     if (currentStep.type === 'form') {
       const formValues = flowState.form[currentStep.id] ?? {}
-      const missing = currentStep.schema?.fields?.filter(field => field.required && !formValues[field.name]) ?? []
+      const missing =
+        currentStep.schema?.fields?.filter(field => field.required && !formValues[field.name]) ?? []
       if (missing.length) {
         setError(`Field "${missing[0].label ?? missing[0].name}" is required`)
         return
       }
     }
 
+    // Check tool step result
     if (currentStep.type === 'tool') {
       const key = currentStep.output_key ?? currentStep.tool ?? currentStep.id
       if (!flowState.tools[key]) {
-        await executeTool(currentStep)
+        // Tool will auto-execute in ToolStep component
         return
       }
     }
 
+    // Check OAuth
     if (currentStep.type === 'oauth') {
       const provider = currentStep.oauth?.provider
       if (!provider) {
@@ -560,968 +161,83 @@ export default function FlowSetupForm({
       }
     }
 
+    // Instance step is handled by InstanceStep component itself
     if (currentStep.type === 'instance') {
-      await createInstance(currentStep)
+      // This button shouldn't appear for instance steps
       return
     }
 
+    setError(null)
     advanceStep(1)
-  }
+  }, [currentStep, flowState, advanceStep])
 
-  function advanceStep(delta: number) {
-    setError(null)
-    const nextIndex = Math.max(0, Math.min(currentStepIndex + delta, visibleSteps.length - 1))
+  // Handle flow actions
+  const handleAction = useCallback(
+    (action: FlowAction, step?: FlowStep) => {
+      switch (action.type) {
+        case 'goto_flow': {
+          const target = action.flow
+          if (!target) return
 
-    if (nextIndex >= visibleSteps.length) {
-      onSuccess()
-      return
-    }
+          isChangingFlow.current = true
 
-    // Before moving to instance step, save current device if it exists
-    const nextStep = visibleSteps[nextIndex]
-    if (nextStep?.type === 'instance' && !isManuallyAddingDevice.current) {
-      // Build current device from forms before clearing
-      const currentDevice = buildCurrentDevice()
+          if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+            abortControllerRef.current = null
+          }
 
-      if (currentDevice && !isDuplicateDevice(currentDevice, collectedDevices)) {
-        console.log('[advanceStep] Saving current device before moving to instance step:', currentDevice)
-        // Save device immediately - don't use setState as we need it synchronous
-        setCollectedDevices(prev => {
-          const newDevices = [...prev, currentDevice]
-          console.log('[advanceStep] Updated collectedDevices:', newDevices)
-          return newDevices
-        })
-      } else if (currentDevice) {
-        console.log('[advanceStep] Current device is duplicate, not saving')
-      } else {
-        console.log('[advanceStep] No current device to save (forms incomplete)')
-      }
-    }
+          setBusy(false)
+          goToFlow(target)
+          setError(null)
+          resetFlowState()
 
-    setCurrentStepIndex(nextIndex)
-
-    // Reset manual adding flag and clear loop forms when reaching instance step
-    if (nextStep?.type === 'instance') {
-      isManuallyAddingDevice.current = false
-
-      // Clear loop forms so buildCurrentDevice() returns null
-      // This ensures newly added devices show edit/remove buttons
-      const loopSteps = getLoopSteps()
-      if (loopSteps.length > 0) {
-        setFlowState(prev => {
-          const newForm = { ...prev.form }
-          loopSteps.forEach(stepId => {
-            delete newForm[stepId]
-          })
-          return { ...prev, form: newForm }
-        })
-
-        // Also update the ref
-        flowStateRef.current = {
-          ...flowStateRef.current,
-          form: { ...flowStateRef.current.form }
+          setTimeout(() => {
+            isChangingFlow.current = false
+          }, 100)
+          return
         }
-        loopSteps.forEach(stepId => {
-          delete flowStateRef.current.form[stepId]
-        })
+        case 'open_url': {
+          if (action.url) window.open(action.url, '_blank', 'noopener')
+          return
+        }
+        case 'reset_flow': {
+          resetFlowState()
+          setCurrentStepIndex(0)
+          autoRanSteps.current = new Set()
+          return
+        }
+        default:
+          console.warn('Unhandled flow action', action)
       }
-    }
+    },
+    [goToFlow, resetFlowState, setCurrentStepIndex, autoRanSteps]
+  )
 
-    // Check if the new step needs auto-execution after React updates
-    if (nextStep && nextStep.type === 'tool' && nextStep.auto_advance && !autoRanSteps.current.has(nextStep.id)) {
-      // executeTool will get fresh state via Promise-based approach
-      void executeTool(nextStep)
-    }
-  }
-
-  function generateInstanceId(friendlyName: string): string {
-    // Generate random suffix (6 alphanumeric characters)
-    const randomSuffix = Math.random().toString(36).substring(2, 8).toLowerCase()
-    // Use integration name as prefix
-    const prefix = integration.name
-    return `${prefix}_${randomSuffix}`
-  }
-
-  function normalizeDeviceId(name: string): string {
-    // Normalize device name to valid device_id format
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s_-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-  }
-
-  function getLoopSteps(): string[] {
-    if (!schema?.multi_device?.enabled || !currentFlow) return []
-
-    const fromIndex = currentFlow.steps.findIndex(
-      s => s.id === schema.multi_device!.loop_from_step
-    )
-    const toIndex = currentFlow.steps.findIndex(
-      s => s.id === schema.multi_device!.loop_to_step
-    )
-
-    if (fromIndex === -1 || toIndex === -1) return []
-
-    return currentFlow.steps
-      .slice(fromIndex, toIndex + 1)
-      .map(s => s.id)
-  }
-
-  function buildCurrentDevice(): any | null {
-    // Try to find IP/connection and device config forms
-    const ipForm = flowState.form.ip_form || flowState.form.connection_form
-    const deviceConfig = flowState.form.device_config || flowState.form.device_form
-
-    if (!ipForm?.ip && !ipForm?.host) return null
-    if (!deviceConfig?.friendly_name && !deviceConfig?.name) return null
-
-    const deviceName = deviceConfig.friendly_name || deviceConfig.name
-    const deviceIp = ipForm.ip || ipForm.host
-
-    return {
-      device_id: normalizeDeviceId(deviceName),
-      ip: deviceIp,
-      port: ipForm.port || 55443,
-      name: deviceName,
-      enabled: true
-    }
-  }
-
-  function isDuplicateDevice(device: any, devices: any[]): boolean {
-    return devices.some(d => d.ip === device.ip || d.device_id === device.device_id)
-  }
-
-  function handleAddAnotherDevice() {
-    console.log('[handleAddAnotherDevice] START', {
-      mode,
-      collectedDevicesCount: collectedDevices.length,
-      collectedDevices: [...collectedDevices],
-      multiDeviceEnabled: schema?.multi_device?.enabled,
-      currentStepIndex,
-      currentStepId: visibleSteps[currentStepIndex]?.id
-    })
-
+  // Handle add another device
+  const handleAddAnotherDevice = useCallback(() => {
     if (!schema?.multi_device?.enabled) return
 
-    // Set flag to prevent auto-jump back to instance step
     isManuallyAddingDevice.current = true
 
-    // Build and save current device
-    const currentDevice = buildCurrentDevice()
-    console.log('[handleAddAnotherDevice] currentDevice built:', currentDevice)
+    // Add current device
+    addCurrentDevice()
 
-    if (currentDevice && !isDuplicateDevice(currentDevice, collectedDevices)) {
-      console.log('[handleAddAnotherDevice] Adding current device to collected list')
-      setCollectedDevices(prev => [...prev, currentDevice])
-    } else if (currentDevice) {
-      console.log('[handleAddAnotherDevice] Current device is duplicate, not adding')
-    } else {
-      console.log('[handleAddAnotherDevice] No current device to add (forms are empty)')
-    }
+    // Clear loop forms
+    const loopSteps = getLoopSteps(schema, currentFlow)
+    clearLoopForms(loopSteps)
 
-    // Clear loop step forms
-    const loopSteps = getLoopSteps()
-    console.log('[handleAddAnotherDevice] Loop steps to clear:', loopSteps)
-
-    setFlowState(prev => {
-      const newForm = { ...prev.form }
-      loopSteps.forEach(stepId => {
-        delete newForm[stepId]
-      })
-      return { ...prev, form: newForm }
-    })
-
-    // Reset flowStateRef
-    flowStateRef.current = {
-      ...flowStateRef.current,
-      form: { ...flowStateRef.current.form }
-    }
-    loopSteps.forEach(stepId => {
-      delete flowStateRef.current.form[stepId]
-    })
-
-    // Navigate back to the beginning of the loop
-    const targetStepIndex = visibleSteps.findIndex(
-      s => s.id === schema.multi_device!.loop_from_step
-    )
-    console.log('[handleAddAnotherDevice] Target step search:', {
-      loop_from_step: schema.multi_device!.loop_from_step,
-      targetStepIndex,
-      visibleStepsCount: visibleSteps.length,
-      visibleStepsIds: visibleSteps.map(s => s.id)
-    })
-
+    // Navigate to loop start
+    const targetStepIndex = visibleSteps.findIndex(s => s.id === schema.multi_device!.loop_from_step)
     if (targetStepIndex !== -1) {
-      console.log('[handleAddAnotherDevice] Navigating to step index:', targetStepIndex)
       setCurrentStepIndex(targetStepIndex)
       setError(null)
-    } else {
-      console.error('[handleAddAnotherDevice] Target step NOT FOUND in visibleSteps!')
     }
-  }
+  }, [schema, currentFlow, visibleSteps, addCurrentDevice, clearLoopForms, setCurrentStepIndex])
 
-  function handleRemoveDevice(index: number) {
-    const deviceToRemove = collectedDevices[index]
-    console.log('[handleRemoveDevice] Removing device:', {
-      index,
-      device: deviceToRemove,
-      collectedDevicesCount: collectedDevices.length,
-      collectedDevicesBefore: [...collectedDevices]
-    })
-
-    setCollectedDevices(prev => {
-      const newDevices = prev.filter((_, i) => i !== index)
-      console.log('[handleRemoveDevice] After removal:', {
-        newCount: newDevices.length,
-        newDevices: [...newDevices]
-      })
-      return newDevices
-    })
-  }
-
-  function handleEditDevice(index: number) {
-    console.log('[handleEditDevice] START', {
-      index,
-      collectedDevicesCount: collectedDevices.length,
-      multiDeviceEnabled: schema?.multi_device?.enabled,
-      currentStepIndex,
-      currentStepId: visibleSteps[currentStepIndex]?.id
-    })
-
-    if (!schema?.multi_device?.enabled) return
-
-    // Set flag to prevent auto-jump back to instance step
-    isManuallyAddingDevice.current = true
-
-    const deviceToEdit = collectedDevices[index]
-    console.log('[handleEditDevice] Device to edit:', deviceToEdit)
-
-    if (!deviceToEdit) {
-      console.error('[handleEditDevice] Device not found at index:', index)
-      return
-    }
-
-    // Pre-fill forms with device data
-    const ipFormData = {
-      ip: deviceToEdit.ip,
-      port: deviceToEdit.port || 55443
-    }
-
-    const deviceConfigData = {
-      friendly_name: deviceToEdit.name,
-      // Add any other fields that might be in the device
-      ...deviceToEdit
-    }
-
-    console.log('[handleEditDevice] Pre-filling forms:', {
-      ipFormData,
-      deviceConfigData
-    })
-
-    // Update flowState with pre-filled data
-    setFlowState(prev => ({
-      ...prev,
-      form: {
-        ...prev.form,
-        ip_form: ipFormData,
-        device_config: deviceConfigData
-      }
-    }))
-
-    // Update flowStateRef immediately for synchronous access
-    flowStateRef.current = {
-      ...flowStateRef.current,
-      form: {
-        ...flowStateRef.current.form,
-        ip_form: ipFormData,
-        device_config: deviceConfigData
-      }
-    }
-
-    // Remove device from collected list (will be re-added after editing)
-    console.log('[handleEditDevice] Removing device from collected list temporarily')
-    setCollectedDevices(prev => prev.filter((_, i) => i !== index))
-
-    // Navigate back to the beginning of the loop
-    const targetStepIndex = visibleSteps.findIndex(
-      s => s.id === schema.multi_device!.loop_from_step
-    )
-    console.log('[handleEditDevice] Target step search:', {
-      loop_from_step: schema.multi_device!.loop_from_step,
-      targetStepIndex,
-      visibleStepsCount: visibleSteps.length,
-      visibleStepsIds: visibleSteps.map(s => s.id)
-    })
-
-    if (targetStepIndex !== -1) {
-      console.log('[handleEditDevice] Navigating to step index:', targetStepIndex)
-      setCurrentStepIndex(targetStepIndex)
-      setError(null)
-    } else {
-      console.error('[handleEditDevice] Target step NOT FOUND in visibleSteps!')
-    }
-  }
-
-  async function createInstance(step: FlowStep) {
-    if (!step.instance) {
-      setError('Instance step missing configuration')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      let instanceId: string
-      let friendlyName: string
-      let config: any
-      let connectorType: string
-      let enabled: boolean
-      let updateInterval: number
-      let secrets: any
-
-      // In edit mode: use existing instance data, don't regenerate instance_id
-      if (mode === 'edit') {
-        // Use existing instance_id - NEVER regenerate it
-        instanceId = existingInstanceId!
-
-        // Try to get friendly_name from forms first, fallback to existing data
-        const formFriendlyName = flowState.form.device_config?.friendly_name
-        friendlyName = formFriendlyName || initialConfig.friendly_name || instanceId
-
-        // Use existing config as base, potentially updated by forms
-        const freshContext = buildContext(flowState, currentFlow)
-        const resolved = resolveDeepWithContext(step.instance, freshContext)
-        config = resolved.config ?? initialConfig.config ?? {}
-
-        // Keep other existing properties
-        connectorType = integration.name
-        enabled = initialConfig.enabled ?? true
-        updateInterval = initialConfig.update_interval ?? 15
-        secrets = resolved.secrets ?? initialConfig.secrets ?? undefined
-      } else {
-        // Create mode: use templates from setup.json
-        const freshContext = buildContext(flowState, currentFlow)
-        const resolved = resolveDeepWithContext(step.instance, freshContext)
-
-        // Auto-generate instance_id if empty or "auto"
-        instanceId = resolved.instance_id
-        if (!instanceId || instanceId.trim() === '' || instanceId.trim().toLowerCase() === 'auto') {
-          instanceId = generateInstanceId('')
-        }
-
-        friendlyName = resolved.friendly_name ?? instanceId
-        config = resolved.config ?? {}
-        connectorType = resolved.connector_type ?? integration.name
-        enabled = resolved.enabled ?? true
-        updateInterval = resolved.update_interval ?? 15
-        secrets = resolved.secrets ?? undefined
-      }
-
-      // Collect devices: multi-device mode vs single device
-      let devices = []
-      if (schema?.multi_device?.enabled) {
-        // Multi-device mode: collect all devices
-        devices = [...collectedDevices]
-        const currentDevice = buildCurrentDevice()
-        if (currentDevice && !isDuplicateDevice(currentDevice, devices)) {
-          devices.push(currentDevice)
-        }
-      } else {
-        // Single device mode: use resolved devices from template (create mode only)
-        if (mode === 'edit') {
-          devices = collectedDevices
-        } else {
-          const freshContext = buildContext(flowState, currentFlow)
-          const resolved = resolveDeepWithContext(step.instance, freshContext)
-          devices = resolved.devices ?? []
-        }
-      }
-
-      const payload = {
-        instance_id: instanceId,
-        connector_type: connectorType,
-        friendly_name: friendlyName,
-        config: config,
-        devices: devices,
-        enabled: enabled,
-        update_interval: updateInterval,
-        secrets: secrets
-      }
-      if (!payload.instance_id) {
-        throw new Error('Instance id is required to create connector instance')
-      }
-      if (typeof payload.update_interval === 'string') {
-        const trimmed = payload.update_interval.trim()
-        const numeric = Number(trimmed)
-        payload.update_interval = trimmed && Number.isFinite(numeric) ? numeric : 15
-      }
-      if (payload.config && typeof payload.config.duration === 'string') {
-        const trimmed = payload.config.duration.trim()
-        const numericDuration = Number(trimmed)
-        payload.config.duration = trimmed && Number.isFinite(numericDuration) ? numericDuration : 300
-      }
-      if (payload.config && typeof payload.config.discovery_interval === 'string') {
-        const trimmed = payload.config.discovery_interval.trim()
-        const numericInterval = Number(trimmed)
-        if (trimmed && Number.isFinite(numericInterval)) payload.config.discovery_interval = numericInterval
-      }
-      if (payload.devices && Array.isArray(payload.devices)) {
-        payload.devices = payload.devices.map(device => {
-          const mapped = { ...device }
-          // Normalize device_id if it's a friendly name (not already normalized)
-          if (mapped.device_id && typeof mapped.device_id === 'string') {
-            mapped.device_id = normalizeDeviceId(mapped.device_id)
-          }
-          if (typeof mapped.port === 'string') {
-            const trimmed = mapped.port.trim()
-            const numericPort = Number(trimmed)
-            mapped.port = trimmed && Number.isFinite(numericPort) ? numericPort : 55443
-          }
-          return mapped
-        })
-      }
-      const token = getAuthToken()
-
-      // Use PUT for edit mode, POST for create mode
-      const method = mode === 'edit' ? 'PUT' : 'POST'
-      const url = mode === 'edit'
-        ? `/api/instances/${connectorType}/${existingInstanceId}`
-        : '/api/instances'
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      })
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data?.detail ?? `Failed to ${mode === 'edit' ? 'update' : 'create'} instance`)
-      }
-      onSuccess()
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to create instance')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function handleAction(action: FlowAction, step?: FlowStep) {
-    switch (action.type) {
-      case 'goto_flow': {
-        const target = action.flow
-        if (!target) return
-
-        // Block all state updates from ongoing async operations
-        isChangingFlow.current = true
-
-        // Abort any running tool execution (e.g., auto-discovery)
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort()
-          abortControllerRef.current = null
-        }
-
-        setBusy(false)
-        setCurrentFlowId(target)
-        setCurrentStepIndex(0)
-        autoRanSteps.current = new Set()
-        setFlowState(initialFlowState)
-        setError(null)
-        setShowAdvanced(false)
-
-        // Unblock after a short delay to allow React to process updates
-        setTimeout(() => {
-          isChangingFlow.current = false
-        }, 100)
-        return
-      }
-      case 'open_url': {
-        if (action.url) window.open(action.url, '_blank', 'noopener')
-        return
-      }
-      case 'reset_flow': {
-        setFlowState(initialFlowState)
-        setCurrentStepIndex(0)
-        autoRanSteps.current = new Set()
-        return
-      }
-      case 'rerun_step': {
-        if (step && step.type === 'tool') {
-          autoRanSteps.current.delete(step.id)
-          void executeTool(step)
-        }
-        return
-      }
-      default:
-        console.warn('Unhandled flow action', action)
-    }
-  }
-
-  async function startOAuth(step: FlowStep) {
-    const provider = step.oauth?.provider
-    if (!provider) {
-      setError('OAuth provider not specified')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      const token = getAuthToken()
-      const response = await fetch(`/api/oauth/${provider}/session`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ redirect_uri: step.oauth?.redirect_uri })
-      })
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data?.detail ?? 'Failed to start OAuth flow')
-      }
-      const data = await response.json()
-      setOauthSession({ id: data.session_id, provider })
-      const popup = window.open(data.authorization_url, '_blank', 'width=600,height=700')
-      if (!popup) {
-        throw new Error('Please allow popups to continue OAuth authorization')
-      }
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to start OAuth flow')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function renderField(step: FlowStep, field: FormField) {
-    const values = flowState.form[step.id] ?? {}
-    const value = values[field.name] ?? (field.default ?? '')
-    if (!evaluateConditions(field.conditions)) return null
-    if (field.advanced && !showAdvanced) return null
-
-    if (field.type === 'select') {
-      return (
-        <div key={field.name} className="space-y-2">
-          <Label>{field.label ?? field.name}</Label>
-          <Select
-            value={value}
-            onValueChange={val => updateFormValue(step.id, field, val)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder={field.placeholder ?? 'Select option'} />
-            </SelectTrigger>
-            <SelectContent>
-              {(field.options ?? []).map(option => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {field.description && (
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          )}
-        </div>
-      )
-    }
-
-    if (field.type === 'checkbox') {
-      return (
-        <div key={field.name} className="flex items-center space-x-2">
-          <Input
-            type="checkbox"
-            checked={Boolean(value)}
-            onChange={event => updateFormValue(step.id, field, event.target.checked)}
-          />
-          <Label className="font-normal">{field.label ?? field.name}</Label>
-        </div>
-      )
-    }
-
-    // Handle number fields specially
-    if (field.type === 'number') {
-      return (
-        <div key={field.name} className="space-y-2">
-          <Label>{field.label ?? field.name}</Label>
-          <Input
-            type="number"
-            placeholder={field.placeholder ?? field.default?.toString()}
-            value={value ?? ''}
-            min={field.min}
-            max={field.max}
-            step={field.step}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => {
-              const val = event.target.value
-              // Store as number if valid, empty string if empty
-              const numValue = val === '' ? '' : parseFloat(val)
-              updateFormValue(step.id, field, isNaN(numValue) ? '' : numValue)
-            }}
-          />
-          {field.description && (
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          )}
-        </div>
-      )
-    }
-
-    const inputType = field.type === 'textarea' ? 'text' : field.type === 'password' ? 'password' : 'text'
-    const inputProps = {
-      placeholder: field.placeholder,
-      value: value ?? '',
-      onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-        updateFormValue(step.id, field, event.target.value)
-    }
-
-    return (
-      <div key={field.name} className="space-y-2">
-        <Label>{field.label ?? field.name}</Label>
-        {field.type === 'textarea' ? (
-          <Textarea {...inputProps} rows={field.multiline ? 6 : 3} />
-        ) : (
-          <Input type={inputType} {...inputProps} />
-        )}
-        {field.description && (
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        )}
-      </div>
-    )
-  }
-
-  function renderForm(step: FlowStep) {
-    const hasAdvancedFields = step.schema?.fields?.some(field => field.advanced) ?? false
-
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{step.title ?? 'Configuration'}</CardTitle>
-          {step.description && <CardDescription>{step.description}</CardDescription>}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {step.schema?.fields?.map(field => renderField(step, field))}
-          {hasAdvancedFields && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full"
-            >
-              {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  function renderTool(step: FlowStep) {
-    const storageKey = step.output_key ?? step.tool ?? step.id
-    const result = flowState.tools[storageKey]
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{step.title ?? 'Run Tool'}</CardTitle>
-          {step.description && <CardDescription>{step.description}</CardDescription>}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {busy ? 'Executing tool…' : result ? 'Tool executed successfully' : 'Execute the tool to continue'}
-          </div>
-          <Button variant="secondary" disabled={busy} onClick={() => executeTool(step)}>
-            {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Run tool
-          </Button>
-          {result && (
-            <pre className="bg-muted text-xs p-3 rounded overflow-x-auto">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  function renderSelect(step: FlowStep) {
-    const rawItems = resolveDeep(step.items ?? '')
-    const items = Array.isArray(rawItems) ? rawItems : []
-    const storageKey = step.output_key ?? step.id
-    const currentSelection = flowState.selection[storageKey] ?? (step.multi_select ? [] : null)
-
-    const toggle = (value: any) => {
-      setFlowState(prev => {
-        const selection = prev.selection[storageKey]
-        if (step.multi_select) {
-          const list = Array.isArray(selection) ? [...selection] : []
-          const index = list.findIndex(item => JSON.stringify(item) === JSON.stringify(value))
-          if (index >= 0) list.splice(index, 1)
-          else list.push(value)
-          return {
-            ...prev,
-            selection: { ...prev.selection, [storageKey]: list }
-          }
-        }
-        return {
-          ...prev,
-          selection: { ...prev.selection, [storageKey]: value }
-        }
-      })
-    }
-
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{step.title ?? 'Select items'}</CardTitle>
-          {step.description && <CardDescription>{step.description}</CardDescription>}
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {items.length === 0 && (
-            <Alert>
-              <AlertDescription>No options available. Run the previous step again if data was expected.</AlertDescription>
-            </Alert>
-          )}
-          {items.map((item, index) => {
-            const itemValue = resolveDeep(step.item_value ?? '{{ item }}', { item })
-            const itemLabel = resolveTemplate(step.item_label ?? '{{ item }}', { item })
-            const isActive = step.multi_select
-              ? Array.isArray(currentSelection) && currentSelection.some((sel: any) => JSON.stringify(sel) === JSON.stringify(itemValue))
-              : JSON.stringify(currentSelection) === JSON.stringify(itemValue)
-            return (
-              <button
-                type="button"
-                key={`${storageKey}-${index}`}
-                className={cn(
-                  'w-full text-left border rounded p-3 transition-colors',
-                  isActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                )}
-                onClick={() => toggle(itemValue)}
-              >
-                {itemLabel}
-              </button>
-            )
-          })}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  function renderSummary(step: FlowStep) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{step.title ?? 'Summary'}</CardTitle>
-          {step.description && <CardDescription>{step.description}</CardDescription>}
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          {(step.sections ?? []).map((section, index) => (
-            <div key={`${step.id}-section-${index}`} className="flex justify-between">
-              <span className="text-muted-foreground">{section.label}</span>
-              <span>{resolveTemplate(section.value)}</span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  function renderMessage(step: FlowStep) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{step.title ?? 'Information'}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">{step.description ?? 'Follow the instructions to continue.'}</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  function DeviceListItem({
-    device,
-    index,
-    onRemove,
-    onEdit,
-    canRemove = true
-  }: {
-    device: any
-    index: number
-    onRemove?: () => void
-    onEdit?: () => void
-    canRemove?: boolean
-  }) {
-    return (
-      <div className="flex items-center justify-between p-3 border rounded-lg bg-background">
-        <div className="flex-1">
-          <div className="font-medium text-sm">{device.name}</div>
-          <div className="text-xs text-muted-foreground">
-            {device.ip}:{device.port}
-          </div>
-        </div>
-        <div className="flex gap-1">
-          {onEdit && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onEdit}
-              className="hover:bg-primary/10"
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          )}
-          {canRemove && onRemove && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRemove}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  function renderInstance(step: FlowStep) {
-    // Multi-device support
-    const multiDevice = schema?.multi_device
-
-    // Build current device from forms (if being edited/added)
-    const currentDevice = buildCurrentDevice()
-
-    // For display: show collected devices + current device (if exists and not duplicate)
-    const allDevices = [...collectedDevices]
-    const hasCurrentDevice = currentDevice && !isDuplicateDevice(currentDevice, allDevices)
-    if (hasCurrentDevice) {
-      allDevices.push(currentDevice)
-    }
-
-    // For buttons: ONLY use collectedDevices indices (not allDevices)
-    // currentDevice is handled separately - it's being edited, not in the list yet
-    const devicesToShow = [...collectedDevices]
-
-    const maxDevices = multiDevice?.max_devices ?? 100
-    const canAddMore = multiDevice?.enabled === true && allDevices.length < maxDevices
-    const totalDeviceCount = allDevices.length
-
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{step.title ?? 'Create Instance'}</CardTitle>
-          {step.description && <CardDescription>{step.description}</CardDescription>}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Device list */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-foreground">
-                {multiDevice?.enabled
-                  ? `${multiDevice.device_label ?? 'Devices'} (${totalDeviceCount}/${maxDevices})`
-                  : 'Device Configuration'
-                }
-              </h4>
-            </div>
-            <div className="space-y-2">
-              {/* Show all devices (collected + current if exists) */}
-              {allDevices.map((device, index) => {
-                // Check if this is the current device (last in allDevices if hasCurrentDevice)
-                const isCurrentDevice = hasCurrentDevice && index === allDevices.length - 1
-
-                return (
-                  <DeviceListItem
-                    key={`${device.device_id}-${index}`}
-                    device={device}
-                    index={index}
-                    // If it's current device, don't allow edit/remove (it's being edited right now)
-                    // Otherwise, use the index from collectedDevices
-                    onRemove={isCurrentDevice ? undefined : () => handleRemoveDevice(index)}
-                    onEdit={isCurrentDevice ? undefined : () => handleEditDevice(index)}
-                    canRemove={!isCurrentDevice && (multiDevice?.enabled === true || allDevices.length > 1)}
-                  />
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Add another device button - ALWAYS visible when multi-device enabled */}
-          {canAddMore && (
-            <Button
-              variant="outline"
-              onClick={handleAddAnotherDevice}
-              disabled={busy}
-              className="w-full"
-            >
-              {multiDevice!.add_button_label ?? 'Add Another Device'}
-            </Button>
-          )}
-
-          <p className="text-sm text-muted-foreground">
-            Press Finish to create the connector instance with {totalDeviceCount} device{totalDeviceCount > 1 ? 's' : ''}.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  function renderOAuth(step: FlowStep) {
-    const provider = step.oauth?.provider ?? 'provider'
-    const sessionActive = flowState.oauth[provider]
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{step.title ?? `Authorize ${provider}`}</CardTitle>
-          {step.description && <CardDescription>{step.description}</CardDescription>}
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Sign in with your {provider} account to continue. A popup window will open to complete the authorization.
-          </p>
-          <Button disabled={busy} onClick={() => startOAuth(step)}>
-            {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Authorize {provider}
-          </Button>
-          {sessionActive && (
-            <Alert>
-              <AlertDescription>
-                Connected as {sessionActive.tokens?.account ?? 'authorized account'}
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  function renderStep(step: FlowStep) {
-    switch (step.type as FlowStepType) {
-      case 'form':
-        return renderForm(step)
-      case 'tool':
-        return renderTool(step)
-      case 'select':
-        return renderSelect(step)
-      case 'summary':
-        return renderSummary(step)
-      case 'message':
-        return renderMessage(step)
-      case 'instance':
-        return renderInstance(step)
-      case 'oauth':
-        return renderOAuth(step)
-      case 'discovery':
-        return renderMessage(step)
-      default:
-        return (
-          <Alert>
-            <AlertDescription>Unsupported step type: {step.type}</AlertDescription>
-          </Alert>
-        )
-    }
-  }
-
-  function renderFlowSelector() {
+  // Render flow selector
+  const renderFlowSelector = () => {
     if (!schema || schema.flows.length <= 1) return null
+
     return (
       <div className="flex flex-wrap gap-2">
         {schema.flows.map(flow => {
@@ -1530,11 +246,7 @@ export default function FlowSetupForm({
             <Button
               key={flow.id}
               variant={selected ? 'default' : 'outline'}
-              onClick={() => {
-                setCurrentFlowId(flow.id)
-                setCurrentStepIndex(0)
-                autoRanSteps.current = new Set()
-              }}
+              onClick={() => goToFlow(flow.id)}
             >
               {flow.name}
             </Button>
@@ -1544,22 +256,88 @@ export default function FlowSetupForm({
     )
   }
 
+  // Render current step
+  const renderStep = () => {
+    if (!currentStep) return null
+
+    // Special handling for instance step
+    if (currentStep.type === 'instance') {
+      return (
+        <InstanceStep
+          step={currentStep}
+          flowState={flowState}
+          updateFlowState={updateFlowState}
+          onNext={handleNext}
+          busy={busy}
+          error={error}
+          setError={setError}
+          setBusy={setBusy}
+          connectorName={integration.name}
+          mode={mode}
+          existingInstanceId={existingInstanceId}
+          initialConfig={initialConfig}
+          context={context}
+          schema={schema}
+          collectedDevices={collectedDevices}
+          onAddDevice={handleAddAnotherDevice}
+          onEditDevice={editDevice}
+          onRemoveDevice={removeDevice}
+          onSuccess={onSuccess}
+        />
+      )
+    }
+
+    // Get step component from registry
+    const stepDef = stepRegistry.getStep(currentStep.type)
+    if (!stepDef) {
+      return (
+        <Alert variant="destructive">
+          <AlertDescription>Unsupported step type: {currentStep.type}</AlertDescription>
+        </Alert>
+      )
+    }
+
+    const StepComponent = stepDef.component
+
+    return (
+      <StepComponent
+        step={currentStep}
+        flowState={flowState}
+        updateFlowState={updateFlowState}
+        onNext={handleNext}
+        busy={busy}
+        error={error}
+        setError={setError}
+        setBusy={setBusy}
+        connectorName={integration.name}
+        mode={mode}
+        existingInstanceId={existingInstanceId}
+        initialConfig={initialConfig}
+        context={context}
+      />
+    )
+  }
+
+  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center h-40 text-muted-foreground">
-        <Loader2 className="w-6 h-6 animate-spin mr-2" />Loading setup…
+        <Loader2 className="w-6 h-6 animate-spin mr-2" />
+        Loading setup…
       </div>
     )
   }
 
-  if (error) {
+  // Error state
+  if (error && !schema) {
     return (
-      <Alert>
+      <Alert variant="destructive">
         <AlertDescription>{error}</AlertDescription>
       </Alert>
     )
   }
 
+  // No flow available
   if (!schema || !currentFlow || visibleSteps.length === 0) {
     return (
       <Alert>
@@ -1569,6 +347,7 @@ export default function FlowSetupForm({
   }
 
   const footerActions = currentStep?.actions ?? []
+  const isInstanceStep = currentStep?.type === 'instance'
 
   return (
     <div className="space-y-4">
@@ -1582,22 +361,24 @@ export default function FlowSetupForm({
         {renderFlowSelector()}
       </div>
 
-      {currentStep && renderStep(currentStep)}
+      {renderStep()}
 
       {error && (
-        <Alert>
+        <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       <div className="flex justify-between items-center">
         <div className="flex gap-2 items-center">
-          <Button variant="outline" onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
           {footerActions.map(action => (
             <Button
               key={`${currentStep?.id ?? 'flow'}-${action.type}`}
               variant="ghost"
-              onClick={() => handleAction(action, currentStep)}
+              onClick={() => handleAction(action, currentStep!)}
               className="flex items-center gap-1"
             >
               {action.label ?? action.type}
@@ -1611,18 +392,26 @@ export default function FlowSetupForm({
               Back
             </Button>
           )}
-          {currentStep.type === 'instance' ? (
-            <Button key={`finish-${currentFlowId}-${currentStepIndex}`} disabled={busy} onClick={() => createInstance(currentStep)}>
+          {!isInstanceStep && (
+            <Button disabled={busy} onClick={handleNext}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {mode === 'edit' ? 'Save Changes' : 'Finish'}
-            </Button>
-          ) : (
-            <Button key={`next-${currentFlowId}-${currentStepIndex}`} disabled={busy} onClick={handleNext}>
-              {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Next
+              Next
             </Button>
           )}
         </div>
       </div>
     </div>
   )
+}
+
+// Helper function
+function getLoopSteps(schema: FlowSetupSchema | null, currentFlow: any): string[] {
+  if (!schema?.multi_device?.enabled || !currentFlow) return []
+
+  const fromIndex = currentFlow.steps.findIndex((s: any) => s.id === schema.multi_device!.loop_from_step)
+  const toIndex = currentFlow.steps.findIndex((s: any) => s.id === schema.multi_device!.loop_to_step)
+
+  if (fromIndex === -1 || toIndex === -1) return []
+
+  return currentFlow.steps.slice(fromIndex, toIndex + 1).map((s: any) => s.id)
 }
