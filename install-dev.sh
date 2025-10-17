@@ -288,7 +288,7 @@ main() {
     [ -d "$INSTALL_DIR/secrets" ] && cp -r "$INSTALL_DIR/secrets" "$BACKUP_DIR/" 2>/dev/null || true
 
     # Safe update: pull latest code
-    (cd "$INSTALL_DIR" && git fetch origin "$BRANCH" && git reset --hard "origin/$BRANCH") >>"$LOG_FILE" 2>&1 || true
+    (cd "$INSTALL_DIR" && git fetch origin "$BRANCH" && git checkout "$BRANCH" && git reset --hard "origin/$BRANCH") >>"$LOG_FILE" 2>&1 || true
 
     # Restore user data
     log "Restoring user data..."
