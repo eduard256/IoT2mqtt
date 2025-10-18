@@ -32,6 +32,18 @@ export function FormStep({
 
   const hasAdvancedFields = step.schema?.fields?.some(field => field.advanced) ?? false
 
+  // Resolve templates in all field configs (must be outside map for React hooks rules)
+  const resolvedFields = useMemo(() => {
+    return step.schema?.fields?.map(field => {
+      if (!field.config) return field
+
+      return {
+        ...field,
+        config: resolveDeep(field.config)
+      }
+    }) ?? []
+  }, [step.schema?.fields, resolveDeep])
+
   return (
     <Card>
       <CardHeader>
@@ -39,27 +51,17 @@ export function FormStep({
         {step.description && <CardDescription>{step.description}</CardDescription>}
       </CardHeader>
       <CardContent className="space-y-4">
-        {step.schema?.fields?.map(field => {
+        {resolvedFields.map(field => {
           // Check visibility conditions
           if (!evaluateConditions(field.conditions, context, v => v)) return null
           if (field.advanced && !showAdvanced) return null
 
           const value = flowState.form[step.id]?.[field.name] ?? field.default ?? ''
 
-          // Resolve templates in field.config if present
-          const resolvedField: FormField = useMemo(() => {
-            if (!field.config) return field
-
-            return {
-              ...field,
-              config: resolveDeep(field.config)
-            }
-          }, [field, context])
-
           return (
             <FieldRenderer
               key={field.name}
-              field={resolvedField}
+              field={field}
               value={value}
               onChange={val => updateFormValue(field.name, val)}
               connectorName={connectorName}
