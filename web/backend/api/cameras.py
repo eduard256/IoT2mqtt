@@ -6,9 +6,9 @@ Provides search and stream scanning functionality
 import logging
 import uuid
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from services.camera_index_service import CameraIndexService
 from services.camera_stream_scanner import CameraStreamScanner
@@ -28,6 +28,37 @@ class StreamScanRequest(BaseModel):
     username: str = ""
     password: str = ""
     channel: int = 0
+
+
+# Add custom exception handler for validation errors
+@router.post("/scan-streams-debug")
+async def debug_stream_scan_request(request: Request) -> Dict[str, Any]:
+    """
+    Debug endpoint to see raw request data before Pydantic validation
+    """
+    try:
+        body = await request.body()
+        logger.info("=" * 80)
+        logger.info("DEBUG: RAW REQUEST DATA")
+        logger.info(f"Raw body bytes: {body}")
+        logger.info(f"Raw body decoded: {body.decode('utf-8')}")
+
+        import json
+        try:
+            json_data = json.loads(body)
+            logger.info(f"Parsed JSON data: {json.dumps(json_data, indent=2)}")
+            logger.info(f"JSON keys: {list(json_data.keys())}")
+            for key, value in json_data.items():
+                logger.info(f"  {key}: '{value}' (type: {type(value).__name__})")
+        except Exception as e:
+            logger.error(f"Failed to parse JSON: {e}")
+
+        logger.info("=" * 80)
+
+        return {"ok": True, "message": "Check server logs for details"}
+    except Exception as e:
+        logger.error(f"Debug endpoint error: {e}")
+        return {"ok": False, "error": str(e)}
 
 
 @router.get("/search")
@@ -61,17 +92,32 @@ async def start_stream_scan(request: StreamScanRequest) -> Dict[str, Any]:
     Returns task_id for monitoring progress via SSE endpoint
     """
     try:
+        logger.info("=" * 80)
+        logger.info("STREAM SCAN REQUEST RECEIVED")
+        logger.info(f"Request model type: {type(request)}")
+        logger.info(f"Request brand: '{request.brand}' (type: {type(request.brand)})")
+        logger.info(f"Request model: '{request.model}' (type: {type(request.model)})")
+        logger.info(f"Request address: '{request.address}' (type: {type(request.address)})")
+        logger.info(f"Request username: '{request.username}' (type: {type(request.username)})")
+        logger.info(f"Request password: {'***' if request.password else '(empty)'}")
+        logger.info(f"Request channel: {request.channel} (type: {type(request.channel)})")
+        logger.info("=" * 80)
+
         task_id = str(uuid.uuid4())
 
         # Get URL patterns for this model
+        logger.info(f"Calling camera_index.get_entries(brand='{request.brand}', model='{request.model}')")
         entries = camera_index.get_entries(request.brand, request.model)
+        logger.info(f"camera_index.get_entries returned {len(entries) if entries else 0} entries")
 
         if not entries:
+            logger.warning(f"No stream patterns found for brand='{request.brand}', model='{request.model}'")
             return {
                 "ok": False,
                 "error": "No stream patterns found for this model"
             }
 
+        logger.info(f"Starting stream scanner with task_id={task_id}")
         # Start background scanning task
         await stream_scanner.start_scan(
             task_id=task_id,
@@ -82,6 +128,7 @@ async def start_stream_scan(request: StreamScanRequest) -> Dict[str, Any]:
             channel=request.channel
         )
 
+        logger.info(f"Stream scan started successfully: task_id={task_id}, patterns={len(entries)}")
         return {
             "ok": True,
             "task_id": task_id,
@@ -89,7 +136,13 @@ async def start_stream_scan(request: StreamScanRequest) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Failed to start stream scan: {e}")
+        logger.error("=" * 80)
+        logger.error(f"FAILED TO START STREAM SCAN - Exception: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error(f"Exception details: {repr(e)}")
+        import traceback
+        logger.error(f"Traceback:\n{traceback.format_exc()}")
+        logger.error("=" * 80)
         raise HTTPException(status_code=500, detail=str(e))
 
 

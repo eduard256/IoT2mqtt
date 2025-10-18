@@ -42,51 +42,86 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
     setStreams([])
 
     try {
+      console.log('='.repeat(80))
+      console.log('FRONTEND: Starting camera stream scan')
+      console.log('Field config:', config)
+
       // Parse model data
       let modelData
       try {
+        console.log('Attempting to parse config.model as JSON:', config.model)
         modelData = JSON.parse(config.model || '{}')
-      } catch {
+        console.log('Successfully parsed as JSON:', modelData)
+      } catch (parseError) {
+        console.log('Failed to parse as JSON, treating as display string:', parseError)
         // If not JSON, treat as display string
         const parts = (config.model || '').split(':')
+        console.log('Split by colon:', parts)
         if (parts.length === 2) {
           modelData = {
             brand: parts[0].trim(),
             model: parts[1].trim()
           }
+          console.log('Created modelData from split:', modelData)
         } else {
+          console.error('Invalid model format - not 2 parts after split')
           throw new Error('Invalid model format')
         }
       }
 
+      const requestBody = {
+        brand: modelData.brand,
+        model: modelData.model,
+        address: config.address || '',
+        username: config.username || '',
+        password: config.password || '',
+        channel: parseInt(config.channel || '0')
+      }
+
+      console.log('Request body to send:', {
+        ...requestBody,
+        password: requestBody.password ? '***' : '(empty)'
+      })
+      console.log('Request body field types:', {
+        brand: typeof requestBody.brand,
+        model: typeof requestBody.model,
+        address: typeof requestBody.address,
+        username: typeof requestBody.username,
+        password: typeof requestBody.password,
+        channel: typeof requestBody.channel
+      })
+
       const token = getAuthToken()
 
       // Start scan
+      console.log('Sending POST to /api/cameras/scan-streams')
       const scanRes = await fetch('/api/cameras/scan-streams', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          brand: modelData.brand,
-          model: modelData.model,
-          address: config.address || '',
-          username: config.username || '',
-          password: config.password || '',
-          channel: parseInt(config.channel || '0')
-        })
+        body: JSON.stringify(requestBody)
       })
 
+      console.log('Response status:', scanRes.status)
+      console.log('Response ok:', scanRes.ok)
+
       if (!scanRes.ok) {
-        throw new Error('Failed to start scan')
+        const errorText = await scanRes.text()
+        console.error('Error response body:', errorText)
+        throw new Error(`Failed to start scan: ${scanRes.status} - ${errorText}`)
       }
 
       const scanData = await scanRes.json()
+      console.log('Scan response data:', scanData)
 
       if (!scanData.ok) {
+        console.error('Scan failed with message:', scanData.error)
         throw new Error(scanData.error || 'Scan failed')
       }
+
+      console.log('='.repeat(80))
 
       const taskId = scanData.task_id
 
