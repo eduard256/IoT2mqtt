@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
 import type { FlowState, FlowContext } from '../types'
-import type { FlowDefinition, FormField } from '@/types/integration'
+import type { FlowSetupSchema, FormField } from '@/types/integration'
 
 const initialFlowState: FlowState = {
   form: {},
@@ -12,7 +12,7 @@ const initialFlowState: FlowState = {
 
 export function useFlowState(
   integration: { name: string; display_name?: string },
-  currentFlow: FlowDefinition | undefined
+  schema: FlowSetupSchema | null
 ) {
   const [flowState, setFlowState] = useState<FlowState>(initialFlowState)
   const flowStateRef = useRef<FlowState>(initialFlowState)
@@ -27,38 +27,54 @@ export function useFlowState(
   }, [])
 
   // Build context with defaults applied
+  // This processes ALL form data in flowState, regardless of which flow is active
   const buildContext = useCallback(
     (state: FlowState): FlowContext => {
       const enrichedForm: Record<string, any> = {}
 
-      if (currentFlow) {
-        for (const step of currentFlow.steps) {
-          if (step.type === 'form' && step.id) {
-            const formData = state.form[step.id] || {}
-            const enrichedData: Record<string, any> = {}
+      // Build a map of all form steps from all flows in schema
+      const formStepsMap = new Map<string, any>()
 
-            if (step.schema?.fields) {
-              for (const field of step.schema.fields) {
-                const currentValue = formData[field.name]
-                const fieldExistsInFormData = field.name in formData
-
-                if (fieldExistsInFormData) {
-                  if (field.type === 'number' && typeof currentValue === 'string') {
-                    const parsed = parseFloat(currentValue)
-                    enrichedData[field.name] = isNaN(parsed) ? (field.default ?? 0) : parsed
-                  } else {
-                    enrichedData[field.name] = currentValue
-                  }
-                } else if (field.default !== undefined) {
-                  enrichedData[field.name] = field.default
-                }
-              }
+      if (schema?.flows) {
+        for (const flow of schema.flows) {
+          for (const step of flow.steps) {
+            if (step.type === 'form' && step.id) {
+              formStepsMap.set(step.id, step)
             }
-
-            enrichedForm[step.id] = Object.keys(enrichedData).length > 0 ? enrichedData : formData
-          } else if (state.form[step.id]) {
-            enrichedForm[step.id] = state.form[step.id]
           }
+        }
+      }
+
+      // Process all form data in flowState
+      for (const [stepId, formData] of Object.entries(state.form)) {
+        const step = formStepsMap.get(stepId)
+
+        if (step?.schema?.fields) {
+          // Apply defaults and type conversions
+          const enrichedData: Record<string, any> = {}
+
+          for (const field of step.schema.fields) {
+            const currentValue = formData[field.name]
+            const fieldExistsInFormData = field.name in formData
+
+            if (fieldExistsInFormData) {
+              // Type conversion for number fields
+              if (field.type === 'number' && typeof currentValue === 'string') {
+                const parsed = parseFloat(currentValue)
+                enrichedData[field.name] = isNaN(parsed) ? (field.default ?? 0) : parsed
+              } else {
+                enrichedData[field.name] = currentValue
+              }
+            } else if (field.default !== undefined) {
+              // Apply default value if field is not present
+              enrichedData[field.name] = field.default
+            }
+          }
+
+          enrichedForm[stepId] = Object.keys(enrichedData).length > 0 ? enrichedData : formData
+        } else {
+          // Step not found in schema or has no fields - use data as-is
+          enrichedForm[stepId] = formData
         }
       }
 
@@ -71,7 +87,7 @@ export function useFlowState(
         oauth: state.oauth
       }
     },
-    [integration, currentFlow]
+    [integration, schema]
   )
 
   const context = useMemo(() => buildContext(flowState), [buildContext, flowState])
@@ -85,13 +101,18 @@ export function useFlowState(
           [field.name]: value
         }
 
-        // Apply defaults for other fields
-        const formStep = currentFlow?.steps.find(s => s.id === stepId && s.type === 'form')
-        if (formStep?.schema?.fields) {
-          for (const f of formStep.schema.fields) {
-            if (f.name === field.name) continue
-            if (!(f.name in updatedStepData) && f.default !== undefined) {
-              updatedStepData[f.name] = f.default
+        // Apply defaults for other fields in the same step
+        if (schema?.flows) {
+          for (const flow of schema.flows) {
+            const formStep = flow.steps.find(s => s.id === stepId && s.type === 'form')
+            if (formStep?.schema?.fields) {
+              for (const f of formStep.schema.fields) {
+                if (f.name === field.name) continue
+                if (!(f.name in updatedStepData) && f.default !== undefined) {
+                  updatedStepData[f.name] = f.default
+                }
+              }
+              break
             }
           }
         }
@@ -105,7 +126,7 @@ export function useFlowState(
         }
       })
     },
-    [currentFlow, updateFlowState]
+    [schema, updateFlowState]
   )
 
   const resetFlowState = useCallback(() => {

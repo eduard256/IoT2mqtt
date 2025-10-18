@@ -83,7 +83,7 @@ export default function FlowSetupForm({
 
   // Flow state management
   const { flowState, flowStateRef, updateFlowState, context, resetFlowState, updateFormValue } =
-    useFlowState(integration, undefined)
+    useFlowState(integration, schema)
 
   // Navigation
   const {
