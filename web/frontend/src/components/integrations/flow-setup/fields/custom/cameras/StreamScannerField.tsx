@@ -46,20 +46,8 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
       console.log('FRONTEND: Starting camera stream scan')
       console.log('Field config:', config)
 
-      // Parse model data from "Brand: Model" format
-      const parts = (config.model || '').split(':')
-      console.log('Model string:', config.model)
-      console.log('Split by colon:', parts)
-
-      if (parts.length !== 2) {
-        console.error('Invalid model format - expected "Brand: Model"')
-        throw new Error('Invalid model format')
-      }
-
-      const modelData = {
-        brand: parts[0].trim(),
-        model: parts[1].trim()
-      }
+      // Parse model data from JSON format (CameraModelPicker always returns JSON)
+      const modelData = JSON.parse(config.model || '{}')
       console.log('Parsed model data:', modelData)
 
       const requestBody = {
