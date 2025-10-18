@@ -78,7 +78,7 @@ class DeviceCommand(BaseModel):
 
 class FlowAction(BaseModel):
     """Action rendered as a button inside a step"""
-    type: Literal["goto_flow", "open_url", "reset_flow", "rerun_step", "submit", "close", "custom"]
+    type: str
     label: Optional[str] = None
     flow: Optional[str] = Field(default=None, description="Target flow id for goto_flow")
     url: Optional[str] = Field(default=None, description="URL to open for open_url")
@@ -94,17 +94,7 @@ class FormFieldOption(BaseModel):
 
 class FormField(BaseModel):
     """Single form field definition"""
-    type: Literal[
-        "text",
-        "password",
-        "number",
-        "select",
-        "checkbox",
-        "ip",
-        "url",
-        "email",
-        "textarea"
-    ]
+    type: str
     name: str
     label: Optional[str] = None
     description: Optional[str] = None
@@ -136,16 +126,7 @@ class FormSchema(BaseModel):
 class FlowStep(BaseModel):
     """Generic flow step description"""
     id: str
-    type: Literal[
-        "form",
-        "tool",
-        "select",
-        "summary",
-        "discovery",
-        "message",
-        "instance",
-        "oauth"
-    ]
+    type: str
     title: Optional[str] = None
     description: Optional[str] = None
     schema: Optional[FormSchema] = None
