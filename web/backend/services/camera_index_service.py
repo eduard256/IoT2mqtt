@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 # Add connectors directory to path
-CONNECTORS_DIR = Path(__file__).parent.parent.parent.parent / "connectors"
+# Use IOT2MQTT_PATH environment variable for Docker compatibility
+IOT2MQTT_PATH = os.getenv("IOT2MQTT_PATH", "/app")
+CONNECTORS_DIR = Path(IOT2MQTT_PATH) / "connectors"
 sys.path.insert(0, str(CONNECTORS_DIR))
 
 from cameras.camera_index import get_camera_index
