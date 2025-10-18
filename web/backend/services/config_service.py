@@ -6,6 +6,8 @@ import os
 import json
 import yaml
 import fcntl
+import random
+import string
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from contextlib import contextmanager
@@ -363,13 +365,46 @@ class ConfigService:
         
         return config
     
+    def generate_unique_instance_id(self, connector_name: str, max_attempts: int = 10) -> str:
+        """
+        Generate a unique instance_id in format: {connector_name}_{random6}
+
+        Args:
+            connector_name: Name of the connector (e.g., "yeelight", "cameras")
+            max_attempts: Maximum number of generation attempts
+
+        Returns:
+            Unique instance ID string
+
+        Raises:
+            RuntimeError: If unable to generate unique ID after max_attempts
+        """
+        for attempt in range(max_attempts):
+            # Generate 6 random lowercase alphanumeric characters
+            # Using same logic as frontend: Math.random().toString(36).substring(2, 8)
+            random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+            instance_id = f"{connector_name}_{random_suffix}"
+
+            # Check if this ID already exists
+            if not self.get_instance_config(connector_name, instance_id):
+                logger.info(f"Generated unique instance_id: {instance_id} (attempt {attempt + 1})")
+                return instance_id
+
+            logger.debug(f"Instance ID {instance_id} already exists, retrying...")
+
+        # Fallback: append timestamp to ensure uniqueness
+        timestamp_suffix = datetime.now().strftime("%H%M%S")
+        fallback_id = f"{connector_name}_{timestamp_suffix}"
+        logger.warning(f"Could not generate random ID after {max_attempts} attempts, using timestamp: {fallback_id}")
+        return fallback_id
+
     def get_connector_branding(self, connector_name: str) -> Dict[str, Any]:
         """Get connector branding information"""
         setup = self.get_connector_setup(connector_name)
-        
+
         if setup and "branding" in setup:
             return setup["branding"]
-        
+
         # Default branding
         connector_dir = self.connectors_path / connector_name
         return {

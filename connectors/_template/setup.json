@@ -24,12 +24,6 @@
                         "fields": [
                             {
                                 "type": "text",
-                                "name": "instance_id",
-                                "label": "Instance ID",
-                                "required": true
-                            },
-                            {
-                                "type": "text",
                                 "name": "friendly_name",
                                 "label": "Friendly name",
                                 "required": true
@@ -56,7 +50,6 @@
                     "id": "create",
                     "type": "instance",
                     "instance": {
-                        "instance_id": "{{ form.basics.instance_id }}",
                         "friendly_name": "{{ form.basics.friendly_name }}",
                         "connector_type": "template",
                         "ha_discovery_enabled": "{{ form.basics.ha_discovery_enabled }}",

@@ -105,14 +105,6 @@
                                 "required": true
                             },
                             {
-                                "type": "text",
-                                "name": "instance_id",
-                                "label": "Instance ID",
-                                "placeholder": "auto",
-                                "description": "Leave empty to auto-generate unique instance ID",
-                                "advanced": true
-                            },
-                            {
                                 "type": "select",
                                 "name": "effect_type",
                                 "label": "Transition",
@@ -169,7 +161,6 @@
                     "id": "manual_create",
                     "type": "instance",
                     "instance": {
-                        "instance_id": "{{ form.device_config.instance_id }}",
                         "friendly_name": "{{ form.device_config.friendly_name }}",
                         "connector_type": "yeelight",
                         "update_interval": 10,

@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 import { DeviceListItem } from '../../components/DeviceListItem'
-import { buildCurrentDevice, isDuplicateDevice, normalizeDeviceId, generateInstanceId } from '../../utils/deviceUtils'
+import { buildCurrentDevice, isDuplicateDevice, normalizeDeviceId } from '../../utils/deviceUtils'
 import { getAuthToken } from '@/utils/auth'
 import type { StepComponentProps } from '../../types'
 import type { FlowSetupSchema } from '@/types/integration'
@@ -69,12 +69,10 @@ export function InstanceStep({
         // Create mode
         const resolved = resolveDeepPayload(step.instance, context)
 
-        instanceId = resolved.instance_id
-        if (!instanceId || instanceId.trim() === '' || instanceId.trim().toLowerCase() === 'auto') {
-          instanceId = generateInstanceId(connectorName)
-        }
+        // Send instance_id to backend (will be auto-generated if null/empty/"auto")
+        instanceId = resolved.instance_id || null
 
-        friendlyName = resolved.friendly_name ?? instanceId
+        friendlyName = resolved.friendly_name ?? connectorName
         config = resolved.config ?? {}
         connectorType = resolved.connector_type ?? connectorName
         enabled = resolved.enabled ?? true
@@ -100,7 +98,7 @@ export function InstanceStep({
       }
 
       const payload = {
-        instance_id: instanceId,
+        instance_id: instanceId,  // Can be null - backend will auto-generate
         connector_type: connectorType,
         friendly_name: friendlyName,
         config: config,
@@ -108,10 +106,6 @@ export function InstanceStep({
         enabled: enabled,
         update_interval: updateInterval,
         secrets: secrets
-      }
-
-      if (!payload.instance_id) {
-        throw new Error('Instance id is required to create connector instance')
       }
 
       // Normalize numeric fields

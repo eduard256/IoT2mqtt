@@ -29,7 +29,7 @@ log_connections: Dict[str, List[WebSocket]] = {}
 
 class CreateInstanceRequest(BaseModel):
     """Request to create a new instance"""
-    instance_id: str = Field(..., pattern="^[a-z0-9_-]+$")
+    instance_id: Optional[str] = None  # Optional: will be auto-generated if not provided
     connector_type: str
     friendly_name: str
     config: Dict[str, Any]
@@ -112,17 +112,21 @@ async def get_instance(connector: str, instance_id: str):
 async def create_instance(request: CreateInstanceRequest, background_tasks: BackgroundTasks):
     """Create new instance with Docker container"""
     try:
-        # Check if instance already exists
-        existing = config_service.get_instance_config(
-            request.connector_type, 
-            request.instance_id
-        )
-        if existing:
-            raise HTTPException(status_code=409, detail="Instance already exists")
-        
+        # Auto-generate instance_id if not provided or if it's "auto"
+        instance_id = request.instance_id
+        if not instance_id or instance_id.strip() == "" or instance_id.strip().lower() == "auto":
+            instance_id = config_service.generate_unique_instance_id(request.connector_type)
+            logger.info(f"Auto-generated instance_id: {instance_id}")
+        else:
+            # Validate and check if instance already exists
+            instance_id = instance_id.strip()
+            existing = config_service.get_instance_config(request.connector_type, instance_id)
+            if existing:
+                raise HTTPException(status_code=409, detail="Instance already exists")
+
         # Prepare instance configuration
         instance_config = {
-            "instance_id": request.instance_id,
+            "instance_id": instance_id,
             "instance_type": "device",  # Can be extended later
             "connector_type": request.connector_type,
             "friendly_name": request.friendly_name,
@@ -142,14 +146,14 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
         # Save configuration with separated secrets
         docker_secrets = config_service.save_instance_with_secrets(
             request.connector_type,
-            request.instance_id,
+            instance_id,
             instance_config,
             request.secrets
         )
-        
+
         # Update docker-compose.yml
         compose_data = config_service.load_docker_compose()
-        service_name = f"{request.connector_type}_{request.instance_id}"
+        service_name = f"{request.connector_type}_{instance_id}"
         
         # Add service configuration
         compose_data.setdefault("services", {})
@@ -165,7 +169,7 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
                 "./.env:/app/.env:ro"  # Mount .env file for dynamic MQTT config
             ],
             "environment": [
-                f"INSTANCE_NAME={request.instance_id}",
+                f"INSTANCE_NAME={instance_id}",
                 "MODE=production",
                 "PYTHONUNBUFFERED=1",
                 "LOG_LEVEL=${LOG_LEVEL:-INFO}"  # Use LOG_LEVEL from .env with default
@@ -174,7 +178,7 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
             "labels": {
                 "iot2mqtt.type": "connector",
                 "iot2mqtt.connector": request.connector_type,
-                "iot2mqtt.instance": request.instance_id
+                "iot2mqtt.instance": instance_id
             }
         }
         
@@ -199,15 +203,15 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
         background_tasks.add_task(
             create_and_start_container,
             request.connector_type,
-            request.instance_id,
+            instance_id,
             instance_config
         )
-        
+
         return {
             "success": True,
             "message": "Instance created, container is starting",
-            "instance_id": request.instance_id,
-            "websocket_logs": f"/api/logs/{request.connector_type}_{request.instance_id}"
+            "instance_id": instance_id,
+            "websocket_logs": f"/api/logs/{request.connector_type}_{instance_id}"
         }
         
     except HTTPException:
