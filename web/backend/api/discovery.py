@@ -264,15 +264,15 @@ async def scan_single_integration(integration: str, background_tasks: Background
     """Trigger discovery scan for a single integration"""
     try:
         # Check if integration exists
-        manifest_path = config_service.connectors_path / integration / "manifest.json"
-        
-        if not manifest_path.exists():
+        setup_path = config_service.connectors_path / integration / "setup.json"
+
+        if not setup_path.exists():
             raise HTTPException(status_code=404, detail=f"Integration {integration} not found")
-        
-        with open(manifest_path, 'r') as f:
-            manifest = json.load(f)
-        
-        if not manifest.get("discovery", {}).get("supported", False):
+
+        with open(setup_path, 'r') as f:
+            setup_data = json.load(f)
+
+        if not setup_data.get("discovery", {}).get("supported", False):
             raise HTTPException(status_code=400, detail=f"Discovery not supported for {integration}")
         
         # Run discovery in background

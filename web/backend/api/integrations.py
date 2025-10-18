@@ -65,15 +65,15 @@ async def get_configured_integrations():
             instances_path = config_service.instances_path / connector_dir.name
             if not instances_path.exists():
                 continue
-            
-            # Read manifest for display name
-            manifest_path = connector_dir / "manifest.json"
+
+            # Read setup.json for display name
+            setup_path = connector_dir / "setup.json"
             display_name = connector_dir.name
-            if manifest_path.exists():
+            if setup_path.exists():
                 try:
-                    with open(manifest_path, 'r') as f:
-                        manifest = json.load(f)
-                        display_name = manifest.get("name", connector_dir.name)
+                    with open(setup_path, 'r') as f:
+                        setup_data = json.load(f)
+                        display_name = setup_data.get("display_name", connector_dir.name)
                 except:
                     pass
             

@@ -1,8 +1,20 @@
 {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "display_name": "Yeelight",
     "description": "Control Yeelight smart lighting with local network access.",
     "author": "IoT2MQTT",
+    "domain": "yeelight",
+    "documentation": "https://github.com/eduard256/IoT2mqtt/wiki/yeelight",
+    "iot_class": "local_polling",
+    "integration_type": "device",
+    "supported_brands": ["Yeelight", "Xiaomi", "Mijia"],
+    "capabilities": [
+        "brightness",
+        "color_temp",
+        "rgb_color",
+        "effects",
+        "transitions"
+    ],
     "branding": {
         "icon": "/assets/brands/yeelight.svg",
         "color": "#FF7E35",

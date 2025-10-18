@@ -339,7 +339,6 @@ async def get_available_connectors():
             continue
 
         setup_path = connector_dir / "setup.json"
-        manifest_path = connector_dir / "manifest.json"
 
         if not setup_path.exists():
             continue
@@ -353,22 +352,21 @@ async def get_available_connectors():
             logger.error(f"Skipping {connector_dir.name}: invalid setup schema ({exc})")
             continue
 
-        manifest: Dict[str, Any] = {}
-        if manifest_path.exists():
-            with open(manifest_path, 'r') as f:
-                manifest = json.load(f)
-
         primary_flow = next((flow for flow in setup.flows if flow.default), setup.flows[0])
 
         connectors.append({
             "name": connector_dir.name,
             "display_name": setup.display_name,
-            "version": manifest.get("version", setup.version),
-            "author": setup.author or manifest.get("author", "Unknown"),
-            "description": setup.description or manifest.get("description", ""),
-            "branding": setup.branding or manifest.get("branding"),
+            "version": setup.version,
+            "author": setup.author or "Unknown",
+            "description": setup.description or "",
+            "branding": setup.branding,
             "discovery": setup.discovery,
-            "capabilities": manifest.get("capabilities", []),
+            "capabilities": setup.capabilities or [],
+            "documentation": setup.documentation,
+            "iot_class": setup.iot_class,
+            "integration_type": setup.integration_type,
+            "supported_brands": setup.supported_brands or [],
             "default_flow": primary_flow.id,
             "flows": [
                 {

@@ -213,6 +213,13 @@ class FlowSetupSchema(BaseModel):
     tools: Dict[str, ToolDefinition] = {}
     discovery: Optional[Dict[str, Any]] = None
     secrets: Optional[List[str]] = None
+    # Extended metadata (previously from manifest.json)
+    domain: Optional[str] = None
+    documentation: Optional[str] = None
+    iot_class: Optional[str] = None
+    integration_type: Optional[str] = None
+    supported_brands: Optional[List[str]] = None
+    capabilities: Optional[List[str]] = None
 
 
 class ContainerInfo(BaseModel):
