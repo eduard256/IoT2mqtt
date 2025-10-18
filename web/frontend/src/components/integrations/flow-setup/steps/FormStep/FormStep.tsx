@@ -34,15 +34,23 @@ export function FormStep({
 
   // Resolve templates in all field configs (must be outside map for React hooks rules)
   const resolvedFields = useMemo(() => {
+    console.log('[FormStep] Resolving field configs')
+    console.log('[FormStep] Context:', context)
+    console.log('[FormStep] FlowState:', flowState)
+
     return step.schema?.fields?.map(field => {
       if (!field.config) return field
 
+      console.log('[FormStep] Field has config:', field.name, field.config)
+      const resolved = resolveDeep(field.config)
+      console.log('[FormStep] Resolved config:', resolved)
+
       return {
         ...field,
-        config: resolveDeep(field.config)
+        config: resolved
       }
     }) ?? []
-  }, [step.schema?.fields, resolveDeep])
+  }, [step.schema?.fields, resolveDeep, context, flowState])
 
   return (
     <Card>
