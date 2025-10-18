@@ -126,6 +126,14 @@
                                 "max": 10000,
                                 "step": 50,
                                 "advanced": true
+                            },
+                            {
+                                "type": "checkbox",
+                                "name": "ha_discovery_enabled",
+                                "label": "Enable Home Assistant Discovery",
+                                "description": "Automatically publish device information to Home Assistant via MQTT Discovery",
+                                "default": true,
+                                "advanced": true
                             }
                         ]
                     }
@@ -153,6 +161,7 @@
                         "friendly_name": "{{ form.device_config.friendly_name }}",
                         "connector_type": "yeelight",
                         "update_interval": 10,
+                        "ha_discovery_enabled": "{{ form.device_config.ha_discovery_enabled }}",
                         "config": {
                             "discovery_enabled": false,
                             "effect_type": "{{ form.device_config.effect_type }}",

@@ -347,7 +347,7 @@ class MQTTClient:
     def publish_discovered(self, devices: list):
         """
         Publish discovered devices
-        
+
         Args:
             devices: List of discovered device information
         """
@@ -355,10 +355,40 @@ class MQTTClient:
             "timestamp": datetime.now().isoformat(),
             "devices": devices
         }
-        
+
         topic = f"{self.base_topic}/v1/instances/{self.instance_id}/discovered"
         self.publish(topic, payload, retain=False)
-    
+
+    def publish_ha_discovery(self, discovery_messages: list):
+        """
+        Publish Home Assistant MQTT Discovery messages
+
+        Args:
+            discovery_messages: List of discovery message dicts with 'topic' and 'payload' keys
+                               Each dict should have format:
+                               {
+                                   "topic": "homeassistant/light/device_id/config",
+                                   "payload": {...config...},
+                                   "retain": True
+                               }
+        """
+        if not discovery_messages:
+            logger.debug("No discovery messages to publish")
+            return
+
+        published_count = 0
+        for msg in discovery_messages:
+            topic = msg.get('topic')
+            payload = msg.get('payload')
+            retain = msg.get('retain', True)
+
+            if topic and payload:
+                self.publish(topic, payload, retain=retain)
+                published_count += 1
+                logger.debug(f"Published HA discovery: {topic}")
+
+        logger.info(f"Published {published_count} Home Assistant discovery message(s)")
+
     def send_command(self, device_id: str, command: Dict[str, Any], 
                      timeout: float = 5.0, callback: Callable = None) -> str:
         """

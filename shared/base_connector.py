@@ -15,8 +15,10 @@ from pathlib import Path
 
 try:
     from .mqtt_client import MQTTClient
+    from .discovery import DiscoveryGenerator
 except ImportError:
     from mqtt_client import MQTTClient
+    from discovery import DiscoveryGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +73,27 @@ class BaseConnector(ABC):
             qos=self.config.get('mqtt', {}).get('qos', 1),
             retain_state=self.config.get('mqtt', {}).get('retain_state', True)
         )
-        
+
+        # Home Assistant Discovery - enabled by default, can be disabled in config
+        self.ha_discovery_enabled = self.config.get('ha_discovery_enabled', True)
+        if self.ha_discovery_enabled:
+            discovery_prefix = self.config.get('ha_discovery_prefix', 'homeassistant')
+            self.discovery_generator = DiscoveryGenerator(
+                base_topic=self.mqtt.base_topic,
+                discovery_prefix=discovery_prefix,
+                instance_id=self.instance_id
+            )
+            logger.info(f"Home Assistant Discovery enabled with prefix: {discovery_prefix}")
+        else:
+            self.discovery_generator = None
+            logger.info("Home Assistant Discovery disabled")
+
         # Internal state
         self.running = False
         self.main_thread = None
         self.devices = {}
         self.update_interval = self.config.get('update_interval', 10)
-        
+
         # Setup logging
         self._setup_logging()
     
@@ -220,6 +236,13 @@ class BaseConnector(ABC):
             logger.error(f"Failed to initialize connection: {e}", exc_info=True)
             return False
 
+        # Publish Home Assistant Discovery after successful device initialization
+        try:
+            self._publish_ha_discovery()
+        except Exception as e:
+            logger.error(f"Error publishing Home Assistant Discovery: {e}", exc_info=True)
+            # Don't fail startup if discovery fails
+
         # Start main loop
         self.running = True
         self.main_thread = threading.Thread(target=self._main_loop, daemon=True)
@@ -272,7 +295,49 @@ class BaseConnector(ABC):
         self.mqtt.subscribe(meta_topic, self._handle_meta_request)
 
         logger.info("All MQTT subscriptions established")
-    
+
+    def _publish_ha_discovery(self):
+        """
+        Publish Home Assistant MQTT Discovery messages for all configured devices
+
+        This method is called automatically during connector startup after device
+        initialization is complete. It generates and publishes discovery messages
+        for each enabled device based on their configuration and capabilities.
+        """
+        if not self.ha_discovery_enabled or not self.discovery_generator:
+            logger.debug("Home Assistant Discovery disabled, skipping discovery publish")
+            return
+
+        logger.info("Publishing Home Assistant Discovery messages...")
+        total_published = 0
+
+        for device_config in self.config.get('devices', []):
+            if not device_config.get('enabled', True):
+                logger.debug(f"Skipping discovery for disabled device: {device_config['device_id']}")
+                continue
+
+            device_id = device_config['device_id']
+
+            try:
+                # Generate discovery messages for this device
+                discovery_messages = self.discovery_generator.generate_device_discovery(
+                    device_id=device_id,
+                    device_config=device_config
+                )
+
+                if discovery_messages:
+                    # Publish all discovery messages for this device
+                    self.mqtt.publish_ha_discovery(discovery_messages)
+                    total_published += len(discovery_messages)
+                    logger.info(f"Published {len(discovery_messages)} discovery message(s) for device: {device_id}")
+                else:
+                    logger.debug(f"No discovery messages generated for device: {device_id}")
+
+            except Exception as e:
+                logger.error(f"Error generating discovery for device {device_id}: {e}", exc_info=True)
+
+        logger.info(f"Home Assistant Discovery complete: {total_published} total message(s) published")
+
     def _main_loop(self):
         """Main loop for polling devices"""
         error_count = 0

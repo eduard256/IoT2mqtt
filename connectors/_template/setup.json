@@ -33,6 +33,14 @@
                                 "name": "friendly_name",
                                 "label": "Friendly name",
                                 "required": true
+                            },
+                            {
+                                "type": "checkbox",
+                                "name": "ha_discovery_enabled",
+                                "label": "Enable Home Assistant Discovery",
+                                "description": "Automatically publish device information to Home Assistant via MQTT Discovery",
+                                "default": true,
+                                "advanced": true
                             }
                         ]
                     }
@@ -51,6 +59,7 @@
                         "instance_id": "{{ form.basics.instance_id }}",
                         "friendly_name": "{{ form.basics.friendly_name }}",
                         "connector_type": "template",
+                        "ha_discovery_enabled": "{{ form.basics.ha_discovery_enabled }}",
                         "config": {},
                         "devices": []
                     }
