@@ -81,11 +81,11 @@ export default function FlowSetupForm({
     load()
   }, [integration.name])
 
-  // Flow state management (without currentFlow initially)
-  const { flowState, flowStateRef, updateFlowState, buildContext, resetFlowState, updateFormValue } =
+  // Flow state management
+  const { flowState, flowStateRef, updateFlowState, context, resetFlowState, updateFormValue } =
     useFlowState(integration, undefined)
 
-  // Navigation (needs initial context, will update later)
+  // Navigation
   const {
     currentFlow,
     currentFlowId,
@@ -98,52 +98,7 @@ export default function FlowSetupForm({
     goToFlow,
     advanceStep,
     goToStepById
-  } = useFlowNavigation(schema, flowState, buildContext(flowState), v => v)
-
-  // Build context with actual currentFlow (after navigation hook provides it)
-  const context = useMemo(() => {
-    const enrichedForm: Record<string, any> = {}
-
-    if (currentFlow) {
-      for (const step of currentFlow.steps) {
-        if (step.type === 'form' && step.id) {
-          const formData = flowState.form[step.id] || {}
-          const enrichedData: Record<string, any> = {}
-
-          if (step.schema?.fields) {
-            for (const field of step.schema.fields) {
-              const currentValue = formData[field.name]
-              const fieldExistsInFormData = field.name in formData
-
-              if (fieldExistsInFormData) {
-                if (field.type === 'number' && typeof currentValue === 'string') {
-                  const parsed = parseFloat(currentValue)
-                  enrichedData[field.name] = isNaN(parsed) ? (field.default ?? 0) : parsed
-                } else {
-                  enrichedData[field.name] = currentValue
-                }
-              } else if (field.default !== undefined) {
-                enrichedData[field.name] = field.default
-              }
-            }
-          }
-
-          enrichedForm[step.id] = Object.keys(enrichedData).length > 0 ? enrichedData : formData
-        } else if (flowState.form[step.id]) {
-          enrichedForm[step.id] = flowState.form[step.id]
-        }
-      }
-    }
-
-    return {
-      integration,
-      form: enrichedForm,
-      tools: flowState.tools,
-      selection: flowState.selection,
-      shared: flowState.shared,
-      oauth: flowState.oauth
-    }
-  }, [integration, currentFlow, flowState])
+  } = useFlowNavigation(schema, flowState, context, v => v)
 
   // Template resolver
   const { resolveTemplate, resolveDeep } = useTemplateResolver(context)
