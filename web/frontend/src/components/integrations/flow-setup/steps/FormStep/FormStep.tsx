@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FieldRenderer } from '../../fields/FieldRenderer'
 import { evaluateConditions } from '../../utils/conditionEvaluator'
+import { useTemplateResolver } from '../../hooks/useTemplateResolver'
 import type { StepComponentProps } from '../../types'
+import type { FormField } from '@/types/integration'
 
 export function FormStep({
   step,
@@ -13,6 +15,7 @@ export function FormStep({
   connectorName
 }: StepComponentProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const { resolveDeep } = useTemplateResolver(context)
 
   const updateFormValue = (fieldName: string, value: any) => {
     updateFlowState(prev => ({
@@ -43,10 +46,20 @@ export function FormStep({
 
           const value = flowState.form[step.id]?.[field.name] ?? field.default ?? ''
 
+          // Resolve templates in field.config if present
+          const resolvedField: FormField = useMemo(() => {
+            if (!field.config) return field
+
+            return {
+              ...field,
+              config: resolveDeep(field.config)
+            }
+          }, [field, context])
+
           return (
             <FieldRenderer
               key={field.name}
-              field={field}
+              field={resolvedField}
               value={value}
               onChange={val => updateFormValue(field.name, val)}
               connectorName={connectorName}

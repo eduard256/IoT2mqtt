@@ -43,6 +43,7 @@ export interface FormField {
   secret?: boolean
   advanced?: boolean
   conditions?: Record<string, unknown>
+  config?: Record<string, any>  // Custom configuration for specialized field components
 }
 
 export interface FormSchema {

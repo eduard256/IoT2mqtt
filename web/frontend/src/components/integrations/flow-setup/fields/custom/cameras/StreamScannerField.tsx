@@ -46,28 +46,21 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
       console.log('FRONTEND: Starting camera stream scan')
       console.log('Field config:', config)
 
-      // Parse model data
-      let modelData
-      try {
-        console.log('Attempting to parse config.model as JSON:', config.model)
-        modelData = JSON.parse(config.model || '{}')
-        console.log('Successfully parsed as JSON:', modelData)
-      } catch (parseError) {
-        console.log('Failed to parse as JSON, treating as display string:', parseError)
-        // If not JSON, treat as display string
-        const parts = (config.model || '').split(':')
-        console.log('Split by colon:', parts)
-        if (parts.length === 2) {
-          modelData = {
-            brand: parts[0].trim(),
-            model: parts[1].trim()
-          }
-          console.log('Created modelData from split:', modelData)
-        } else {
-          console.error('Invalid model format - not 2 parts after split')
-          throw new Error('Invalid model format')
-        }
+      // Parse model data from "Brand: Model" format
+      const parts = (config.model || '').split(':')
+      console.log('Model string:', config.model)
+      console.log('Split by colon:', parts)
+
+      if (parts.length !== 2) {
+        console.error('Invalid model format - expected "Brand: Model"')
+        throw new Error('Invalid model format')
       }
+
+      const modelData = {
+        brand: parts[0].trim(),
+        model: parts[1].trim()
+      }
+      console.log('Parsed model data:', modelData)
 
       const requestBody = {
         brand: modelData.brand,
