@@ -116,6 +116,10 @@ class FormField(BaseModel):
         default=None,
         description="Optional map describing when the field should be shown"
     )
+    config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Custom configuration passed to specialized field components (e.g., template variables)"
+    )
 
 
 class FormSchema(BaseModel):
