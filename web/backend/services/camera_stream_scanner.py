@@ -162,10 +162,11 @@ class CameraStreamScanner:
                 logger.debug(f"Loop iteration: {len(pending_tasks)} pending, {found_count} found, {elapsed:.1f}s elapsed")
 
                 # Wait for next result with timeout
+                # Timeout should be longer than test timeouts (25s) to allow tasks to complete
                 done, pending_tasks = await asyncio.wait(
                     pending_tasks,
                     return_when=asyncio.FIRST_COMPLETED,
-                    timeout=1.0
+                    timeout=30.0  # Was 1.0 - way too short!
                 )
 
                 logger.debug(f"asyncio.wait returned: {len(done)} done, {len(pending_tasks)} still pending")
