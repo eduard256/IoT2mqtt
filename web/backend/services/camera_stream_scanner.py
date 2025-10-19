@@ -137,9 +137,14 @@ class CameraStreamScanner:
 
             # Create tasks for all URLs
             tasks = [asyncio.create_task(test_with_semaphore(url_info)) for url_info in test_urls]
+            logger.info(f"Created {len(tasks)} test tasks for parallel testing")
 
             # Process results as they complete
             pending_tasks = set(tasks)
+            logger.info(f"Starting result processing loop with {len(pending_tasks)} pending tasks")
+
+            if not pending_tasks:
+                logger.warning(f"No pending tasks to process! All {len(test_urls)} URLs skipped or failed immediately")
 
             while pending_tasks:
                 # Check stop conditions
@@ -147,12 +152,14 @@ class CameraStreamScanner:
                 found_count = len(self.scan_results[task_id])
 
                 if found_count >= max_streams:
-                    logger.info(f"Found {found_count} streams (>= {max_streams}), stopping scan")
+                    logger.info(f"Stop condition: found {found_count} streams (>= {max_streams}), stopping scan")
                     break
 
                 if elapsed >= max_duration:
-                    logger.info(f"Scan timeout ({max_duration}s), stopping scan")
+                    logger.info(f"Stop condition: timeout {elapsed:.1f}s (>= {max_duration}s), stopping scan")
                     break
+
+                logger.debug(f"Loop iteration: {len(pending_tasks)} pending, {found_count} found, {elapsed:.1f}s elapsed")
 
                 # Wait for next result with timeout
                 done, pending_tasks = await asyncio.wait(
@@ -160,6 +167,8 @@ class CameraStreamScanner:
                     return_when=asyncio.FIRST_COMPLETED,
                     timeout=1.0
                 )
+
+                logger.debug(f"asyncio.wait returned: {len(done)} done, {len(pending_tasks)} still pending")
 
                 # Process completed tasks
                 for completed_task in done:
@@ -187,12 +196,14 @@ class CameraStreamScanner:
 
             # Cancel remaining tasks if we stopped early
             if pending_tasks:
-                logger.info(f"Cancelling {len(pending_tasks)} remaining tasks")
+                logger.info(f"Loop ended early: cancelling {len(pending_tasks)} remaining tasks")
                 for task in pending_tasks:
                     task.cancel()
 
                 # Wait for cancellations to complete
                 await asyncio.gather(*pending_tasks, return_exceptions=True)
+            else:
+                logger.info(f"All tasks completed naturally (no pending tasks left)")
 
             # Mark as complete
             self.scan_status[task_id] = "completed"
