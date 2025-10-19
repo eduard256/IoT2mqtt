@@ -97,6 +97,14 @@
                 "placeholder": "http://192.168.0.0",
                 "description": "Examples: http://192.168.1.2:80, https://some.dyn.url:8082. Make sure your network camera has a static IP address on your network",
                 "required": true
+              },
+              {
+                "type": "text",
+                "name": "friendly_name",
+                "label": "Camera Name",
+                "placeholder": "Leave empty for auto-generated name",
+                "description": "Optional: Give this camera a friendly name like 'Entrance' or 'Parking'",
+                "advanced": true
               }
             ]
           }

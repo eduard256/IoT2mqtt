@@ -38,35 +38,40 @@ export function buildCurrentDevice(flowState: any): any | null {
 
   if (cameraForm && networkForm?.address && streamScan) {
     // Parse model JSON
-    let brandModel = 'Camera'
     let brand: string | undefined
     let model: string | undefined
 
     try {
       const modelData = JSON.parse(cameraForm.model)
-      brandModel = modelData.display || `${modelData.brand} ${modelData.model}`
       brand = modelData.brand
       model = modelData.model
     } catch (e) {
       // If not JSON, use as is
-      brandModel = cameraForm.model
+      brand = cameraForm.model
     }
 
     // Parse IP from address
     const ip = parseIpFromAddress(networkForm.address)
+    const channel = cameraForm.channel || 0
+
+    // Generate device_id (always IP-based for uniqueness)
+    const deviceId = `${ip.replace(/\./g, '_')}_${channel}`
+
+    // Use friendly_name if provided, otherwise use IP_channel format
+    const deviceName = networkForm.friendly_name?.trim() || `${ip}_${channel}`
 
     return {
-      device_id: normalizeDeviceId(brandModel),
+      device_id: deviceId,
       ip: ip,
       port: streamScan.port || 554,
-      name: brandModel,
+      name: deviceName,
       enabled: true,
       // Additional camera-specific fields
       stream_url: streamScan.full_url,
       stream_type: streamScan.type,
       username: cameraForm.username,
       password: cameraForm.password,
-      channel: cameraForm.channel || 0,
+      channel: channel,
       brand,
       model
     }
