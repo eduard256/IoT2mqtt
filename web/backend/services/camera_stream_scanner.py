@@ -277,14 +277,22 @@ class CameraStreamScanner:
             url_path = entry.get("url", "")
 
             # Replace template variables
+            # Curly brace format: {placeholder}
             url_path = url_path.replace("{username}", username or "")
             url_path = url_path.replace("{password}", password or "")
             url_path = url_path.replace("{ip}", host)
             url_path = url_path.replace("{port}", str(port))
             url_path = url_path.replace("{channel}", str(channel))
+
+            # Bracket format: [PLACEHOLDER]
             url_path = url_path.replace("[USERNAME]", username or "")
             url_path = url_path.replace("[PASSWORD]", password or "")
+            url_path = url_path.replace("[PASWORD]", password or "")  # Handle typo in database
             url_path = url_path.replace("[AUTH]", f"{username}:{password}" if username else "")
+            url_path = url_path.replace("[CHANNEL]", str(channel))
+            url_path = url_path.replace("[WIDTH]", "640")  # Default width
+            url_path = url_path.replace("[HEIGHT]", "480")  # Default height
+            url_path = url_path.replace("[TOKEN]", "")  # Tokens usually obtained separately
 
             # Build full URL
             if protocol in ["rtsp", "http", "https"]:
