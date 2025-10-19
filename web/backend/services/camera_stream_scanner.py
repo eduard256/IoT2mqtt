@@ -5,6 +5,7 @@ Synchronously tests camera stream URLs and broadcasts results via SSE
 
 import json
 import logging
+import os
 import subprocess
 import threading
 import time
@@ -202,7 +203,9 @@ class CameraStreamScanner:
 
     def _load_popular_patterns(self) -> List[Dict[str, Any]]:
         """Load popular stream patterns from JSON file"""
-        patterns_file = Path(__file__).parent.parent.parent.parent / "connectors" / "cameras" / "data" / "popular_stream_patterns.json"
+        # Use IOT2MQTT_PATH environment variable (for Docker compatibility)
+        iot2mqtt_path = os.getenv("IOT2MQTT_PATH", "/app")
+        patterns_file = Path(iot2mqtt_path) / "connectors" / "cameras" / "data" / "popular_stream_patterns.json"
 
         if not patterns_file.exists():
             logger.warning(f"Popular patterns file not found: {patterns_file}")
