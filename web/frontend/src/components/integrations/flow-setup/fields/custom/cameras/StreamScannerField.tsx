@@ -54,6 +54,13 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
         channel: parseInt(config.channel || '0')
       }
 
+      console.log('[StreamScanner] Starting scan with:', {
+        brand: requestBody.brand,
+        model: requestBody.model,
+        address: requestBody.address,
+        channel: requestBody.channel
+      })
+
       const token = getAuthToken()
 
       // Start scan
@@ -72,12 +79,15 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
       }
 
       const scanData = await scanRes.json()
+      console.log('[StreamScanner] Scan response:', scanData)
 
       if (!scanData.ok) {
+        console.error('[StreamScanner] Scan failed:', scanData.error)
         throw new Error(scanData.error || 'Scan failed')
       }
 
       const taskId = scanData.task_id
+      console.log('[StreamScanner] Task ID:', taskId)
 
       // Open SSE connection
       const eventSource = new EventSource(
@@ -88,17 +98,21 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
+          console.log('[StreamScanner] SSE message received:', data)
 
           if (data.type === 'done') {
+            console.log('[StreamScanner] Scan completed')
             setScanning(false)
             eventSource.close()
           } else if (data.type === 'error') {
+            console.error('[StreamScanner] Scan error:', data.message)
             setScanError(data.message || 'Scan error')
             setScanning(false)
             eventSource.close()
           } else {
             // New stream found
             const stream = data as Stream
+            console.log('[StreamScanner] New stream found:', stream.type, stream.url)
             setStreams(prev => {
               const updated = [...prev, stream]
               // Sort by priority
@@ -106,7 +120,7 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
             })
           }
         } catch (err) {
-          // Failed to parse SSE message
+          console.error('[StreamScanner] Failed to parse SSE message:', err)
         }
       }
 
