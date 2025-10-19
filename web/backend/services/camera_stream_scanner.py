@@ -307,6 +307,13 @@ class CameraStreamScanner:
         # Sort by priority (ONVIF first, then FFMPEG/RTSP, etc.)
         test_urls.sort(key=lambda x: x["priority"])
 
+        # Log all generated URLs for debugging
+        logger.info(f"Generated {len(test_urls)} test URLs:")
+        for i, url_info in enumerate(test_urls, 1):
+            # Mask credentials in log
+            display_url = self._mask_credentials(url_info["url"])
+            logger.info(f"  {i}. [{url_info['type']}] {display_url[:200]}")
+
         return test_urls
 
     async def _try_onvif_discovery(
@@ -493,8 +500,9 @@ class CameraStreamScanner:
     async def _test_rtsp(self, url_info: Dict[str, Any]) -> Dict[str, Any]:
         """Test RTSP stream using ffprobe"""
         url = url_info["url"]
+        masked_url = self._mask_credentials(url)
 
-        logger.debug(f"ffprobe testing URL: {url[:100]}")
+        logger.info(f"Testing RTSP: {masked_url[:150]}")
 
         try:
             # Run ffprobe with timeout
@@ -512,11 +520,10 @@ class CameraStreamScanner:
 
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=25)
 
-            logger.debug(f"ffprobe returncode={proc.returncode} for {url[:50]}...")
-
+            # Log ffprobe results
             if proc.returncode == 0 and stdout:
                 # Stream is accessible
-                logger.info(f"✓ RTSP stream accessible: {url[:50]}...")
+                logger.info(f"✓ RTSP stream accessible: {masked_url[:150]}")
                 return {
                     "ok": True,
                     "stream": {
@@ -528,13 +535,19 @@ class CameraStreamScanner:
                         "notes": url_info.get("notes", "")
                     }
                 }
+            else:
+                # Log error details
+                error_msg = stderr.decode().strip() if stderr else "No error output"
+                logger.info(f"✗ RTSP test failed (code={proc.returncode}): {masked_url[:100]}")
+                if error_msg and error_msg != "No error output":
+                    logger.debug(f"  ffprobe error: {error_msg[:200]}")
 
         except asyncio.TimeoutError:
-            logger.debug(f"✗ RTSP test timeout (25s): {url[:50]}...")
+            logger.info(f"✗ RTSP test timeout (25s): {masked_url[:100]}")
         except FileNotFoundError:
             logger.error("ffprobe not found - RTSP testing disabled!")
         except Exception as e:
-            logger.debug(f"✗ RTSP test error for {url[:50]}...: {e}")
+            logger.warning(f"✗ RTSP test exception for {masked_url[:100]}: {e}")
 
         return {"ok": False, "stream": None}
 
@@ -560,7 +573,12 @@ class CameraStreamScanner:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=25)
             status_code = stdout.decode().strip()
 
+            # Log response code
+            masked_url = self._mask_credentials(url)
+            logger.info(f"HTTP test: {masked_url[:100]} → HTTP {status_code}")
+
             if status_code.startswith("200"):
+                logger.info(f"✓ HTTP stream accessible: {masked_url[:100]}")
                 return {
                     "ok": True,
                     "stream": {
@@ -572,11 +590,13 @@ class CameraStreamScanner:
                         "notes": url_info.get("notes", "")
                     }
                 }
+            else:
+                logger.debug(f"✗ HTTP stream failed (code {status_code}): {masked_url[:100]}")
 
         except asyncio.TimeoutError:
-            logger.debug(f"HTTP test timeout: {url}")
+            logger.info(f"✗ HTTP test timeout (25s): {self._mask_credentials(url)[:100]}")
         except Exception as e:
-            logger.debug(f"HTTP test error: {e}")
+            logger.warning(f"✗ HTTP test error for {self._mask_credentials(url)[:100]}: {e}")
 
         return {"ok": False, "stream": None}
 
