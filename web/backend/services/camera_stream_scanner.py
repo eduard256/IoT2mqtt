@@ -455,21 +455,30 @@ class CameraStreamScanner:
         stream_type = url_info["type"]
         protocol = url_info["protocol"]
 
+        logger.debug(f"Testing stream: {protocol}://{url[:50]}... (type={stream_type})")
+
         try:
             if protocol == "rtsp" or stream_type == "FFMPEG":
-                return await self._test_rtsp(url_info)
+                result = await self._test_rtsp(url_info)
+                logger.debug(f"RTSP test result for {url[:50]}...: ok={result['ok']}")
+                return result
             elif protocol in ["http", "https"]:
-                return await self._test_http(url_info)
+                result = await self._test_http(url_info)
+                logger.debug(f"HTTP test result for {url[:50]}...: ok={result['ok']}")
+                return result
             else:
+                logger.warning(f"Unknown protocol '{protocol}' for {url[:50]}...")
                 return {"ok": False, "stream": None}
 
         except Exception as e:
-            logger.debug(f"Stream test failed for {url}: {e}")
+            logger.error(f"Stream test exception for {url[:50]}...: {e}")
             return {"ok": False, "stream": None}
 
     async def _test_rtsp(self, url_info: Dict[str, Any]) -> Dict[str, Any]:
         """Test RTSP stream using ffprobe"""
         url = url_info["url"]
+
+        logger.debug(f"Starting ffprobe test for: {url[:50]}...")
 
         try:
             # Run ffprobe with timeout
@@ -487,8 +496,11 @@ class CameraStreamScanner:
 
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=25)
 
+            logger.debug(f"ffprobe returncode={proc.returncode} for {url[:50]}...")
+
             if proc.returncode == 0 and stdout:
                 # Stream is accessible
+                logger.info(f"✓ RTSP stream accessible: {url[:50]}...")
                 return {
                     "ok": True,
                     "stream": {
@@ -502,11 +514,11 @@ class CameraStreamScanner:
                 }
 
         except asyncio.TimeoutError:
-            logger.debug(f"RTSP test timeout: {url}")
+            logger.debug(f"✗ RTSP test timeout (25s): {url[:50]}...")
         except FileNotFoundError:
-            logger.warning("ffprobe not found - RTSP testing disabled")
+            logger.error("ffprobe not found - RTSP testing disabled!")
         except Exception as e:
-            logger.debug(f"RTSP test error: {e}")
+            logger.debug(f"✗ RTSP test error for {url[:50]}...: {e}")
 
         return {"ok": False, "stream": None}
 
