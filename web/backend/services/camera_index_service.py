@@ -40,6 +40,12 @@ class CameraIndexService:
         """
         Get URL pattern entries for a specific model
 
+        Logic:
+        - If model == "Unlisted": Returns ONLY popular patterns
+          (Scanner will test: ONVIF → Popular Patterns)
+        - If model is selected: Returns database patterns for that model
+          (Scanner will test: ONVIF → DB Patterns → Popular Patterns)
+
         Args:
             brand: Camera brand
             model: Camera model
@@ -48,6 +54,13 @@ class CameraIndexService:
             List of URL pattern entries
         """
         if model == "Unlisted":
+            # User did NOT select a device
+            # Return ONLY popular patterns (no database patterns)
+            # Scanner will automatically test ONVIF first, then these patterns
             return self.index.get_popular_patterns()
 
+        # User selected a specific model
+        # Return database patterns for this brand/model
+        # Scanner will automatically test ONVIF first, then these patterns,
+        # then popular patterns (if < 7 streams found)
         return self.index.get_entries_for_model(brand, model)

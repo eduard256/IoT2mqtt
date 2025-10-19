@@ -85,9 +85,9 @@ async def search_cameras(
 
 
 @router.post("/scan-streams")
-async def start_stream_scan(request: StreamScanRequest) -> Dict[str, Any]:
+def start_stream_scan(request: StreamScanRequest) -> Dict[str, Any]:
     """
-    Start asynchronous stream scanning
+    Start stream scanning in background thread
 
     Returns task_id for monitoring progress via SSE endpoint
     """
@@ -118,8 +118,8 @@ async def start_stream_scan(request: StreamScanRequest) -> Dict[str, Any]:
             }
 
         logger.info(f"Starting stream scanner with task_id={task_id}")
-        # Start background scanning task
-        await stream_scanner.start_scan(
+        # Start background scanning task (now synchronous - runs in thread)
+        stream_scanner.start_scan(
             task_id=task_id,
             entries=entries,
             address=request.address,
