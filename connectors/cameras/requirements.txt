@@ -1,0 +1,13 @@
+# Camera Connector Dependencies
+
+# YAML processing (for go2rtc config generation)
+pyyaml>=6.0
+
+# MQTT client (inherited from BaseConnector)
+paho-mqtt>=1.6.1
+
+# HTTP requests (for go2rtc API)
+requests>=2.31.0
+
+# Process supervisor (for running go2rtc + connector)
+supervisor>=4.2.5
