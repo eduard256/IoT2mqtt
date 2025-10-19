@@ -147,16 +147,17 @@ def start_stream_scan(request: StreamScanRequest) -> Dict[str, Any]:
 
 
 @router.get("/scan-streams/{task_id}/stream")
-async def stream_scan_results(task_id: str):
+def stream_scan_results(task_id: str):
     """
     Server-Sent Events endpoint for real-time scan results
 
     Streams found camera streams as they are discovered
+    Uses synchronous generator (FastAPI/Starlette supports both sync and async)
     """
     try:
-        async def event_generator():
-            """Generate SSE events for scan progress"""
-            async for event in stream_scanner.get_results_stream(task_id):
+        def event_generator():
+            """Generate SSE events for scan progress (synchronous)"""
+            for event in stream_scanner.get_results_stream(task_id):
                 if event["type"] == "stream_found":
                     stream_data = event["data"]
                     yield f"data: {stream_data}\n\n"
