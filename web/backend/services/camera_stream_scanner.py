@@ -130,10 +130,21 @@ class CameraStreamScanner:
 
             # Test URLs in parallel (with concurrency limit)
             semaphore = asyncio.Semaphore(12)  # Max 12 concurrent tests (was 10)
+            test_counter = {"started": 0, "finished": 0, "errors": 0}
 
             async def test_with_semaphore(url_info):
-                async with semaphore:
-                    return await self._test_stream(url_info)
+                test_counter["started"] += 1
+                logger.debug(f"Task started for {url_info['protocol']}://{url_info['url'][:30]}...")
+                try:
+                    async with semaphore:
+                        result = await self._test_stream(url_info)
+                        test_counter["finished"] += 1
+                        logger.debug(f"Task finished: ok={result['ok']} for {url_info['url'][:30]}...")
+                        return result
+                except Exception as e:
+                    test_counter["errors"] += 1
+                    logger.error(f"Task exception for {url_info['url'][:30]}...: {e}")
+                    return {"ok": False, "stream": None}
 
             # Create tasks for all URLs
             tasks = [asyncio.create_task(test_with_semaphore(url_info)) for url_info in test_urls]
@@ -194,6 +205,9 @@ class CameraStreamScanner:
                                 logger.info(f"Found stream {len(self.scan_results[task_id])}: {stream_data.get('notes', 'Unknown')}")
                     except Exception as e:
                         logger.debug(f"Error processing task result: {e}")
+
+            # Log test statistics
+            logger.info(f"Test statistics: started={test_counter['started']}, finished={test_counter['finished']}, errors={test_counter['errors']}")
 
             # Cancel remaining tasks if we stopped early
             if pending_tasks:
