@@ -470,7 +470,7 @@ class CameraStreamScanner:
         stream_type = url_info["type"]
         protocol = url_info["protocol"]
 
-        logger.debug(f"Testing stream: {protocol}://{url[:50]}... (type={stream_type})")
+        logger.debug(f"Testing stream: {url[:80]}... (type={stream_type}, protocol={protocol})")
 
         try:
             if protocol == "rtsp" or stream_type == "FFMPEG":
@@ -493,7 +493,7 @@ class CameraStreamScanner:
         """Test RTSP stream using ffprobe"""
         url = url_info["url"]
 
-        logger.debug(f"Starting ffprobe test for: {url[:50]}...")
+        logger.debug(f"ffprobe testing URL: {url[:100]}")
 
         try:
             # Run ffprobe with timeout
