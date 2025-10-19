@@ -134,25 +134,49 @@ def validate_rtsp_stream(url: str, timeout: int = 10) -> Dict[str, Any]:
 
 def validate_http_stream(url: str, timeout: int = 10) -> Dict[str, Any]:
     """
-    Validate HTTP/MJPEG stream
+    Validate HTTP/MJPEG stream using GET request with Basic Auth
 
     Returns: {"ok": bool, "error": {...} or "result": {...}}
     """
     try:
-        # Try to fetch first few bytes
+        # Extract credentials from URL query parameters
+        # Support formats: ?user=X&pwd=Y, ?username=X&password=Y
+        from urllib.parse import urlparse, parse_qs
+
+        parsed = urlparse(url)
+        query_params = parse_qs(parsed.query)
+
+        username = None
+        password = None
+
+        # Check for credentials in query params
+        if 'user' in query_params:
+            username = query_params['user'][0]
+        elif 'username' in query_params:
+            username = query_params['username'][0]
+
+        if 'pwd' in query_params:
+            password = query_params['pwd'][0]
+        elif 'password' in query_params:
+            password = query_params['password'][0]
+
+        # Build curl command with GET request and Basic Auth if credentials found
+        cmd = ["curl", "-s", "-L"]  # Silent, follow redirects
+
+        if username and password:
+            # Use HTTP Basic Auth header
+            cmd.extend(["-u", f"{username}:{password}"])
+
+        cmd.extend([
+            "--connect-timeout", str(timeout),
+            "--max-time", str(timeout),
+            url
+        ])
+
         result = subprocess.run(
-            [
-                "curl",
-                "-s",
-                "-I",  # HEAD request
-                "-L",  # Follow redirects
-                "--connect-timeout", str(timeout),
-                "--max-time", str(timeout),
-                url
-            ],
+            cmd,
             capture_output=True,
-            timeout=timeout + 5,
-            text=True
+            timeout=timeout + 5
         )
 
         if result.returncode != 0:
@@ -165,39 +189,38 @@ def validate_http_stream(url: str, timeout: int = 10) -> Dict[str, Any]:
                 }
             }
 
-        # Check status code
-        headers = result.stdout
-        if "200 OK" not in headers and "200" not in headers.split("\n")[0]:
-            return {
-                "ok": False,
-                "error": {
-                    "code": "http_error",
-                    "message": "HTTP stream returned error status",
-                    "retriable": True
+        # Check for JPEG magic bytes (FF D8 FF E0 or FF D8 FF E1)
+        if len(result.stdout) >= 4:
+            magic_bytes = result.stdout[:4]
+            if magic_bytes[:3] == b'\xff\xd8\xff':
+                # Valid JPEG image
+                return {
+                    "ok": True,
+                    "result": {
+                        "stream_type": "JPEG",
+                        "content_type": "image/jpeg",
+                        "validated": True,
+                        "size_bytes": len(result.stdout)
+                    }
                 }
-            }
+            elif magic_bytes == b'--BoundaryString':
+                # MJPEG multipart stream
+                return {
+                    "ok": True,
+                    "result": {
+                        "stream_type": "MJPEG",
+                        "content_type": "multipart/x-mixed-replace",
+                        "validated": True
+                    }
+                }
 
-        # Check content type
-        content_type = ""
-        for line in headers.split("\n"):
-            if line.lower().startswith("content-type:"):
-                content_type = line.split(":", 1)[1].strip().lower()
-                break
-
-        # Determine stream type
-        if "multipart" in content_type or "mjpeg" in content_type:
-            stream_type = "MJPEG"
-        elif "image" in content_type:
-            stream_type = "JPEG"
-        else:
-            stream_type = "HTTP"
-
+        # If we got data but it's not a recognized format
         return {
-            "ok": True,
-            "result": {
-                "stream_type": stream_type,
-                "content_type": content_type,
-                "validated": True
+            "ok": False,
+            "error": {
+                "code": "invalid_stream",
+                "message": "Response is not a valid JPEG or MJPEG stream",
+                "retriable": False
             }
         }
 
