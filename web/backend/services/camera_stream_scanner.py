@@ -7,11 +7,21 @@ import asyncio
 import json
 import logging
 import subprocess
-from typing import Dict, List, Any, AsyncGenerator
+from typing import Dict, List, Any, AsyncGenerator, Optional
 from urllib.parse import urlparse
 from datetime import datetime
+import time
 
 logger = logging.getLogger(__name__)
+
+# Try to import ONVIF library (optional dependency)
+try:
+    from onvif import ONVIFCamera
+    ONVIF_AVAILABLE = True
+    logger.info("ONVIF library loaded successfully")
+except ImportError:
+    ONVIF_AVAILABLE = False
+    logger.warning("ONVIF library not available - install with: pip install onvif-zeep")
 
 
 class CameraStreamScanner:
@@ -67,12 +77,56 @@ class CameraStreamScanner:
         password: str,
         channel: int
     ):
-        """Internal method to perform stream scanning"""
+        """
+        Internal method to perform stream scanning
+
+        Combines ONVIF discovery with pattern-based URL testing.
+        Stops when 7+ streams found or 2 minutes elapsed.
+        """
+        start_time = time.time()
+        max_duration = 120  # 2 minutes
+        max_streams = 7     # Stop after finding 7 streams
+
         try:
-            # Generate test URLs from entries
+            # Try ONVIF discovery first (runs in parallel with URL generation)
+            logger.info(f"Starting scan for task {task_id}")
+
+            # Start ONVIF discovery in background
+            onvif_task = asyncio.create_task(
+                self._try_onvif_discovery(address, username, password)
+            )
+
+            # Generate test URLs from entries while ONVIF discovery runs
             test_urls = self._generate_test_urls(entries, address, username, password, channel)
 
-            logger.info(f"Scanning {len(test_urls)} URLs for task {task_id}")
+            logger.info(f"Generated {len(test_urls)} test URLs for task {task_id}")
+
+            # Wait for ONVIF discovery (with timeout)
+            try:
+                onvif_streams = await asyncio.wait_for(onvif_task, timeout=15.0)
+
+                if onvif_streams:
+                    logger.info(f"ONVIF discovered {len(onvif_streams)} stream(s)")
+
+                    # Process ONVIF streams first
+                    for stream_data in onvif_streams:
+                        self.scan_results[task_id].append(stream_data)
+                        await self.scan_queues[task_id].put({
+                            "type": "stream_found",
+                            "data": json.dumps(stream_data)
+                        })
+
+                    # Check if we already have enough streams
+                    if len(self.scan_results[task_id]) >= max_streams:
+                        logger.info(f"Found {len(self.scan_results[task_id])} streams via ONVIF, stopping scan")
+                        self.scan_status[task_id] = "completed"
+                        await self.scan_queues[task_id].put({"type": "scan_complete"})
+                        return
+
+            except asyncio.TimeoutError:
+                logger.debug(f"ONVIF discovery timeout for task {task_id}, continuing with pattern testing")
+            except Exception as e:
+                logger.debug(f"ONVIF discovery error for task {task_id}: {e}")
 
             # Test URLs in parallel (with concurrency limit)
             semaphore = asyncio.Semaphore(10)  # Max 10 concurrent tests
@@ -82,29 +136,70 @@ class CameraStreamScanner:
                     return await self._test_stream(url_info)
 
             # Create tasks for all URLs
-            tasks = [test_with_semaphore(url_info) for url_info in test_urls]
+            tasks = [asyncio.create_task(test_with_semaphore(url_info)) for url_info in test_urls]
 
             # Process results as they complete
-            for coro in asyncio.as_completed(tasks):
-                result = await coro
+            pending_tasks = set(tasks)
 
-                if result["ok"]:
-                    stream_data = result["stream"]
+            while pending_tasks:
+                # Check stop conditions
+                elapsed = time.time() - start_time
+                found_count = len(self.scan_results[task_id])
 
-                    # Add to results
-                    self.scan_results[task_id].append(stream_data)
+                if found_count >= max_streams:
+                    logger.info(f"Found {found_count} streams (>= {max_streams}), stopping scan")
+                    break
 
-                    # Send to queue for SSE
-                    await self.scan_queues[task_id].put({
-                        "type": "stream_found",
-                        "data": json.dumps(stream_data)
-                    })
+                if elapsed >= max_duration:
+                    logger.info(f"Scan timeout ({max_duration}s), stopping scan")
+                    break
+
+                # Wait for next result with timeout
+                done, pending_tasks = await asyncio.wait(
+                    pending_tasks,
+                    return_when=asyncio.FIRST_COMPLETED,
+                    timeout=1.0
+                )
+
+                # Process completed tasks
+                for completed_task in done:
+                    try:
+                        result = await completed_task
+
+                        if result["ok"]:
+                            stream_data = result["stream"]
+
+                            # Check for duplicates (same URL)
+                            existing_urls = [s.get("url") for s in self.scan_results[task_id]]
+                            if stream_data.get("url") not in existing_urls:
+                                # Add to results
+                                self.scan_results[task_id].append(stream_data)
+
+                                # Send to queue for SSE
+                                await self.scan_queues[task_id].put({
+                                    "type": "stream_found",
+                                    "data": json.dumps(stream_data)
+                                })
+
+                                logger.info(f"Found stream {len(self.scan_results[task_id])}: {stream_data.get('notes', 'Unknown')}")
+                    except Exception as e:
+                        logger.debug(f"Error processing task result: {e}")
+
+            # Cancel remaining tasks if we stopped early
+            if pending_tasks:
+                logger.info(f"Cancelling {len(pending_tasks)} remaining tasks")
+                for task in pending_tasks:
+                    task.cancel()
+
+                # Wait for cancellations to complete
+                await asyncio.gather(*pending_tasks, return_exceptions=True)
 
             # Mark as complete
             self.scan_status[task_id] = "completed"
             await self.scan_queues[task_id].put({"type": "scan_complete"})
 
-            logger.info(f"Scan {task_id} completed. Found {len(self.scan_results[task_id])} streams")
+            elapsed = time.time() - start_time
+            logger.info(f"Scan {task_id} completed in {elapsed:.1f}s. Found {len(self.scan_results[task_id])} streams")
 
         except Exception as e:
             logger.error(f"Scan {task_id} failed: {e}")
@@ -186,6 +281,147 @@ class CameraStreamScanner:
         test_urls.sort(key=lambda x: x["priority"])
 
         return test_urls
+
+    async def _try_onvif_discovery(
+        self,
+        address: str,
+        username: str,
+        password: str,
+        port: int = 80
+    ) -> List[Dict[str, Any]]:
+        """
+        Try ONVIF device discovery to get exact stream URLs
+
+        Args:
+            address: Camera IP address
+            username: Camera username
+            password: Camera password
+            port: ONVIF port (default 80)
+
+        Returns:
+            List of discovered stream entries (empty if ONVIF not supported)
+        """
+        if not ONVIF_AVAILABLE:
+            logger.debug("ONVIF library not available, skipping ONVIF discovery")
+            return []
+
+        discovered_streams = []
+
+        try:
+            # Parse address to get clean IP
+            parsed = urlparse(address if '://' in address else f'http://{address}')
+            host = parsed.hostname or address
+
+            logger.info(f"Attempting ONVIF discovery on {host}:{port}")
+
+            # Create ONVIF camera instance
+            # Run in executor to avoid blocking async loop
+            def create_onvif_camera():
+                try:
+                    mycam = ONVIFCamera(
+                        host,
+                        port,
+                        username,
+                        password,
+                        wsdl_dir='/usr/local/lib/python3.11/site-packages/wsdl'  # Adjust path as needed
+                    )
+                    return mycam
+                except Exception as e:
+                    logger.debug(f"Failed to create ONVIF camera: {e}")
+                    return None
+
+            # Run ONVIF operations with timeout
+            mycam = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(None, create_onvif_camera),
+                timeout=10.0
+            )
+
+            if not mycam:
+                logger.debug(f"ONVIF not supported on {host}")
+                return []
+
+            # Get media service
+            def get_media_profiles():
+                try:
+                    media_service = mycam.create_media_service()
+                    profiles = media_service.GetProfiles()
+                    return profiles
+                except Exception as e:
+                    logger.debug(f"Failed to get media profiles: {e}")
+                    return []
+
+            profiles = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(None, get_media_profiles),
+                timeout=10.0
+            )
+
+            if not profiles:
+                logger.debug(f"No ONVIF media profiles found on {host}")
+                return []
+
+            logger.info(f"Found {len(profiles)} ONVIF media profile(s) on {host}")
+
+            # Extract stream URIs from profiles
+            for idx, profile in enumerate(profiles):
+                try:
+                    def get_stream_uri(prof):
+                        try:
+                            media_service = mycam.create_media_service()
+                            obj = media_service.create_type('GetStreamUri')
+                            obj.ProfileToken = prof.token
+                            obj.StreamSetup = {
+                                'Stream': 'RTP-Unicast',
+                                'Transport': {'Protocol': 'RTSP'}
+                            }
+                            uri_response = media_service.GetStreamUri(obj)
+                            return uri_response.Uri
+                        except Exception as e:
+                            logger.debug(f"Failed to get stream URI: {e}")
+                            return None
+
+                    stream_uri = await asyncio.wait_for(
+                        asyncio.get_event_loop().run_in_executor(None, lambda: get_stream_uri(profile)),
+                        timeout=5.0
+                    )
+
+                    if stream_uri:
+                        # Parse ONVIF stream URI
+                        parsed_uri = urlparse(stream_uri)
+
+                        # Build clean URL without embedded credentials
+                        clean_path = parsed_uri.path
+                        if parsed_uri.query:
+                            clean_path += f"?{parsed_uri.query}"
+
+                        discovered_streams.append({
+                            "type": "ONVIF",
+                            "protocol": "rtsp",
+                            "port": parsed_uri.port or 554,
+                            "url": clean_path,
+                            "full_url": stream_uri,
+                            "notes": f"ONVIF Profile {idx + 1}: {profile.Name if hasattr(profile, 'Name') else f'Stream {idx + 1}'}"
+                        })
+
+                        logger.info(f"ONVIF stream {idx + 1}: {stream_uri}")
+
+                except asyncio.TimeoutError:
+                    logger.debug(f"Timeout getting stream URI for profile {idx}")
+                    continue
+                except Exception as e:
+                    logger.debug(f"Error processing profile {idx}: {e}")
+                    continue
+
+            if discovered_streams:
+                logger.info(f"ONVIF discovery successful: found {len(discovered_streams)} stream(s)")
+            else:
+                logger.debug(f"ONVIF discovery found no usable streams on {host}")
+
+        except asyncio.TimeoutError:
+            logger.debug(f"ONVIF discovery timeout for {host}")
+        except Exception as e:
+            logger.debug(f"ONVIF discovery failed for {host}: {e}")
+
+        return discovered_streams
 
     def _get_priority(self, stream_type: str) -> int:
         """Get priority for stream type (lower = higher priority)"""
