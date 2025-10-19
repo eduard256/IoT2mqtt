@@ -1,5 +1,21 @@
 [
   {
+    "url": "/live/main",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Common RTSP main stream for ONVIF cameras",
+    "model_count": 9999
+  },
+  {
+    "url": "/live/sub",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Common RTSP sub stream for ONVIF cameras",
+    "model_count": 9998
+  },
+  {
     "url": "/11",
     "type": "FFMPEG",
     "protocol": "rtsp",
