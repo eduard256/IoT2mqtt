@@ -31,7 +31,7 @@ from api import auth, mqtt, connectors, instances, devices, docker, discovery, i
 from services.secrets_manager import SecretsManager
 
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)  # Enable DEBUG logs for troubleshooting
 logger = logging.getLogger(__name__)
 
 # JWT Configuration
