@@ -6,9 +6,12 @@ Loads all brand JSON files and builds an in-memory search index
 
 import json
 import os
+import logging
 from pathlib import Path
 from typing import List, Dict, Any
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -279,357 +282,62 @@ class CameraIndex:
         Get most popular/common stream patterns for when model is unknown
 
         Returns:
-            List of common URL pattern entries (~50 most popular patterns)
+            List of popular URL pattern entries from database analysis (top 150)
         """
-        # Most common patterns across all cameras
-        # Organized by priority and popularity
-        popular_patterns = [
-            # === ONVIF Generic (Priority 1) ===
-            {
-                "type": "ONVIF",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/onvif1",
-                "notes": "ONVIF Profile S stream 1"
-            },
-            {
-                "type": "ONVIF",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/onvif2",
-                "notes": "ONVIF Profile S stream 2"
-            },
+        if not self._loaded:
+            self.load()
 
-            # === Hikvision (Very Popular - Priority 2) ===
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/Streaming/Channels/101",
-                "notes": "Hikvision main stream (HD)"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/Streaming/Channels/102",
-                "notes": "Hikvision sub stream (SD)"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/Streaming/Channels/1/httppreview",
-                "notes": "Hikvision HTTP preview"
-            },
-            {
-                "type": "MJPEG",
-                "protocol": "http",
-                "port": 80,
-                "url": "/ISAPI/Streaming/channels/101/picture",
-                "notes": "Hikvision snapshot"
-            },
+        # Load patterns from pre-generated JSON file
+        patterns_file = Path(__file__).parent / "data" / "popular_stream_patterns.json"
 
-            # === Dahua (Very Popular - Priority 2) ===
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/cam/realmonitor?channel=1&subtype=0",
-                "notes": "Dahua main stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/cam/realmonitor?channel=1&subtype=1",
-                "notes": "Dahua sub stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/cam/realmonitor?channel=1&subtype=0&unicast=true&proto=Onvif",
-                "notes": "Dahua ONVIF compatible"
-            },
+        if not patterns_file.exists():
+            logger.warning(f"Popular patterns file not found: {patterns_file}")
+            return []
 
-            # === Generic RTSP Patterns (Priority 3) ===
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/live/main",
-                "notes": "Common RTSP main stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/live/sub",
-                "notes": "Common RTSP sub stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/stream1",
-                "notes": "Generic stream 1"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/stream2",
-                "notes": "Generic stream 2"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/h264",
-                "notes": "H264 stream path"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/h264Preview_01_main",
-                "notes": "H264 preview main"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/h264Preview_01_sub",
-                "notes": "H264 preview sub"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/ch01/0",
-                "notes": "Channel 1 main"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/ch01/1",
-                "notes": "Channel 1 sub"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/live",
-                "notes": "Simple live stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/video",
-                "notes": "Simple video stream"
-            },
+        try:
+            with open(patterns_file, 'r', encoding='utf-8') as f:
+                patterns = json.load(f)
 
-            # === Axis (Popular) ===
-            {
-                "type": "MJPEG",
-                "protocol": "http",
-                "port": 80,
-                "url": "/axis-cgi/mjpg/video.cgi",
-                "notes": "Axis MJPEG stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/axis-media/media.amp",
-                "notes": "Axis RTSP stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/axis-media/media.amp?videocodec=h264",
-                "notes": "Axis H264 stream"
-            },
+            # Add ONVIF patterns at the beginning (highest priority)
+            onvif_patterns = [
+                {
+                    "type": "ONVIF",
+                    "protocol": "rtsp",
+                    "port": 554,
+                    "url": "/onvif1",
+                    "notes": "ONVIF Profile S stream 1"
+                },
+                {
+                    "type": "ONVIF",
+                    "protocol": "rtsp",
+                    "port": 554,
+                    "url": "/onvif2",
+                    "notes": "ONVIF Profile S stream 2"
+                },
+            ]
 
-            # === Foscam (Popular) ===
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/videoMain",
-                "notes": "Foscam main stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/videoSub",
-                "notes": "Foscam sub stream"
-            },
-            {
-                "type": "MJPEG",
-                "protocol": "http",
-                "port": 88,
-                "url": "/cgi-bin/CGIStream.cgi?cmd=GetMJStream",
-                "notes": "Foscam MJPEG (port 88)"
-            },
-            {
-                "type": "JPEG",
-                "protocol": "http",
-                "port": 88,
-                "url": "/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2",
-                "notes": "Foscam snapshot"
-            },
+            # Combine: ONVIF first (highest priority), then patterns by popularity
+            return onvif_patterns + patterns
 
-            # === TP-Link/Tapo ===
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/stream1",
-                "notes": "TP-Link stream 1"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/stream2",
-                "notes": "TP-Link stream 2"
-            },
-
-            # === Amcrest (Dahua-based) ===
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/cam/realmonitor?channel=1&subtype=00",
-                "notes": "Amcrest main (Dahua variant)"
-            },
-
-            # === Generic with Credentials in Query String ===
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/live?user={username}&password={password}",
-                "notes": "Generic with query credentials"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/stream?usr={username}&pwd={password}",
-                "notes": "Generic alt credentials format"
-            },
-
-            # === MJPEG/HTTP Streams (Priority 4) ===
-            {
-                "type": "MJPEG",
-                "protocol": "http",
-                "port": 80,
-                "url": "/video.cgi",
-                "notes": "Common MJPEG stream"
-            },
-            {
-                "type": "MJPEG",
-                "protocol": "http",
-                "port": 80,
-                "url": "/mjpg/video.mjpg",
-                "notes": "MJPEG video path"
-            },
-            {
-                "type": "MJPEG",
-                "protocol": "http",
-                "port": 80,
-                "url": "/cgi-bin/video.cgi",
-                "notes": "CGI MJPEG stream"
-            },
-            {
-                "type": "JPEG",
-                "protocol": "http",
-                "port": 80,
-                "url": "/snapshot.cgi",
-                "notes": "Snapshot CGI"
-            },
-            {
-                "type": "JPEG",
-                "protocol": "http",
-                "port": 80,
-                "url": "/cgi-bin/snapshot.cgi",
-                "notes": "CGI snapshot"
-            },
-
-            # === Additional Generic Paths ===
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/1",
-                "notes": "Simple path /1"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/11",
-                "notes": "Simple path /11"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/mpeg4",
-                "notes": "MPEG4 stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/mpeg4/media.amp",
-                "notes": "MPEG4 media"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/live.sdp",
-                "notes": "SDP live stream"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/av0_0",
-                "notes": "AV stream 0_0"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/av0_1",
-                "notes": "AV stream 0_1"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/channel1",
-                "notes": "Channel 1"
-            },
-            {
-                "type": "FFMPEG",
-                "protocol": "rtsp",
-                "port": 554,
-                "url": "/media/video1",
-                "notes": "Media video 1"
-            },
-        ]
-
-        return popular_patterns
+        except Exception as e:
+            logger.error(f"Failed to load popular patterns: {e}")
+            # Return at least ONVIF patterns if file loading fails
+            return [
+                {
+                    "type": "ONVIF",
+                    "protocol": "rtsp",
+                    "port": 554,
+                    "url": "/onvif1",
+                    "notes": "ONVIF Profile S stream 1"
+                },
+                {
+                    "type": "ONVIF",
+                    "protocol": "rtsp",
+                    "port": 554,
+                    "url": "/onvif2",
+                    "notes": "ONVIF Profile S stream 2"
+                },
+            ]
 
 
 # Global singleton instance

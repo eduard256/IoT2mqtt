@@ -81,10 +81,10 @@ class CameraStreamScanner:
         Internal method to perform stream scanning
 
         Combines ONVIF discovery with pattern-based URL testing.
-        Stops when 7+ streams found or 2 minutes elapsed.
+        Stops when 7+ streams found or 5 minutes elapsed.
         """
         start_time = time.time()
-        max_duration = 120  # 2 minutes
+        max_duration = 300  # 5 minutes (was 2 minutes)
         max_streams = 7     # Stop after finding 7 streams
 
         try:
@@ -103,7 +103,7 @@ class CameraStreamScanner:
 
             # Wait for ONVIF discovery (with timeout)
             try:
-                onvif_streams = await asyncio.wait_for(onvif_task, timeout=15.0)
+                onvif_streams = await asyncio.wait_for(onvif_task, timeout=25.0)
 
                 if onvif_streams:
                     logger.info(f"ONVIF discovered {len(onvif_streams)} stream(s)")
@@ -129,7 +129,7 @@ class CameraStreamScanner:
                 logger.debug(f"ONVIF discovery error for task {task_id}: {e}")
 
             # Test URLs in parallel (with concurrency limit)
-            semaphore = asyncio.Semaphore(10)  # Max 10 concurrent tests
+            semaphore = asyncio.Semaphore(12)  # Max 12 concurrent tests (was 10)
 
             async def test_with_semaphore(url_info):
                 async with semaphore:
@@ -333,7 +333,7 @@ class CameraStreamScanner:
             # Run ONVIF operations with timeout
             mycam = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(None, create_onvif_camera),
-                timeout=10.0
+                timeout=15.0
             )
 
             if not mycam:
@@ -352,7 +352,7 @@ class CameraStreamScanner:
 
             profiles = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(None, get_media_profiles),
-                timeout=10.0
+                timeout=15.0
             )
 
             if not profiles:
@@ -381,7 +381,7 @@ class CameraStreamScanner:
 
                     stream_uri = await asyncio.wait_for(
                         asyncio.get_event_loop().run_in_executor(None, lambda: get_stream_uri(profile)),
-                        timeout=5.0
+                        timeout=10.0
                     )
 
                     if stream_uri:
@@ -466,7 +466,7 @@ class CameraStreamScanner:
                 "ffprobe",
                 "-v", "error",
                 "-rtsp_transport", "tcp",
-                "-timeout", "5000000",  # 5 second timeout
+                "-timeout", "25000000",  # 25 second timeout (was 5 sec)
                 "-print_format", "json",
                 "-show_streams",
                 url,
@@ -474,7 +474,7 @@ class CameraStreamScanner:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=25)
 
             if proc.returncode == 0 and stdout:
                 # Stream is accessible
@@ -511,14 +511,14 @@ class CameraStreamScanner:
                 "-s",  # Silent
                 "-o", "/dev/null",
                 "-w", "%{http_code}",
-                "--connect-timeout", "5",
-                "--max-time", "10",
+                "--connect-timeout", "10",
+                "--max-time", "25",
                 url,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
 
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=25)
             status_code = stdout.decode().strip()
 
             if status_code.startswith("200"):
