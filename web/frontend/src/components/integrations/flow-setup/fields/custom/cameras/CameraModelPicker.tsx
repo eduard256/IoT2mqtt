@@ -19,6 +19,7 @@ export function CameraModelPicker({ field, value, onChange, error }: FieldCompon
   const [results, setResults] = useState<CameraModel[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [justSelected, setJustSelected] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Debounced search
@@ -26,6 +27,11 @@ export function CameraModelPicker({ field, value, onChange, error }: FieldCompon
     if (query.length < 2) {
       setResults([])
       setIsOpen(false)
+      return
+    }
+
+    // Don't search or open dropdown if user just selected a model
+    if (justSelected) {
       return
     }
 
@@ -45,7 +51,10 @@ export function CameraModelPicker({ field, value, onChange, error }: FieldCompon
 
         const data = await res.json()
         setResults(data.results || [])
-        setIsOpen(data.results?.length > 0)
+        // Only open if we have results and it wasn't just a selection
+        if (data.results?.length > 0 && !justSelected) {
+          setIsOpen(true)
+        }
       } catch (err) {
         setResults([])
         setIsOpen(false)
@@ -55,7 +64,7 @@ export function CameraModelPicker({ field, value, onChange, error }: FieldCompon
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [query])
+  }, [query, justSelected])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -81,6 +90,7 @@ export function CameraModelPicker({ field, value, onChange, error }: FieldCompon
     onChange(modelData)
     setQuery(item.display)
     setIsOpen(false)
+    setJustSelected(true)
   }
 
   return (
@@ -96,7 +106,12 @@ export function CameraModelPicker({ field, value, onChange, error }: FieldCompon
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
-            if (e.target.value.length >= 2) {
+            // Reset justSelected flag when user starts typing
+            setJustSelected(false)
+          }}
+          onFocus={() => {
+            // Only open dropdown if there are results and user hasn't just selected
+            if (results.length > 0 && !justSelected) {
               setIsOpen(true)
             }
           }}
