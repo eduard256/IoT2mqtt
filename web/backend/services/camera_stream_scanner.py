@@ -129,7 +129,8 @@ class CameraStreamScanner:
                 logger.debug(f"ONVIF discovery error for task {task_id}: {e}")
 
             # Test URLs in parallel (with concurrency limit)
-            semaphore = asyncio.Semaphore(12)  # Max 12 concurrent tests (was 10)
+            # Reduced to 4 to avoid overwhelming cameras with anti-flood protection
+            semaphore = asyncio.Semaphore(4)  # Max 4 concurrent tests (was 12)
             test_counter = {"started": 0, "finished": 0, "errors": 0}
 
             async def test_with_semaphore(url_info):
