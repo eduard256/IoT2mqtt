@@ -42,13 +42,8 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
     setStreams([])
 
     try {
-      console.log('='.repeat(80))
-      console.log('FRONTEND: Starting camera stream scan')
-      console.log('Field config:', config)
-
       // Parse model data from JSON format (CameraModelPicker always returns JSON)
       const modelData = JSON.parse(config.model || '{}')
-      console.log('Parsed model data:', modelData)
 
       const requestBody = {
         brand: modelData.brand,
@@ -59,23 +54,9 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
         channel: parseInt(config.channel || '0')
       }
 
-      console.log('Request body to send:', {
-        ...requestBody,
-        password: requestBody.password ? '***' : '(empty)'
-      })
-      console.log('Request body field types:', {
-        brand: typeof requestBody.brand,
-        model: typeof requestBody.model,
-        address: typeof requestBody.address,
-        username: typeof requestBody.username,
-        password: typeof requestBody.password,
-        channel: typeof requestBody.channel
-      })
-
       const token = getAuthToken()
 
       // Start scan
-      console.log('Sending POST to /api/cameras/scan-streams')
       const scanRes = await fetch('/api/cameras/scan-streams', {
         method: 'POST',
         headers: {
@@ -85,24 +66,16 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
         body: JSON.stringify(requestBody)
       })
 
-      console.log('Response status:', scanRes.status)
-      console.log('Response ok:', scanRes.ok)
-
       if (!scanRes.ok) {
         const errorText = await scanRes.text()
-        console.error('Error response body:', errorText)
         throw new Error(`Failed to start scan: ${scanRes.status} - ${errorText}`)
       }
 
       const scanData = await scanRes.json()
-      console.log('Scan response data:', scanData)
 
       if (!scanData.ok) {
-        console.error('Scan failed with message:', scanData.error)
         throw new Error(scanData.error || 'Scan failed')
       }
-
-      console.log('='.repeat(80))
 
       const taskId = scanData.task_id
 
@@ -133,19 +106,17 @@ export function StreamScannerField({ field, value, onChange, error }: FieldCompo
             })
           }
         } catch (err) {
-          console.error('Failed to parse SSE message:', err)
+          // Failed to parse SSE message
         }
       }
 
       eventSource.onerror = (err) => {
-        console.error('SSE error:', err)
         setScanError('Connection error during scan')
         setScanning(false)
         eventSource.close()
       }
 
     } catch (err: any) {
-      console.error('Scan error:', err)
       setScanError(err.message || 'Failed to start scan')
       setScanning(false)
     }

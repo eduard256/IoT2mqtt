@@ -47,7 +47,6 @@ export function CameraModelPicker({ field, value, onChange, error }: FieldCompon
         setResults(data.results || [])
         setIsOpen(data.results?.length > 0)
       } catch (err) {
-        console.error('Camera search error:', err)
         setResults([])
         setIsOpen(false)
       } finally {
