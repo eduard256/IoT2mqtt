@@ -78,46 +78,154 @@ class CameraIndex:
 
     def search(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         """
-        Search for camera models matching the query
+        Search for camera models matching the query with intelligent scoring
 
         Args:
             query: Search string (case-insensitive)
+                   Supports formats:
+                   - "brand" → all models of brand
+                   - "model" → all brands with this model
+                   - "brand: model" → specific brand+model combination
+                   - "brand model" → fuzzy search in both fields
             limit: Maximum number of results
 
         Returns:
-            List of matching models with format:
-            [{"brand": "Hikvision", "model": "2CD2032-I", "display": "Hikvision: 2CD2032-I", "entry": {...}}]
+            List of matching models sorted by relevance:
+            [{"brand": "Hikvision", "model": "2CD2032-I", "display": "Hikvision: 2CD2032-I", "entry": {...}, "score": 90}]
         """
         if not self._loaded:
             self.load()
 
-        query_lower = query.lower().strip()
-        if not query_lower:
+        query_normalized = query.lower().strip()
+        if not query_normalized:
             return []
 
-        results = []
+        # Parse query based on presence of colon separator
+        has_colon = ':' in query_normalized
+
+        if has_colon:
+            # Explicit brand:model format
+            parts = query_normalized.split(':', 1)
+            brand_query = parts[0].strip()
+            model_query = parts[1].strip() if len(parts) > 1 else ''
+        else:
+            # Single query - will search across all fields
+            brand_query = None
+            model_query = None
+
+        results_with_scores = []
         seen_displays = set()
 
         # Search through all models
         for camera_model in self.models:
-            # Check if query matches brand or model
             brand_lower = camera_model.brand.lower()
             model_lower = camera_model.model.lower()
+            display_lower = camera_model.display.lower()
 
-            if query_lower in brand_lower or query_lower in model_lower:
-                # Avoid duplicates
-                if camera_model.display not in seen_displays:
-                    results.append({
-                        "brand": camera_model.brand,
-                        "brand_id": camera_model.brand_id,
-                        "model": camera_model.model,
-                        "display": camera_model.display,
-                        "entry": camera_model.entry
-                    })
-                    seen_displays.add(camera_model.display)
+            score = 0
 
-                if len(results) >= limit:
-                    break
+            if has_colon:
+                # Colon-separated query: strict brand+model matching
+                brand_match = brand_query in brand_lower if brand_query else True
+                model_match = model_query in model_lower if model_query else True
+
+                if not brand_match:
+                    continue
+                if not model_match:
+                    continue
+
+                # Calculate score for colon queries
+                if brand_query and brand_lower == brand_query:
+                    score += 50  # Exact brand match
+                elif brand_query and brand_lower.startswith(brand_query):
+                    score += 40  # Brand starts with query
+                elif brand_query:
+                    score += 30  # Brand contains query
+
+                if model_query and model_lower == model_query:
+                    score += 50  # Exact model match
+                elif model_query and model_lower.startswith(model_query):
+                    score += 40  # Model starts with query
+                elif model_query:
+                    score += 30  # Model contains query
+
+                # If no model specified after colon, all models of brand get same score
+                if not model_query:
+                    score = max(score, 30)
+
+            else:
+                # No colon: intelligent multi-field search with scoring
+
+                # Priority 1: Exact match in display (highest relevance)
+                if query_normalized == display_lower:
+                    score = 100
+
+                # Priority 2: Exact match in brand
+                elif query_normalized == brand_lower:
+                    score = 90
+
+                # Priority 3: Exact match in model
+                elif query_normalized == model_lower:
+                    score = 80
+
+                # Priority 4: Brand starts with query
+                elif brand_lower.startswith(query_normalized):
+                    score = 70
+
+                # Priority 5: Model starts with query
+                elif model_lower.startswith(query_normalized):
+                    score = 60
+
+                # Priority 6: Brand contains query
+                elif query_normalized in brand_lower:
+                    score = 50
+
+                # Priority 7: Model contains query
+                elif query_normalized in model_lower:
+                    score = 40
+
+                # Priority 8: Display contains query (lowest, but still relevant)
+                elif query_normalized in display_lower:
+                    score = 30
+
+                # Priority 9: Multi-token search (e.g., "trassir 2141")
+                # Check if all tokens in query appear in display
+                elif ' ' in query_normalized:
+                    tokens = query_normalized.split()
+                    if all(token in display_lower for token in tokens):
+                        score = 35  # Between display contains and model contains
+                    else:
+                        continue
+
+                # No match - skip this model
+                else:
+                    continue
+
+            # Avoid duplicates
+            if camera_model.display in seen_displays:
+                continue
+
+            seen_displays.add(camera_model.display)
+            results_with_scores.append({
+                "brand": camera_model.brand,
+                "brand_id": camera_model.brand_id,
+                "model": camera_model.model,
+                "display": camera_model.display,
+                "entry": camera_model.entry,
+                "score": score
+            })
+
+        # Sort by score (descending) - highest relevance first
+        results_with_scores.sort(key=lambda x: x['score'], reverse=True)
+
+        # Apply limit
+        results_with_scores = results_with_scores[:limit]
+
+        # Remove score from final results (internal use only)
+        results = []
+        for item in results_with_scores:
+            result = {k: v for k, v in item.items() if k != 'score'}
+            results.append(result)
 
         # Add "Unlisted" option for each unique brand in results
         unique_brands = {}
@@ -136,7 +244,7 @@ class CameraIndex:
                 "entry": None
             })
 
-        # Combine: unlisted first, then matches
+        # Combine: unlisted first, then matches sorted by relevance
         return unlisted_options + results
 
     def get_entries_for_model(self, brand: str, model: str) -> List[Dict[str, Any]]:
