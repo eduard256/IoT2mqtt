@@ -11,6 +11,7 @@ import sys
 import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from urllib.parse import urlparse
 
 
 class Go2RTCConfigGenerator:
