@@ -34,6 +34,39 @@ class Go2RTCConfigGenerator:
         with open(self.config_path, 'r') as f:
             return json.load(f)
 
+    def _inject_credentials(self, url: str, username: str, password: str) -> str:
+        """
+        Inject credentials into URL if not already present
+
+        Args:
+            url: Original URL (http://, https://, rtsp://, rtmp://)
+            username: Username from device config
+            password: Password from device config
+
+        Returns:
+            URL with credentials injected if missing
+
+        Example:
+            Input: http://10.0.20.112/snapshot.jpg
+            Output: http://admin:pass@10.0.20.112/snapshot.jpg
+        """
+        if not url or not username:
+            return url
+
+        # Check if credentials are already in the URL (contains '@' after protocol)
+        if '://' in url and '@' in url.split('://', 1)[1].split('/')[0]:
+            # URL already has credentials: http://user:pass@host/path
+            return url
+
+        # Parse URL and inject credentials
+        if '://' in url:
+            protocol, rest = url.split('://', 1)
+            # Insert credentials: protocol://username:password@rest
+            return f"{protocol}://{username}:{password}@{rest}"
+
+        # URL without protocol - return as-is
+        return url
+
     def build_go2rtc_source(self, device: Dict[str, Any]) -> Optional[str]:
         """
         Build go2rtc source URL from device config with proper handling for all types
@@ -61,7 +94,10 @@ class Go2RTCConfigGenerator:
             if not stream_url.startswith('rtsp://') and not stream_url.startswith('rtmp://'):
                 print(f"  ⚠️  {device_id}: FFMPEG stream_url should start with rtsp:// or rtmp://", file=sys.stderr)
 
-            return stream_url
+            # Inject credentials if missing
+            username = device.get('username', '')
+            password = device.get('password', '')
+            return self._inject_credentials(stream_url, username, password)
 
         # 2. JPEG snapshots - use exec:ffmpeg to avoid camera protection
         elif stream_type == 'JPEG':
@@ -81,7 +117,10 @@ class Go2RTCConfigGenerator:
             if not stream_url.startswith('http://') and not stream_url.startswith('https://'):
                 print(f"  ⚠️  {device_id}: MJPEG stream_url should start with http:// or https://", file=sys.stderr)
 
-            return stream_url
+            # Inject credentials if missing
+            username = device.get('username', '')
+            password = device.get('password', '')
+            return self._inject_credentials(stream_url, username, password)
 
         # 4. HTTP sources (FLV, MPEG-TS, etc) - native go2rtc support
         elif stream_type == 'HTTP':
@@ -93,7 +132,10 @@ class Go2RTCConfigGenerator:
             if not stream_url.startswith('http://') and not stream_url.startswith('https://'):
                 print(f"  ⚠️  {device_id}: HTTP stream_url should start with http:// or https://", file=sys.stderr)
 
-            return stream_url
+            # Inject credentials if missing
+            username = device.get('username', '')
+            password = device.get('password', '')
+            return self._inject_credentials(stream_url, username, password)
 
         # 5. ONVIF - prefer concrete stream_url if available, otherwise use ONVIF auto-discovery
         elif stream_type == 'ONVIF':
@@ -151,19 +193,19 @@ class Go2RTCConfigGenerator:
         """
         # Get framerate (default: 5 FPS to avoid overwhelming the camera)
         framerate = device.get('framerate', 5)
+        username = device.get('username', '')
+        password = device.get('password', '')
 
         # Ensure stream_url is absolute (contains full http:// path)
-        # If it's already absolute, use as-is
+        # If it's already absolute, use as-is and inject credentials
         if stream_url.startswith('http://') or stream_url.startswith('https://'):
-            full_url = stream_url
+            full_url = self._inject_credentials(stream_url, username, password)
         else:
             # Build absolute URL from device params
             ip = device.get('ip', '')
             port = device.get('port', 80)
-            username = device.get('username', '')
-            password = device.get('password', '')
 
-            # Build base URL
+            # Build base URL with credentials
             if username and password:
                 full_url = f"http://{username}:{password}@{ip}:{port}{stream_url}"
             else:
