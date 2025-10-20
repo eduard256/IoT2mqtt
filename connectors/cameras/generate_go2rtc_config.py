@@ -35,9 +35,14 @@ class Go2RTCConfigGenerator:
 
     def build_go2rtc_source(self, device: Dict[str, Any]) -> Optional[str]:
         """
-        Build go2rtc source URL from device config
+        Build go2rtc source URL from device config with proper handling for all types
 
-        Supports: FFMPEG (RTSP), JPEG, MJPEG, ONVIF, HTTP
+        Supported stream types:
+        - FFMPEG/RTSP: Direct RTSP streams (rtsp://...)
+        - JPEG: Static snapshots → converted to exec:ffmpeg for rate limiting
+        - MJPEG: MJPEG video streams over HTTP (native support)
+        - HTTP: HTTP-FLV, MPEG-TS and other HTTP sources (native support)
+        - ONVIF: Auto-discovery via ONVIF protocol
 
         Returns: Source URL string or None if invalid
         """
@@ -45,22 +50,52 @@ class Go2RTCConfigGenerator:
         stream_url = device.get('stream_url', '')
         device_id = device.get('device_id', 'unknown')
 
+        # 1. RTSP/FFMPEG sources - direct passthrough
         if stream_type == 'FFMPEG':
-            # Direct RTSP URL
             if not stream_url:
                 print(f"  ⚠️  {device_id}: Missing stream_url for FFMPEG type", file=sys.stderr)
                 return None
+
+            # Validate RTSP URL
+            if not stream_url.startswith('rtsp://') and not stream_url.startswith('rtmp://'):
+                print(f"  ⚠️  {device_id}: FFMPEG stream_url should start with rtsp:// or rtmp://", file=sys.stderr)
+
             return stream_url
 
-        elif stream_type in ['JPEG', 'MJPEG', 'HTTP']:
-            # HTTP sources (go2rtc handles them natively)
+        # 2. JPEG snapshots - use exec:ffmpeg to avoid camera protection
+        elif stream_type == 'JPEG':
             if not stream_url:
-                print(f"  ⚠️  {device_id}: Missing stream_url for {stream_type} type", file=sys.stderr)
+                print(f"  ⚠️  {device_id}: Missing stream_url for JPEG type", file=sys.stderr)
                 return None
+
+            return self._build_jpeg_ffmpeg_source(device, stream_url)
+
+        # 3. MJPEG streams - native go2rtc support
+        elif stream_type == 'MJPEG':
+            if not stream_url:
+                print(f"  ⚠️  {device_id}: Missing stream_url for MJPEG type", file=sys.stderr)
+                return None
+
+            # Validate HTTP URL
+            if not stream_url.startswith('http://') and not stream_url.startswith('https://'):
+                print(f"  ⚠️  {device_id}: MJPEG stream_url should start with http:// or https://", file=sys.stderr)
+
             return stream_url
 
+        # 4. HTTP sources (FLV, MPEG-TS, etc) - native go2rtc support
+        elif stream_type == 'HTTP':
+            if not stream_url:
+                print(f"  ⚠️  {device_id}: Missing stream_url for HTTP type", file=sys.stderr)
+                return None
+
+            # Validate HTTP URL
+            if not stream_url.startswith('http://') and not stream_url.startswith('https://'):
+                print(f"  ⚠️  {device_id}: HTTP stream_url should start with http:// or https://", file=sys.stderr)
+
+            return stream_url
+
+        # 5. ONVIF - build ONVIF URL from device params
         elif stream_type == 'ONVIF':
-            # Build ONVIF URL: onvif://user:pass@ip:port
             ip = device.get('ip')
             if not ip:
                 print(f"  ⚠️  {device_id}: Missing IP address for ONVIF type", file=sys.stderr)
@@ -72,9 +107,59 @@ class Go2RTCConfigGenerator:
 
             return f"onvif://{username}:{password}@{ip}:{port}"
 
+        # Unknown type - try to use stream_url as-is with warning
         else:
             print(f"  ⚠️  {device_id}: Unknown stream_type '{stream_type}', using stream_url as-is", file=sys.stderr)
             return stream_url if stream_url else None
+
+    def _build_jpeg_ffmpeg_source(self, device: Dict[str, Any], stream_url: str) -> str:
+        """
+        Build exec:ffmpeg source for JPEG snapshots
+
+        This method uses FFmpeg to convert static JPEG snapshots into MJPEG stream
+        with controlled framerate to avoid triggering camera's DoS protection.
+
+        Args:
+            device: Device configuration dict
+            stream_url: JPEG snapshot URL (can be relative or absolute)
+
+        Returns:
+            exec:ffmpeg source string
+
+        Example:
+            Input: http://10.0.20.112/snapshot.jpg?user=admin&pwd=pass&strm=0
+            Output: exec:ffmpeg -loglevel quiet -f image2 -loop 1 -framerate 5 -i http://... -c copy -f mjpeg -
+        """
+        # Get framerate (default: 5 FPS to avoid overwhelming the camera)
+        framerate = device.get('framerate', 5)
+
+        # Ensure stream_url is absolute (contains full http:// path)
+        # If it's already absolute, use as-is
+        if stream_url.startswith('http://') or stream_url.startswith('https://'):
+            full_url = stream_url
+        else:
+            # Build absolute URL from device params
+            ip = device.get('ip', '')
+            port = device.get('port', 80)
+            username = device.get('username', '')
+            password = device.get('password', '')
+
+            # Build base URL
+            if username and password:
+                full_url = f"http://{username}:{password}@{ip}:{port}{stream_url}"
+            else:
+                full_url = f"http://{ip}:{port}{stream_url}"
+
+        # Build exec:ffmpeg command
+        # -loglevel quiet: suppress FFmpeg output
+        # -f image2: treat input as image sequence
+        # -loop 1: loop the image (re-fetch periodically)
+        # -framerate N: fetch N times per second
+        # -i URL: input URL
+        # -c copy: copy codec (no transcoding)
+        # -f mjpeg: output format MJPEG
+        # -: output to stdout (pipe to go2rtc)
+        return f"exec:ffmpeg -loglevel quiet -f image2 -loop 1 -framerate {framerate} -i {full_url} -c copy -f mjpeg -"
 
     def generate_go2rtc_config(self, instance_config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -150,11 +235,27 @@ class Go2RTCConfigGenerator:
         """
         Remove credentials from URL for safe logging
 
-        Examples:
-          rtsp://admin:pass@ip → rtsp://***:***@ip
-          onvif://user:pass@ip → onvif://***:***@ip
+        Handles multiple URL formats:
+        - rtsp://admin:pass@ip → rtsp://***:***@ip
+        - onvif://user:pass@ip → onvif://***:***@ip
+        - exec:ffmpeg ... -i http://user:pass@ip/... → exec:ffmpeg ... -i http://***:***@ip/...
+        - http://user:pass@ip → http://***:***@ip
+
+        Args:
+            url: Source URL (can be rtsp://, http://, onvif://, or exec:ffmpeg command)
+
+        Returns:
+            Sanitized URL with credentials replaced by ***
         """
-        return re.sub(r'://([^:]+):([^@]+)@', r'://***:***@', url)
+        # For exec commands, sanitize URLs within the command
+        if url.startswith('exec:'):
+            # Replace credentials in any http:// or https:// URLs within the command
+            url = re.sub(r'(https?://)([^:]+):([^@]+)@', r'\1***:***@', url)
+
+        # For standard protocol URLs (rtsp://, onvif://, http://, https://)
+        url = re.sub(r'://([^:]+):([^@]+)@', r'://***:***@', url)
+
+        return url
 
     def run(self) -> int:
         """
