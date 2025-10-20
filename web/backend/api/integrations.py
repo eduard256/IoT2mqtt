@@ -275,11 +275,68 @@ async def restart_instance(instance_id: str):
     try:
         await stop_instance(instance_id)
         await start_instance(instance_id)
-        
+
         return {"status": "success", "message": f"Instance {instance_id} restarted"}
-        
+
     except Exception as e:
         logger.error(f"Failed to restart instance {instance_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/instances/{instance_id}/rebuild")
+async def rebuild_instance(instance_id: str):
+    """Rebuild instance container (rebuild image and recreate container)"""
+    try:
+        integration_name = await find_integration_for_instance(instance_id)
+        if not integration_name:
+            raise HTTPException(status_code=404, detail=f"Instance {instance_id} not found")
+
+        # Load instance configuration
+        config_file = config_service.instances_path / integration_name / f"{instance_id}.json"
+        if not config_file.exists():
+            raise HTTPException(status_code=404, detail="Instance configuration not found")
+
+        with open(config_file, 'r') as f:
+            instance_config = json.load(f)
+
+        # 1. Stop the container
+        docker_client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
+        container_name = f"iot2mqtt_{integration_name}_{instance_id}"
+
+        try:
+            container = docker_client.containers.get(container_name)
+            logger.info(f"Stopping container {container_name}")
+            container.stop(timeout=10)
+        except docker.errors.NotFound:
+            logger.info(f"Container {container_name} not found, will create new one")
+
+        # 2. Rebuild the image
+        logger.info(f"Rebuilding image for {integration_name}")
+        if not docker_service.build_image(integration_name):
+            raise HTTPException(status_code=500, detail=f"Failed to build image for {integration_name}")
+
+        # 3. Remove old container
+        try:
+            container = docker_client.containers.get(container_name)
+            logger.info(f"Removing old container {container_name}")
+            container.remove(force=True)
+        except docker.errors.NotFound:
+            pass
+
+        # 4. Create new container from fresh image
+        logger.info(f"Creating new container {container_name}")
+        docker_service.create_or_update_container(
+            integration_name,
+            instance_id,
+            instance_config
+        )
+
+        return {"status": "success", "message": f"Instance {instance_id} rebuilt successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to rebuild instance {instance_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

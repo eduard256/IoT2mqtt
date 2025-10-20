@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getAuthToken } from '@/utils/auth'
-import { ArrowLeft, Settings, Trash2, Play, Square, RotateCcw, Plus, Loader2, CheckCircle, AlertCircle, Clock } from 'lucide-react'
+import { ArrowLeft, Settings, Trash2, Play, Square, RotateCcw, Plus, Loader2, CheckCircle, AlertCircle, Clock, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -73,9 +73,9 @@ export default function IntegrationInstancesPage({ integrationName, onBack }: In
     }
   }
 
-  const handleInstanceAction = async (instanceId: string, action: 'start' | 'stop' | 'restart') => {
+  const handleInstanceAction = async (instanceId: string, action: 'start' | 'stop' | 'restart' | 'rebuild') => {
     setActionLoading(`${action}-${instanceId}`)
-    
+
     try {
       const token = getAuthToken()
       const response = await fetch(`/api/integrations/instances/${instanceId}/${action}`, {
@@ -306,8 +306,8 @@ export default function IntegrationInstancesPage({ integrationName, onBack }: In
                     </Button>
                   )}
                   
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="outline"
                     onClick={() => handleInstanceAction(instance.instance_id, 'restart')}
                     disabled={actionLoading === `restart-${instance.instance_id}`}
@@ -318,7 +318,21 @@ export default function IntegrationInstancesPage({ integrationName, onBack }: In
                       <RotateCcw className="w-3 h-3" />
                     )}
                   </Button>
-                  
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleInstanceAction(instance.instance_id, 'rebuild')}
+                    disabled={actionLoading === `rebuild-${instance.instance_id}`}
+                    title="Rebuild container (rebuild image and recreate)"
+                  >
+                    {actionLoading === `rebuild-${instance.instance_id}` ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
+                  </Button>
+
                   <Button
                     size="sm"
                     variant="outline"
