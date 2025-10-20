@@ -1,5 +1,21 @@
 [
   {
+    "url": "/ch0",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Thingino firmware - main stream channel 0",
+    "model_count": 10000
+  },
+  {
+    "url": "/ch1",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Thingino firmware - main stream channel 1",
+    "model_count": 10000
+  },
+  {
     "url": "/live/main",
     "type": "FFMPEG",
     "protocol": "rtsp",
@@ -14,6 +30,406 @@
     "port": 554,
     "notes": "Common RTSP sub stream for ONVIF cameras",
     "model_count": 9998
+  },
+  {
+    "url": "/ch2",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Channel 2 stream",
+    "model_count": 450
+  },
+  {
+    "url": "/ch3",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Channel 3 stream",
+    "model_count": 400
+  },
+  {
+    "url": "/ch4",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Channel 4 stream",
+    "model_count": 350
+  },
+  {
+    "url": "/live/ch1",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Live channel 1",
+    "model_count": 420
+  },
+  {
+    "url": "/live/ch2",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Live channel 2",
+    "model_count": 380
+  },
+  {
+    "url": "/live/ch3",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Live channel 3",
+    "model_count": 340
+  },
+  {
+    "url": "/live/0",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Numeric channel 0",
+    "model_count": 360
+  },
+  {
+    "url": "/live/1",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Numeric channel 1",
+    "model_count": 330
+  },
+  {
+    "url": "/live/2",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Numeric channel 2",
+    "model_count": 310
+  },
+  {
+    "url": "/av0",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Audio/Video stream 0",
+    "model_count": 320
+  },
+  {
+    "url": "/av1",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Audio/Video stream 1",
+    "model_count": 280
+  },
+  {
+    "url": "/video1",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Video stream 1",
+    "model_count": 410
+  },
+  {
+    "url": "/video2",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Video stream 2",
+    "model_count": 370
+  },
+  {
+    "url": "/video3",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Video stream 3",
+    "model_count": 300
+  },
+  {
+    "url": "/main",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Main stream",
+    "model_count": 390
+  },
+  {
+    "url": "/sub",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Sub stream",
+    "model_count": 360
+  },
+  {
+    "url": "/preview",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Preview stream",
+    "model_count": 290
+  },
+  {
+    "url": "/stream",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Generic stream",
+    "model_count": 330
+  },
+  {
+    "url": "/cam0",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Camera 0",
+    "model_count": 295
+  },
+  {
+    "url": "/cam1",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Camera 1",
+    "model_count": 270
+  },
+  {
+    "url": "/h265",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "H265 codec stream",
+    "model_count": 260
+  },
+  {
+    "url": "/hevc",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "HEVC codec stream",
+    "model_count": 240
+  },
+  {
+    "url": "/unicast",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Unicast stream",
+    "model_count": 230
+  },
+  {
+    "url": "/multicast",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Multicast stream",
+    "model_count": 220
+  },
+  {
+    "url": "/ipcam.h264",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Generic IP camera H264",
+    "model_count": 250
+  },
+  {
+    "url": "/image",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Simple image endpoint",
+    "model_count": 310
+  },
+  {
+    "url": "/jpeg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Direct JPEG endpoint",
+    "model_count": 300
+  },
+  {
+    "url": "/snapshot",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Snapshot endpoint",
+    "model_count": 285
+  },
+  {
+    "url": "/image.cgi",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "CGI image endpoint",
+    "model_count": 275
+  },
+  {
+    "url": "image/snapshot.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Snapshot image path",
+    "model_count": 265
+  },
+  {
+    "url": "api/snapshot.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "API snapshot",
+    "model_count": 245
+  },
+  {
+    "url": "tmpfs/snap.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "TMPFS snapshot",
+    "model_count": 235
+  },
+  {
+    "url": "stillimage.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Still image",
+    "model_count": 225
+  },
+  {
+    "url": "capture.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Capture endpoint",
+    "model_count": 215
+  },
+  {
+    "url": "current.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Current frame",
+    "model_count": 205
+  },
+  {
+    "url": "api/v1/snapshot",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "API v1 snapshot",
+    "model_count": 195
+  },
+  {
+    "url": "cgi-bin/image",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "CGI bin image",
+    "model_count": 185
+  },
+  {
+    "url": "live/snapshot.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Live snapshot",
+    "model_count": 175
+  },
+  {
+    "url": "media/snapshot.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Media snapshot",
+    "model_count": 165
+  },
+  {
+    "url": "pic.jpg",
+    "type": "JPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Simple picture",
+    "model_count": 155
+  },
+  {
+    "url": "/video",
+    "type": "MJPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Video endpoint",
+    "model_count": 255
+  },
+  {
+    "url": "/mjpeg",
+    "type": "MJPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "MJPEG stream",
+    "model_count": 250
+  },
+  {
+    "url": "/stream.mjpg",
+    "type": "MJPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "MJPEG stream file",
+    "model_count": 230
+  },
+  {
+    "url": "video/stream",
+    "type": "MJPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Video stream path",
+    "model_count": 220
+  },
+  {
+    "url": "mjpeg/video",
+    "type": "MJPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "MJPEG video path",
+    "model_count": 210
+  },
+  {
+    "url": "live/stream",
+    "type": "MJPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Live stream",
+    "model_count": 200
+  },
+  {
+    "url": "camera.mjpg",
+    "type": "MJPEG",
+    "protocol": "http",
+    "port": 0,
+    "notes": "Camera MJPEG",
+    "model_count": 190
+  },
+  {
+    "url": "/Streaming/Channels/201",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "Hikvision channel 201",
+    "model_count": 180
+  },
+  {
+    "url": "/h264/ch1/main/av_stream",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "H264 main stream",
+    "model_count": 170
+  },
+  {
+    "url": "/h264/ch1/sub/av_stream",
+    "type": "FFMPEG",
+    "protocol": "rtsp",
+    "port": 554,
+    "notes": "H264 sub stream",
+    "model_count": 160
   },
   {
     "url": "/11",

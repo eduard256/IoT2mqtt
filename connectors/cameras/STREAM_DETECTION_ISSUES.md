@@ -1,3 +1,4 @@
+
 # Camera Stream Detection Issues and Solutions
 
 ## Executive Summary
