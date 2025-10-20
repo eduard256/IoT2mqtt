@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     supervisor \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Download go2rtc binary (specific version for deterministic builds)
