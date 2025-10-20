@@ -94,14 +94,32 @@ class Go2RTCConfigGenerator:
 
             return stream_url
 
-        # 5. ONVIF - build ONVIF URL from device params
+        # 5. ONVIF - prefer concrete stream_url if available, otherwise use ONVIF auto-discovery
         elif stream_type == 'ONVIF':
+            # If scanner found a concrete stream_url - use it as RTSP (faster, more reliable)
+            if stream_url:
+                # stream_url should already contain full rtsp:// URL
+                # Add credentials if they're not in the URL
+                if '://' in stream_url and '@' not in stream_url:
+                    # URL without credentials: rtsp://10.0.20.111:554/live/main
+                    parsed = urlparse(stream_url)
+                    username = device.get('username', 'admin')
+                    password = device.get('password', '')
+
+                    if username and password:
+                        # Insert credentials: rtsp://admin:pass@10.0.20.111:554/live/main
+                        netloc_with_creds = f"{username}:{password}@{parsed.netloc}"
+                        stream_url = stream_url.replace(f"://{parsed.netloc}", f"://{netloc_with_creds}")
+
+                return stream_url
+
+            # No stream_url - use ONVIF auto-discovery
             ip = device.get('ip')
             if not ip:
                 print(f"  ⚠️  {device_id}: Missing IP address for ONVIF type", file=sys.stderr)
                 return None
 
-            port = device.get('port', 80)
+            port = device.get('port', 80)  # ONVIF service port (usually 80), NOT RTSP port (554)
             username = device.get('username', 'admin')
             password = device.get('password', '')
 
