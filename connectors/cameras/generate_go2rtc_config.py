@@ -150,7 +150,7 @@ class Go2RTCConfigGenerator:
                 if '://' in stream_url and '@' not in stream_url:
                     # URL without credentials: rtsp://10.0.20.111:554/live/main
                     parsed = urlparse(stream_url)
-                    username = device.get('username', 'admin')
+                    username = device.get('username', '')
                     password = device.get('password', '')
 
                     if username and password:
@@ -167,8 +167,12 @@ class Go2RTCConfigGenerator:
                 return None
 
             port = device.get('port', 80)  # ONVIF service port (usually 80), NOT RTSP port (554)
-            username = device.get('username', 'admin')
+            username = device.get('username', '')
             password = device.get('password', '')
+
+            if not username:
+                print(f"  ⚠️  {device_id}: Missing username for ONVIF type", file=sys.stderr)
+                return None
 
             return f"onvif://{username}:{password}@{ip}:{port}"
 
