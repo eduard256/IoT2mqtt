@@ -135,7 +135,6 @@
           "id": "create_instance",
           "type": "instance",
           "instance": {
-            "instance_id": "cameras",
             "friendly_name": "Cameras",
             "connector_type": "cameras",
             "update_interval": 30,
