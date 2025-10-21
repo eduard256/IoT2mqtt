@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from services.config_service import ConfigService
 from services.docker_service import DockerService
+from services.port_manager import PortManager
 # from services.mqtt_service import MQTTService  # Will be used in future
 from models.schemas import InstanceConfig
 
@@ -22,6 +23,7 @@ router = APIRouter(tags=["Instances"])
 # Services
 config_service = ConfigService()
 docker_service = DockerService()
+port_manager = PortManager(config_service.instances_path)
 
 # WebSocket connections for logs
 log_connections: Dict[str, List[WebSocket]] = {}
@@ -136,6 +138,18 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
             "update_interval": request.update_interval,
             "created_at": datetime.now().isoformat()
         }
+
+        # Generate ports if connector requires them
+        setup = config_service.get_connector_setup(request.connector_type)
+        if setup and "ports" in setup and isinstance(setup["ports"], list):
+            try:
+                port_names = setup["ports"]
+                generated_ports = port_manager.generate_ports_for_connector(port_names)
+                instance_config["ports"] = generated_ports
+                logger.info(f"Generated ports for {instance_id}: {generated_ports}")
+            except Exception as e:
+                logger.error(f"Failed to generate ports for {instance_id}: {e}")
+                raise HTTPException(status_code=500, detail=f"Port generation failed: {str(e)}")
 
         # Maintain backwards compatibility: expose connection keys at top-level
         if isinstance(request.config, dict):

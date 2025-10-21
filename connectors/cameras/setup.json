@@ -3,17 +3,6 @@
   "display_name": "IP Cameras",
   "description": "Connect IP cameras via RTSP, ONVIF, or HTTP streams",
   "author": "IoT2MQTT",
-  "domain": "cameras",
-  "documentation": "https://github.com/eduard256/IoT2mqtt/wiki/cameras",
-  "iot_class": "local_push",
-  "integration_type": "device",
-  "supported_brands": ["Hikvision", "Dahua", "Axis", "Generic RTSP", "ONVIF"],
-  "capabilities": [
-    "video_stream",
-    "snapshot",
-    "motion_detection",
-    "ptz_control"
-  ],
   "branding": {
     "icon": "/assets/brands/camera.svg",
     "color": "#4A90E2",
@@ -32,6 +21,12 @@
     "python": "3.11",
     "libraries": []
   },
+  "ports": [
+    "go2rtc_api",
+    "go2rtc_rtsp",
+    "go2rtc_webrtc",
+    "go2rtc_homekit"
+  ],
   "tools": {
     "validate_stream": {
       "entry": "actions/validate_stream.py",
@@ -97,14 +92,6 @@
                 "placeholder": "http://192.168.0.0",
                 "description": "Examples: http://192.168.1.2:80, https://some.dyn.url:8082. Make sure your network camera has a static IP address on your network",
                 "required": true
-              },
-              {
-                "type": "text",
-                "name": "friendly_name",
-                "label": "Camera Name",
-                "placeholder": "Leave empty for auto-generated name",
-                "description": "Optional: Give this camera a friendly name like 'Entrance' or 'Parking'",
-                "advanced": true
               }
             ]
           }
@@ -148,6 +135,7 @@
           "id": "create_instance",
           "type": "instance",
           "instance": {
+            "instance_id": "cameras",
             "friendly_name": "Cameras",
             "connector_type": "cameras",
             "update_interval": 30,
