@@ -1,0 +1,232 @@
+{
+  "version": "1.0.0",
+  "display_name": "Template: MQTT Device Picker",
+  "description": "Example connector showing how to use mqtt_device_picker to connect to devices from other connectors",
+  "author": "IoT2MQTT",
+  "branding": {
+    "icon": "/assets/brands/default.svg",
+    "color": "#6366f1",
+    "category": "template"
+  },
+  "requirements": {
+    "network": "host",
+    "python": "3.11",
+    "libraries": []
+  },
+  "flows": [
+    {
+      "id": "cameras_example",
+      "name": "Use Camera Device",
+      "description": "Example: Select a camera from cameras connector",
+      "default": true,
+      "steps": [
+        {
+          "id": "select_camera",
+          "type": "form",
+          "title": "Select Camera",
+          "description": "Choose a camera device from your existing cameras instances",
+          "schema": {
+            "fields": [
+              {
+                "type": "mqtt_device_picker",
+                "name": "camera_device",
+                "label": "Camera Source",
+                "description": "Search by camera name, IP address, brand, or model",
+                "required": true,
+                "config": {
+                  "connector_type": "cameras",
+                  "extract_fields": [
+                    "ip",
+                    "stream_urls.mp4",
+                    "stream_urls.rtsp",
+                    "name",
+                    "brand",
+                    "model"
+                  ],
+                  "save_mode": "extracted_fields",
+                  "show_preview": true,
+                  "preview_field": "stream_urls.jpeg",
+                  "card_title_field": "name",
+                  "card_subtitle_field": "brand",
+                  "online_field": "online",
+                  "items_per_page": 12,
+                  "grid_columns": 4,
+                  "searchable_fields": [
+                    "name",
+                    "device_id",
+                    "ip",
+                    "brand",
+                    "model"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "configuration",
+          "type": "form",
+          "title": "Configuration",
+          "description": "Configure how to use the selected camera",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "friendly_name",
+                "label": "Instance Name",
+                "placeholder": "Camera Recorder",
+                "required": true
+              },
+              {
+                "type": "select",
+                "name": "stream_format",
+                "label": "Preferred Stream Format",
+                "default": "mp4",
+                "options": [
+                  {
+                    "value": "mp4",
+                    "label": "MP4"
+                  },
+                  {
+                    "value": "rtsp",
+                    "label": "RTSP"
+                  },
+                  {
+                    "value": "m3u8",
+                    "label": "HLS (M3U8)"
+                  }
+                ]
+              },
+              {
+                "type": "checkbox",
+                "name": "ha_discovery_enabled",
+                "label": "Enable Home Assistant Discovery",
+                "description": "Automatically publish device information to Home Assistant via MQTT Discovery",
+                "default": true,
+                "advanced": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "summary",
+          "type": "summary",
+          "title": "Review Configuration",
+          "sections": [
+            {
+              "label": "Instance Name",
+              "value": "{{ form.configuration.friendly_name }}"
+            },
+            {
+              "label": "Camera Device",
+              "value": "{{ form.select_camera.camera_device.extracted_data.name }}"
+            },
+            {
+              "label": "Camera IP",
+              "value": "{{ form.select_camera.camera_device.extracted_data.ip }}"
+            },
+            {
+              "label": "MQTT Path",
+              "value": "{{ form.select_camera.camera_device.mqtt_path }}"
+            },
+            {
+              "label": "Stream Format",
+              "value": "{{ form.configuration.stream_format }}"
+            }
+          ]
+        },
+        {
+          "id": "create_instance",
+          "type": "instance",
+          "instance": {
+            "friendly_name": "{{ form.configuration.friendly_name }}",
+            "connector_type": "mqtt_picker_example",
+            "update_interval": 30,
+            "ha_discovery_enabled": "{{ form.configuration.ha_discovery_enabled }}",
+            "config": {
+              "camera_mqtt_path": "{{ form.select_camera.camera_device.mqtt_path }}",
+              "camera_device_id": "{{ form.select_camera.camera_device.device_id }}",
+              "camera_ip": "{{ form.select_camera.camera_device.extracted_data.ip }}",
+              "stream_url": "{{ form.select_camera.camera_device.extracted_data.mp4 }}",
+              "stream_format": "{{ form.configuration.stream_format }}"
+            },
+            "devices": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "yeelight_example",
+      "name": "Use Yeelight Device",
+      "description": "Example: Select a Yeelight device from yeelight connector",
+      "default": false,
+      "steps": [
+        {
+          "id": "select_light",
+          "type": "form",
+          "title": "Select Yeelight",
+          "description": "Choose a Yeelight device from your existing yeelight instances",
+          "schema": {
+            "fields": [
+              {
+                "type": "mqtt_device_picker",
+                "name": "light_device",
+                "label": "Yeelight Device",
+                "description": "Search by device name or IP address",
+                "required": true,
+                "config": {
+                  "connector_type": "yeelight",
+                  "extract_fields": [
+                    "ip",
+                    "port",
+                    "name"
+                  ],
+                  "save_mode": "extracted_fields",
+                  "show_preview": false,
+                  "card_title_field": "name",
+                  "online_field": "online",
+                  "items_per_page": 9,
+                  "grid_columns": 3,
+                  "searchable_fields": [
+                    "name",
+                    "device_id",
+                    "ip"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "light_config",
+          "type": "form",
+          "title": "Configuration",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "friendly_name",
+                "label": "Instance Name",
+                "required": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "create_light_instance",
+          "type": "instance",
+          "instance": {
+            "friendly_name": "{{ form.light_config.friendly_name }}",
+            "connector_type": "mqtt_picker_example",
+            "config": {
+              "light_mqtt_path": "{{ form.select_light.light_device.mqtt_path }}",
+              "light_ip": "{{ form.select_light.light_device.extracted_data.ip }}",
+              "light_port": "{{ form.select_light.light_device.extracted_data.port }}"
+            },
+            "devices": []
+          }
+        }
+      ]
+    }
+  ]
+}

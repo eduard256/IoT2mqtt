@@ -1,0 +1,622 @@
+{
+  "version": "1.0.0",
+  "display_name": "Camera Detection",
+  "description": "Object detection and motion detection on camera streams with AI/ML",
+  "author": "IoT2MQTT",
+  "domain": "camera_detection",
+  "documentation": "https://github.com/eduard256/IoT2mqtt/wiki/camera-detection",
+  "iot_class": "local_push",
+  "integration_type": "service",
+  "supported_brands": ["Any IP Camera"],
+  "capabilities": [
+    "object_detection",
+    "motion_detection",
+    "person_detection",
+    "vehicle_detection",
+    "face_detection",
+    "zone_detection",
+    "alerts",
+    "snapshots"
+  ],
+  "branding": {
+    "icon": "/assets/brands/camera-detection.svg",
+    "color": "#8B5CF6",
+    "category": "security"
+  },
+  "multi_device": {
+    "enabled": true,
+    "max_devices": 50,
+    "device_label": "Camera",
+    "add_button_label": "Add Another Camera",
+    "loop_from_step": "select_camera",
+    "loop_to_step": "detection_zones"
+  },
+  "requirements": {
+    "network": "host",
+    "python": "3.11",
+    "libraries": [
+      "opencv-python",
+      "numpy",
+      "pillow"
+    ]
+  },
+  "flows": [
+    {
+      "id": "setup_detection",
+      "name": "Setup Detection",
+      "description": "Configure object and motion detection for cameras",
+      "default": true,
+      "steps": [
+        {
+          "id": "instance_config",
+          "type": "form",
+          "title": "Instance Configuration",
+          "description": "Configure the detection service instance",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "friendly_name",
+                "label": "Instance Name",
+                "placeholder": "Camera Detection Service",
+                "description": "Name for this detection service instance",
+                "required": true
+              },
+              {
+                "type": "select",
+                "name": "detection_engine",
+                "label": "Detection Engine",
+                "description": "AI/ML engine for object detection",
+                "default": "opencv",
+                "required": true,
+                "options": [
+                  {
+                    "value": "opencv",
+                    "label": "OpenCV (Built-in)"
+                  },
+                  {
+                    "value": "yolo",
+                    "label": "YOLO (Recommended)"
+                  },
+                  {
+                    "value": "tensorflow",
+                    "label": "TensorFlow Lite"
+                  },
+                  {
+                    "value": "frigate",
+                    "label": "Frigate Integration"
+                  }
+                ]
+              },
+              {
+                "type": "number",
+                "name": "fps",
+                "label": "Analysis FPS",
+                "description": "Frames per second to analyze (lower = less CPU)",
+                "default": 5,
+                "min": 1,
+                "max": 30,
+                "step": 1,
+                "advanced": true
+              },
+              {
+                "type": "checkbox",
+                "name": "ha_discovery_enabled",
+                "label": "Enable Home Assistant Discovery",
+                "description": "Automatically publish sensors to Home Assistant via MQTT Discovery",
+                "default": true,
+                "advanced": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "select_camera",
+          "type": "form",
+          "title": "Select Camera",
+          "description": "Choose a camera from your existing camera instances to monitor",
+          "schema": {
+            "fields": [
+              {
+                "type": "mqtt_device_picker",
+                "name": "camera_device",
+                "label": "Camera Source",
+                "description": "Search by camera name, IP, brand, or location",
+                "required": true,
+                "config": {
+                  "connector_type": "cameras",
+                  "extract_fields": [
+                    "ip",
+                    "name",
+                    "brand",
+                    "model",
+                    "device_id",
+                    "stream_urls.rtsp",
+                    "stream_urls.mp4",
+                    "stream_urls.m3u8",
+                    "stream_urls.jpeg"
+                  ],
+                  "save_mode": "extracted_fields",
+                  "show_preview": true,
+                  "preview_field": "stream_urls.jpeg",
+                  "card_title_field": "name",
+                  "card_subtitle_field": "brand",
+                  "online_field": "online",
+                  "items_per_page": 12,
+                  "grid_columns": 4,
+                  "searchable_fields": [
+                    "name",
+                    "device_id",
+                    "ip",
+                    "brand",
+                    "model",
+                    "location"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "camera_config",
+          "type": "form",
+          "title": "Camera Settings",
+          "description": "Configure camera-specific detection settings",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "camera_name",
+                "label": "Camera Name",
+                "placeholder": "Front Door",
+                "description": "Friendly name for this camera",
+                "required": true
+              },
+              {
+                "type": "select",
+                "name": "stream_source",
+                "label": "Stream Source",
+                "description": "Which stream to use for detection",
+                "default": "rtsp",
+                "required": true,
+                "options": [
+                  {
+                    "value": "rtsp",
+                    "label": "RTSP (Best Quality)"
+                  },
+                  {
+                    "value": "mp4",
+                    "label": "MP4 (HTTP)"
+                  },
+                  {
+                    "value": "m3u8",
+                    "label": "HLS (M3U8)"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "name": "location",
+                "label": "Location",
+                "placeholder": "Front Door, Backyard, etc.",
+                "description": "Physical location of camera (optional)"
+              }
+            ]
+          }
+        },
+        {
+          "id": "detection_config",
+          "type": "form",
+          "title": "Detection Types",
+          "description": "Choose what to detect and track",
+          "schema": {
+            "fields": [
+              {
+                "type": "checkbox",
+                "name": "motion_detection",
+                "label": "Motion Detection",
+                "description": "Detect movement in the camera view",
+                "default": true
+              },
+              {
+                "type": "number",
+                "name": "motion_sensitivity",
+                "label": "Motion Sensitivity",
+                "description": "1-100, higher = more sensitive",
+                "default": 50,
+                "min": 1,
+                "max": 100,
+                "step": 5,
+                "conditions": {
+                  "motion_detection": true
+                }
+              },
+              {
+                "type": "checkbox",
+                "name": "person_detection",
+                "label": "Person Detection",
+                "description": "Detect people in camera view",
+                "default": true
+              },
+              {
+                "type": "number",
+                "name": "person_confidence",
+                "label": "Person Confidence Threshold",
+                "description": "0-100, higher = fewer false positives",
+                "default": 60,
+                "min": 0,
+                "max": 100,
+                "step": 5,
+                "advanced": true,
+                "conditions": {
+                  "person_detection": true
+                }
+              },
+              {
+                "type": "checkbox",
+                "name": "vehicle_detection",
+                "label": "Vehicle Detection",
+                "description": "Detect cars, trucks, motorcycles",
+                "default": false
+              },
+              {
+                "type": "checkbox",
+                "name": "animal_detection",
+                "label": "Animal Detection",
+                "description": "Detect cats, dogs, and other animals",
+                "default": false,
+                "advanced": true
+              },
+              {
+                "type": "checkbox",
+                "name": "package_detection",
+                "label": "Package Detection",
+                "description": "Detect packages/boxes (useful for delivery monitoring)",
+                "default": false,
+                "advanced": true
+              },
+              {
+                "type": "checkbox",
+                "name": "face_detection",
+                "label": "Face Detection",
+                "description": "Detect faces (no recognition, just detection)",
+                "default": false,
+                "advanced": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "detection_zones",
+          "type": "form",
+          "title": "Detection Zones",
+          "description": "Configure zones and masks for detection",
+          "schema": {
+            "fields": [
+              {
+                "type": "checkbox",
+                "name": "enable_zones",
+                "label": "Enable Detection Zones",
+                "description": "Only detect in specific areas of the camera view",
+                "default": false
+              },
+              {
+                "type": "textarea",
+                "name": "zones_config",
+                "label": "Zones Configuration (JSON)",
+                "placeholder": "[\n  {\"name\": \"entry\", \"coordinates\": [[0, 0], [100, 0], [100, 100], [0, 100]]},\n  {\"name\": \"driveway\", \"coordinates\": [[...]]} \n]",
+                "description": "Define detection zones as JSON array of polygons",
+                "multiline": true,
+                "advanced": true,
+                "conditions": {
+                  "enable_zones": true
+                }
+              },
+              {
+                "type": "checkbox",
+                "name": "enable_mask",
+                "label": "Enable Privacy Mask",
+                "description": "Mask specific areas (e.g., neighbor's property)",
+                "default": false,
+                "advanced": true
+              },
+              {
+                "type": "textarea",
+                "name": "mask_config",
+                "label": "Mask Configuration (JSON)",
+                "placeholder": "[\n  {\"coordinates\": [[...]]}\n]",
+                "description": "Define privacy masks as JSON array of polygons",
+                "multiline": true,
+                "advanced": true,
+                "conditions": {
+                  "enable_mask": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "alerts_config",
+          "type": "form",
+          "title": "Alerts & Notifications",
+          "description": "Configure when and how to send alerts",
+          "schema": {
+            "fields": [
+              {
+                "type": "checkbox",
+                "name": "mqtt_alerts",
+                "label": "MQTT Alerts",
+                "description": "Publish detection events to MQTT",
+                "default": true
+              },
+              {
+                "type": "checkbox",
+                "name": "save_snapshots",
+                "label": "Save Detection Snapshots",
+                "description": "Save images when objects are detected",
+                "default": true
+              },
+              {
+                "type": "text",
+                "name": "snapshot_path",
+                "label": "Snapshot Directory",
+                "placeholder": "/data/snapshots",
+                "description": "Where to save detection snapshots",
+                "default": "/data/snapshots",
+                "advanced": true,
+                "conditions": {
+                  "save_snapshots": true
+                }
+              },
+              {
+                "type": "number",
+                "name": "cooldown_period",
+                "label": "Alert Cooldown (seconds)",
+                "description": "Minimum time between alerts for same object",
+                "default": 30,
+                "min": 0,
+                "max": 300,
+                "step": 5,
+                "advanced": true
+              },
+              {
+                "type": "checkbox",
+                "name": "save_clips",
+                "label": "Save Video Clips",
+                "description": "Save short video clips of detections",
+                "default": false,
+                "advanced": true
+              },
+              {
+                "type": "number",
+                "name": "clip_duration",
+                "label": "Clip Duration (seconds)",
+                "description": "Length of video clips to save",
+                "default": 10,
+                "min": 5,
+                "max": 60,
+                "step": 5,
+                "advanced": true,
+                "conditions": {
+                  "save_clips": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "advanced_settings",
+          "type": "form",
+          "title": "Advanced Settings",
+          "description": "Fine-tune detection performance and behavior",
+          "schema": {
+            "fields": [
+              {
+                "type": "number",
+                "name": "detection_fps",
+                "label": "Detection FPS",
+                "description": "Override global FPS for this camera",
+                "placeholder": "Uses instance setting",
+                "min": 1,
+                "max": 30,
+                "step": 1,
+                "advanced": true
+              },
+              {
+                "type": "number",
+                "name": "min_object_size",
+                "label": "Minimum Object Size (pixels)",
+                "description": "Ignore objects smaller than this (reduces false positives)",
+                "default": 50,
+                "min": 10,
+                "max": 500,
+                "step": 10,
+                "advanced": true
+              },
+              {
+                "type": "number",
+                "name": "max_object_size",
+                "label": "Maximum Object Size (pixels)",
+                "description": "Ignore objects larger than this (0 = no limit)",
+                "default": 0,
+                "min": 0,
+                "max": 5000,
+                "step": 100,
+                "advanced": true
+              },
+              {
+                "type": "checkbox",
+                "name": "track_objects",
+                "label": "Object Tracking",
+                "description": "Track objects across frames (more CPU intensive)",
+                "default": true,
+                "advanced": true
+              },
+              {
+                "type": "checkbox",
+                "name": "debug_mode",
+                "label": "Debug Mode",
+                "description": "Save debug frames with bounding boxes",
+                "default": false,
+                "advanced": true
+              },
+              {
+                "type": "select",
+                "name": "processing_priority",
+                "label": "Processing Priority",
+                "description": "CPU priority for this camera",
+                "default": "normal",
+                "advanced": true,
+                "options": [
+                  {
+                    "value": "low",
+                    "label": "Low"
+                  },
+                  {
+                    "value": "normal",
+                    "label": "Normal"
+                  },
+                  {
+                    "value": "high",
+                    "label": "High"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "summary",
+          "type": "summary",
+          "title": "Review Camera Configuration",
+          "description": "Review settings before adding camera",
+          "sections": [
+            {
+              "label": "Camera Name",
+              "value": "{{ form.camera_config.camera_name }}"
+            },
+            {
+              "label": "Source Device",
+              "value": "{{ form.select_camera.camera_device.extracted_data.name }} ({{ form.select_camera.camera_device.extracted_data.ip }})"
+            },
+            {
+              "label": "Brand/Model",
+              "value": "{{ form.select_camera.camera_device.extracted_data.brand }} {{ form.select_camera.camera_device.extracted_data.model }}"
+            },
+            {
+              "label": "Stream Source",
+              "value": "{{ form.camera_config.stream_source }}"
+            },
+            {
+              "label": "Location",
+              "value": "{{ form.camera_config.location }}"
+            },
+            {
+              "label": "Motion Detection",
+              "value": "{{ form.detection_config.motion_detection }}"
+            },
+            {
+              "label": "Person Detection",
+              "value": "{{ form.detection_config.person_detection }}"
+            },
+            {
+              "label": "Vehicle Detection",
+              "value": "{{ form.detection_config.vehicle_detection }}"
+            },
+            {
+              "label": "MQTT Alerts",
+              "value": "{{ form.alerts_config.mqtt_alerts }}"
+            },
+            {
+              "label": "Save Snapshots",
+              "value": "{{ form.alerts_config.save_snapshots }}"
+            }
+          ]
+        },
+        {
+          "id": "create_instance",
+          "type": "instance",
+          "instance": {
+            "friendly_name": "{{ form.instance_config.friendly_name }}",
+            "connector_type": "camera_detection",
+            "update_interval": 5,
+            "ha_discovery_enabled": "{{ form.instance_config.ha_discovery_enabled }}",
+            "config": {
+              "detection_engine": "{{ form.instance_config.detection_engine }}",
+              "global_fps": "{{ form.instance_config.fps }}",
+              "snapshot_base_path": "{{ form.alerts_config.snapshot_path }}"
+            },
+            "devices": [
+              {
+                "device_id": "{{ form.select_camera.camera_device.device_id }}",
+                "name": "{{ form.camera_config.camera_name }}",
+                "enabled": true,
+                "camera_source": {
+                  "mqtt_path": "{{ form.select_camera.camera_device.mqtt_path }}",
+                  "device_id": "{{ form.select_camera.camera_device.device_id }}",
+                  "instance_id": "{{ form.select_camera.camera_device.instance_id }}",
+                  "ip": "{{ form.select_camera.camera_device.extracted_data.ip }}",
+                  "brand": "{{ form.select_camera.camera_device.extracted_data.brand }}",
+                  "model": "{{ form.select_camera.camera_device.extracted_data.model }}",
+                  "stream_rtsp": "{{ form.select_camera.camera_device.extracted_data.rtsp }}",
+                  "stream_mp4": "{{ form.select_camera.camera_device.extracted_data.mp4 }}",
+                  "stream_m3u8": "{{ form.select_camera.camera_device.extracted_data.m3u8 }}",
+                  "snapshot_url": "{{ form.select_camera.camera_device.extracted_data.jpeg }}"
+                },
+                "stream_config": {
+                  "source": "{{ form.camera_config.stream_source }}",
+                  "fps_override": "{{ form.advanced_settings.detection_fps }}"
+                },
+                "location": "{{ form.camera_config.location }}",
+                "detection": {
+                  "motion": {
+                    "enabled": "{{ form.detection_config.motion_detection }}",
+                    "sensitivity": "{{ form.detection_config.motion_sensitivity }}"
+                  },
+                  "person": {
+                    "enabled": "{{ form.detection_config.person_detection }}",
+                    "confidence": "{{ form.detection_config.person_confidence }}"
+                  },
+                  "vehicle": {
+                    "enabled": "{{ form.detection_config.vehicle_detection }}"
+                  },
+                  "animal": {
+                    "enabled": "{{ form.detection_config.animal_detection }}"
+                  },
+                  "package": {
+                    "enabled": "{{ form.detection_config.package_detection }}"
+                  },
+                  "face": {
+                    "enabled": "{{ form.detection_config.face_detection }}"
+                  }
+                },
+                "zones": {
+                  "enabled": "{{ form.detection_zones.enable_zones }}",
+                  "config": "{{ form.detection_zones.zones_config }}"
+                },
+                "mask": {
+                  "enabled": "{{ form.detection_zones.enable_mask }}",
+                  "config": "{{ form.detection_zones.mask_config }}"
+                },
+                "alerts": {
+                  "mqtt": "{{ form.alerts_config.mqtt_alerts }}",
+                  "save_snapshots": "{{ form.alerts_config.save_snapshots }}",
+                  "save_clips": "{{ form.alerts_config.save_clips }}",
+                  "clip_duration": "{{ form.alerts_config.clip_duration }}",
+                  "cooldown_period": "{{ form.alerts_config.cooldown_period }}"
+                },
+                "advanced": {
+                  "min_object_size": "{{ form.advanced_settings.min_object_size }}",
+                  "max_object_size": "{{ form.advanced_settings.max_object_size }}",
+                  "track_objects": "{{ form.advanced_settings.track_objects }}",
+                  "debug_mode": "{{ form.advanced_settings.debug_mode }}",
+                  "processing_priority": "{{ form.advanced_settings.processing_priority }}"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

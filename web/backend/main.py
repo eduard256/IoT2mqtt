@@ -27,7 +27,7 @@ from models.schemas import *
 from services.config_service import ConfigService
 from services.docker_service import DockerService
 from services.mqtt_service import MQTTService
-from api import auth, mqtt, connectors, instances, devices, docker, discovery, integrations, tools, oauth, cameras
+from api import auth, mqtt, connectors, instances, devices, docker, discovery, integrations, tools, oauth, cameras, mqtt_discovery
 from services.secrets_manager import SecretsManager
 
 import logging
@@ -82,6 +82,8 @@ async def lifespan(app: FastAPI):
             logger.info("Connected to MQTT broker")
             # Share mqtt_service with integrations module
             integrations.mqtt_service = mqtt_service
+            # Share mqtt_service with mqtt_discovery module
+            mqtt_discovery.mqtt_service = mqtt_service
         else:
             logger.warning("Failed to connect to MQTT broker")
     
@@ -120,6 +122,7 @@ app.include_router(integrations.router)
 app.include_router(tools.router)
 app.include_router(oauth.router)
 app.include_router(cameras.router)
+app.include_router(mqtt_discovery.router)
 
 # Static files will be mounted after API routes
 
