@@ -7,6 +7,7 @@ import sys
 import os
 import time
 import logging
+import socket
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -21,6 +22,45 @@ import requests
 from stream_validator import StreamValidator
 
 logger = logging.getLogger(__name__)
+
+
+def get_host_ip() -> str:
+    """
+    Auto-detect host IP address for external URL generation
+
+    Strategy:
+    1. Try EXTERNAL_HOST from environment (manual override)
+    2. Connect to MQTT broker and get local IP from socket
+    3. Fallback to 'localhost'
+
+    Returns: IP address or hostname
+    """
+    # 1. Check environment variable first (manual override)
+    external_host = os.getenv('EXTERNAL_HOST')
+    if external_host:
+        logger.info(f"Using EXTERNAL_HOST from environment: {external_host}")
+        return external_host
+
+    # 2. Auto-detect by connecting to MQTT broker
+    try:
+        mqtt_host = os.getenv('MQTT_HOST', 'localhost')
+        mqtt_port = int(os.getenv('MQTT_PORT', '1883'))
+
+        # Create socket and connect to MQTT broker
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        s.connect((mqtt_host, mqtt_port))
+
+        # Get local IP from socket
+        local_ip = s.getsockname()[0]
+        s.close()
+
+        logger.info(f"Auto-detected host IP: {local_ip}")
+        return local_ip
+
+    except Exception as e:
+        logger.warning(f"Failed to auto-detect IP: {e}, using 'localhost'")
+        return 'localhost'
 
 
 class Connector(BaseConnector):
@@ -51,7 +91,8 @@ class Connector(BaseConnector):
         self.go2rtc_api = f"http://localhost:{self.go2rtc_api_port}/api"
 
         # External host for publishing URLs - CRITICAL for remote access
-        self.external_host = os.getenv('EXTERNAL_HOST', 'localhost')
+        # Auto-detect if not set in environment
+        self.external_host = get_host_ip()
 
         # Maximum retries for waiting go2rtc to start
         self.max_retries = 30  # 30 seconds
