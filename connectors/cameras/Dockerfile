@@ -26,7 +26,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy connector code
-COPY generate_go2rtc_config.py connector.py supervisord.conf ./
+COPY generate_go2rtc_config.py connector.py stream_validator.py supervisord.conf ./
 
 # Create instances directory mount point
 RUN mkdir -p /app/instances
