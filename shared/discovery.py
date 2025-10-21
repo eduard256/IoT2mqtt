@@ -171,7 +171,13 @@ class DiscoveryGenerator:
                 device_id, device_info, state_topic, command_topic,
                 availability_topic, capabilities
             ))
-        
+        elif ha_platform == 'camera':
+            # For cameras, extract stream URLs from device_config
+            stream_urls = device_config.get('stream_urls', {})
+            discoveries.append(self._generate_camera_discovery(
+                device_id, device_info, state_topic, stream_urls
+            ))
+
         return discoveries
     
     def _generate_light_discovery(self, device_id: str, device_info: DeviceInfo,
@@ -382,7 +388,46 @@ class DiscoveryGenerator:
             "payload": config,
             "retain": True
         }
-    
+
+    def _generate_camera_discovery(self, device_id: str, device_info: DeviceInfo,
+                                   state_topic: str, stream_urls: Dict[str, str]) -> Dict:
+        """
+        Generate camera discovery configuration
+
+        Args:
+            device_id: Camera device ID
+            device_info: Device information
+            state_topic: MQTT state topic
+            stream_urls: Dict with stream URLs (must contain 'jpeg' and 'rtsp')
+
+        Returns: Discovery message dict
+        """
+        global_id = f"{self.instance_id}_{device_id}" if self.instance_id else device_id
+
+        config = {
+            "unique_id": f"{global_id}_camera",
+            "name": device_info.name,
+            "device": self._device_info_to_dict(device_info),
+            "topic": state_topic,
+            "json_attributes_topic": state_topic,
+        }
+
+        # Add stream source (RTSP preferred for HA)
+        if 'rtsp' in stream_urls:
+            config["stream_source"] = stream_urls['rtsp']
+        elif 'm3u8' in stream_urls:
+            config["stream_source"] = stream_urls['m3u8']
+
+        # Add still image URL (required for HA camera)
+        if 'jpeg' in stream_urls:
+            config["still_image_url"] = stream_urls['jpeg']
+
+        return {
+            "topic": f"{self.discovery_prefix}/camera/{global_id}/config",
+            "payload": config,
+            "retain": True
+        }
+
     def _device_info_to_dict(self, device_info: DeviceInfo) -> Dict[str, Any]:
         """Convert DeviceInfo to dictionary, removing None values"""
         result = {}

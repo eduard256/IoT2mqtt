@@ -9,5 +9,8 @@ paho-mqtt>=1.6.1
 # HTTP requests (for go2rtc API)
 requests>=2.31.0
 
+# Environment variables from .env file
+python-dotenv>=1.0.0
+
 # Process supervisor (for running go2rtc + connector)
 supervisor>=4.2.5
