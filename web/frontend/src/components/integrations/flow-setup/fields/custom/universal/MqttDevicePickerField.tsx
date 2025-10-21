@@ -43,8 +43,8 @@ export function MqttDevicePickerField({
 
   // Configuration with defaults
   const connectorType = config.connector_type as string
-  const itemsPerPage = (config.items_per_page as number) || 12
-  const gridColumns = (config.grid_columns as number) || 4
+  const itemsPerPage = (config.items_per_page as number) || 6
+  const gridColumns = (config.grid_columns as number) || 3
   const enableSearch = config.enable_search !== false
   const searchableFields = (config.searchable_fields as string[]) || [
     'name',
@@ -320,8 +320,8 @@ export function MqttDevicePickerField({
             of {filteredDevices.length} device{filteredDevices.length !== 1 ? 's' : ''}
           </div>
 
-          {/* Grid */}
-          <div className={`grid ${gridColsClass} gap-4 min-h-[400px]`}>
+          {/* Grid - Fixed height cards, 2 rows of 3 = 6 cards visible */}
+          <div className={`grid ${gridColsClass} gap-4 auto-rows-fr`}>
             {paginatedDevices.map((device, idx) => (
               <DeviceCard
                 key={device.mqtt_path}

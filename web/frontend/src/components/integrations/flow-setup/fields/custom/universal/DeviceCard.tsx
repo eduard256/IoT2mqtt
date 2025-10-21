@@ -87,7 +87,8 @@ export function DeviceCard({ device, isSelected, onSelect, config, index }: Devi
     <Card
       className={cn(
         'cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02]',
-        'animate-in fade-in slide-in-from-bottom-2',
+        'animate-in fade-in slide-in-from-bottom-2 h-full',
+        'flex flex-col',
         isSelected && 'border-l-4 border-l-primary bg-primary/5 shadow-md'
       )}
       style={{
@@ -97,7 +98,7 @@ export function DeviceCard({ device, isSelected, onSelect, config, index }: Devi
     >
       {/* Preview Image (for cameras) */}
       {previewUrl && (
-        <div className="relative w-full aspect-video bg-muted overflow-hidden rounded-t-md">
+        <div className="relative w-full h-32 bg-muted overflow-hidden rounded-t-md flex-shrink-0">
           <img
             src={previewUrl}
             alt={title}
@@ -109,64 +110,55 @@ export function DeviceCard({ device, isSelected, onSelect, config, index }: Devi
           />
           {!isOnline && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <AlertCircle className="h-8 w-8 text-white" />
+              <AlertCircle className="h-6 w-6 text-white" />
             </div>
           )}
         </div>
       )}
 
-      <CardContent className="p-4">
+      <CardContent className="p-3 flex flex-col flex-1">
         {/* Header */}
-        <div className="flex items-start gap-2 mb-3">
-          <div className="mt-0.5">{getIcon()}</div>
+        <div className="flex items-start gap-2 mb-2">
+          <div className="mt-0.5 flex-shrink-0">{getIcon()}</div>
           <div className="flex-1 min-w-0">
             <h3
-              className="font-medium truncate text-sm"
+              className="font-medium truncate text-sm leading-tight"
               title={title}
             >
               {title}
             </h3>
             {subtitle && (
-              <p className="text-xs text-muted-foreground truncate" title={subtitle}>
+              <p className="text-xs text-muted-foreground truncate leading-tight" title={subtitle}>
                 {subtitle}
               </p>
             )}
           </div>
         </div>
 
-        {/* Status Badge */}
-        <div className="mb-3">
+        {/* Status Badge and Info - Compact */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           {isOnline ? (
-            <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-white mr-1.5" />
+            <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-xs px-2 py-0">
+              <span className="inline-block w-1 h-1 rounded-full bg-white mr-1" />
               Online
             </Badge>
           ) : (
-            <Badge variant="secondary">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground mr-1.5" />
+            <Badge variant="secondary" className="text-xs px-2 py-0">
+              <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground mr-1" />
               Offline
             </Badge>
           )}
+          {state.ip && (
+            <span className="text-xs text-muted-foreground font-mono">{state.ip}</span>
+          )}
         </div>
 
-        {/* Metadata */}
-        <div className="space-y-1 mb-3">
-          {metadata.map((item, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between text-xs"
-            >
-              <span className="text-muted-foreground">{item.label}:</span>
-              <span className="font-mono truncate ml-2" title={item.value}>
-                {item.value}
-              </span>
-            </div>
-          ))}
-        </div>
+        {/* Spacer to push button to bottom */}
+        <div className="flex-1" />
 
         {/* Select Button */}
         <Button
-          className="w-full"
+          className="w-full mt-2"
           variant={isSelected ? 'default' : 'outline'}
           size="sm"
           onClick={onSelect}
