@@ -21,10 +21,14 @@ class Go2RTCConfigGenerator:
         self.instance_name = instance_name
         self.config_path = f"/app/instances/{instance_name}.json"
 
-        # Read ports from env (with defaults)
-        self.api_port = os.getenv('GO2RTC_API_PORT', '1984')
-        self.rtsp_port = os.getenv('GO2RTC_RTSP_PORT', '8554')
-        self.webrtc_port = os.getenv('GO2RTC_WEBRTC_PORT', '8555')
+        # Read ports from instance config, fallback to env, then defaults
+        instance_config = self.load_instance_config()
+        instance_ports = instance_config.get('ports', {})
+
+        self.api_port = instance_ports.get('go2rtc_api') or os.getenv('GO2RTC_API_PORT', '1984')
+        self.rtsp_port = instance_ports.get('go2rtc_rtsp') or os.getenv('GO2RTC_RTSP_PORT', '8554')
+        self.webrtc_port = instance_ports.get('go2rtc_webrtc') or os.getenv('GO2RTC_WEBRTC_PORT', '8555')
+        self.homekit_port = instance_ports.get('go2rtc_homekit') or os.getenv('GO2RTC_HOMEKIT_PORT', '8443')
 
     def load_instance_config(self) -> Dict[str, Any]:
         """Load IoT2mqtt instance configuration"""
@@ -242,6 +246,9 @@ class Go2RTCConfigGenerator:
             },
             'webrtc': {
                 'listen': f":{self.webrtc_port}"
+            },
+            'srtp': {
+                'listen': f":{self.homekit_port}"
             },
             'streams': {}
         }

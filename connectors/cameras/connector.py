@@ -31,9 +31,16 @@ class Connector(BaseConnector):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # go2rtc API configuration
-        self.go2rtc_api = "http://localhost:1984/api"
-        self.go2rtc_api_port = os.getenv('GO2RTC_API_PORT', '1984')
+        # Read ports from instance config (via self.config loaded by BaseConnector)
+        instance_ports = self.config.get('ports', {})
+
+        # go2rtc API configuration - read from instance ports, fallback to env, then defaults
+        self.go2rtc_api_port = str(instance_ports.get('go2rtc_api') or os.getenv('GO2RTC_API_PORT', '1984'))
+        self.go2rtc_rtsp_port = str(instance_ports.get('go2rtc_rtsp') or os.getenv('GO2RTC_RTSP_PORT', '8554'))
+        self.go2rtc_webrtc_port = str(instance_ports.get('go2rtc_webrtc') or os.getenv('GO2RTC_WEBRTC_PORT', '8555'))
+        self.go2rtc_homekit_port = str(instance_ports.get('go2rtc_homekit') or os.getenv('GO2RTC_HOMEKIT_PORT', '8443'))
+
+        self.go2rtc_api = f"http://localhost:{self.go2rtc_api_port}/api"
 
         # External host for publishing URLs (can be overridden)
         self.external_host = os.getenv('EXTERNAL_HOST', 'localhost')
@@ -118,7 +125,7 @@ class Connector(BaseConnector):
                     "hls": f"{base_url}/{device_id}/stream.m3u8",
                     "mjpeg": f"{base_url}/api/frame.mjpeg?src={device_id}",
                     "snapshot": f"{base_url}/api/frame.jpeg?src={device_id}",
-                    "rtsp": f"rtsp://{self.external_host}:8554/{device_id}",
+                    "rtsp": f"rtsp://{self.external_host}:{self.go2rtc_rtsp_port}/{device_id}",
                     "mp4": f"{base_url}/api/frame.mp4?src={device_id}"
                 },
                 "stream_type": device_config.get('stream_type', 'FFMPEG'),
