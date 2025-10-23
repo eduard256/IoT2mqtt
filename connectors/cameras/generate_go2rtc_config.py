@@ -9,6 +9,7 @@ import yaml
 import os
 import sys
 import re
+import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
@@ -181,19 +182,69 @@ class Go2RTCConfigGenerator:
             print(f"  ⚠️  {device_id}: Unknown stream_type '{stream_type}', using stream_url as-is", file=sys.stderr)
             return stream_url if stream_url else None
 
+    def _test_jpeg_url(self, url: str, timeout: int = 3) -> bool:
+        """
+        Test if JPEG URL is accessible using curl + ffmpeg
+
+        Strategy:
+        1. Fast check with curl (HTTP GET) - timeout 3s
+        2. If curl succeeds, verify with ffmpeg - timeout 3s
+
+        Args:
+            url: Full JPEG URL to test
+            timeout: Timeout in seconds for each test
+
+        Returns:
+            True if URL is accessible and valid, False otherwise
+        """
+        try:
+            # Step 1: Quick HTTP check with curl
+            curl_result = subprocess.run(
+                ['curl', '-s', '-f', '-m', str(timeout), '--output', '/dev/null', '--head', url],
+                capture_output=True,
+                timeout=timeout + 1
+            )
+
+            if curl_result.returncode != 0:
+                return False
+
+            # Step 2: Verify with ffmpeg (can actually read the image)
+            ffmpeg_result = subprocess.run(
+                [
+                    'ffmpeg',
+                    '-loglevel', 'error',
+                    '-timeout', str(timeout * 1000000),  # microseconds
+                    '-i', url,
+                    '-frames:v', '1',
+                    '-f', 'null',
+                    '-'
+                ],
+                capture_output=True,
+                timeout=timeout + 1
+            )
+
+            return ffmpeg_result.returncode == 0
+
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            return False
+
     def _build_jpeg_ffmpeg_source(self, device: Dict[str, Any], stream_url: str) -> str:
         """
-        Build exec:ffmpeg source for JPEG snapshots
+        Build exec:ffmpeg source for JPEG snapshots with automatic auth method detection
 
-        This method uses FFmpeg to convert static JPEG snapshots into MJPEG stream
-        with controlled framerate to avoid triggering camera's DoS protection.
+        This method automatically detects the correct authentication method by testing:
+        1. URL with Basic Auth (http://user:pass@host/path?params)
+        2. URL without Basic Auth (http://host/path?params with credentials in query)
+
+        This solves the problem where some cameras require Basic Auth and others
+        require query parameters only.
 
         Args:
             device: Device configuration dict
             stream_url: JPEG snapshot URL (can be relative or absolute)
 
         Returns:
-            exec:ffmpeg source string
+            exec:ffmpeg source string with working URL
 
         Example:
             Input: http://10.0.20.112/snapshot.jpg?user=admin&pwd=pass&strm=0
@@ -203,21 +254,60 @@ class Go2RTCConfigGenerator:
         framerate = device.get('framerate', 5)
         username = device.get('username', '')
         password = device.get('password', '')
+        device_id = device.get('device_id', 'unknown')
 
         # Ensure stream_url is absolute (contains full http:// path)
-        # If it's already absolute, use as-is and inject credentials
         if stream_url.startswith('http://') or stream_url.startswith('https://'):
-            full_url = self._inject_credentials(stream_url, username, password)
+            base_url = stream_url
         else:
             # Build absolute URL from device params
             ip = device.get('ip', '')
             port = device.get('port', 80)
+            base_url = f"http://{ip}:{port}{stream_url}"
 
-            # Build base URL with credentials
-            if username and password:
-                full_url = f"http://{username}:{password}@{ip}:{port}{stream_url}"
+        # Parse URL to extract components
+        parsed = urlparse(base_url)
+
+        # Build two variants for testing
+        url_variants = []
+
+        # Variant A: WITH Basic Auth (http://user:pass@host/path?query)
+        if username and password:
+            url_with_auth = self._inject_credentials(base_url, username, password)
+            url_variants.append(('basic_auth', url_with_auth))
+
+        # Variant B: WITHOUT Basic Auth (http://host/path?query)
+        # Remove credentials from URL if present
+        if '@' in base_url:
+            # Remove user:pass@ part
+            url_without_auth = re.sub(r'://[^:]+:[^@]+@', '://', base_url)
+        else:
+            url_without_auth = base_url
+        url_variants.append(('query_params', url_without_auth))
+
+        # Test each variant to find working one
+        working_url = None
+        working_method = None
+
+        print(f"  🔍 Testing authentication methods for {device_id}...", file=sys.stderr)
+
+        for method, test_url in url_variants:
+            print(f"    • Testing {method}...", end='', file=sys.stderr)
+            if self._test_jpeg_url(test_url):
+                print(f" ✅ Works!", file=sys.stderr)
+                working_url = test_url
+                working_method = method
+                break
             else:
-                full_url = f"http://{ip}:{port}{stream_url}"
+                print(f" ❌ Failed", file=sys.stderr)
+
+        # Fallback: use URL with Basic Auth if no variant worked
+        if not working_url:
+            print(f"  ⚠️  {device_id}: Neither auth method worked, using basic_auth as fallback", file=sys.stderr)
+            working_url = url_variants[0][1] if url_variants else base_url
+            working_method = 'basic_auth (fallback)'
+
+        print(f"  ✓ {device_id}: Using {working_method} authentication", file=sys.stderr)
 
         # Build exec:ffmpeg command
         # -loglevel quiet: suppress FFmpeg output
@@ -228,7 +318,7 @@ class Go2RTCConfigGenerator:
         # -c copy: copy codec (no transcoding)
         # -f mjpeg: output format MJPEG
         # -: output to stdout (pipe to go2rtc)
-        return f"exec:ffmpeg -loglevel quiet -f image2 -loop 1 -framerate {framerate} -i {full_url} -c copy -f mjpeg -"
+        return f"exec:ffmpeg -loglevel quiet -f image2 -loop 1 -framerate {framerate} -i {working_url} -c copy -f mjpeg -"
 
     def generate_go2rtc_config(self, instance_config: Dict[str, Any]) -> Dict[str, Any]:
         """
