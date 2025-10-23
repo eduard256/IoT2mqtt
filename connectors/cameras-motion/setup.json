@@ -29,12 +29,6 @@
       "default": true,
       "steps": [
         {
-          "id": "intro",
-          "type": "message",
-          "title": "Camera Motion Detection",
-          "message": "This parasitic connector adds motion detection to your cameras using FFmpeg.\n\n**Features:**\n- Fast, CPU-efficient motion detection\n- Real-time sensitivity adjustment\n- Independent control per camera\n- Supports up to 100 cameras\n\n**How it works:**\n1. Select cameras to monitor\n2. Configure motion detection settings\n3. Motion events are published to parent camera MQTT topics\n\nClick **Next** to begin."
-        },
-        {
           "id": "select_camera",
           "type": "form",
           "title": "Select Camera",
@@ -109,50 +103,13 @@
           }
         },
         {
-          "id": "general_settings",
-          "type": "form",
-          "title": "General Settings",
-          "description": "Configure instance settings (applies to all cameras)",
-          "schema": {
-            "fields": [
-              {
-                "type": "text",
-                "name": "friendly_name",
-                "label": "Instance Name",
-                "description": "Friendly name for this motion detection instance",
-                "placeholder": "Camera Motion Detection",
-                "default": "Camera Motion Detection",
-                "required": true
-              },
-              {
-                "type": "number",
-                "name": "update_interval",
-                "label": "Update Interval (seconds)",
-                "description": "How often to publish motion state to MQTT",
-                "default": 2,
-                "min": 1,
-                "max": 30,
-                "advanced": true
-              },
-              {
-                "type": "checkbox",
-                "name": "ha_discovery_enabled",
-                "label": "Enable Home Assistant Discovery",
-                "description": "Automatically publish device information to Home Assistant via MQTT Discovery",
-                "default": true,
-                "advanced": true
-              }
-            ]
-          }
-        },
-        {
           "id": "create_instance",
           "type": "instance",
           "instance": {
-            "friendly_name": "{{ form.general_settings.friendly_name }}",
+            "friendly_name": "Motion Detection",
             "connector_type": "cameras-motion",
-            "update_interval": "{{ form.general_settings.update_interval }}",
-            "ha_discovery_enabled": "{{ form.general_settings.ha_discovery_enabled }}",
+            "update_interval": 2,
+            "ha_discovery_enabled": true,
             "config": {
               "parasite_targets": [],
               "sensitivity": "{{ form.motion_settings.sensitivity }}",
