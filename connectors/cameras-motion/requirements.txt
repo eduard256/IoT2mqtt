@@ -4,5 +4,8 @@
 # MQTT client (inherited from shared/)
 paho-mqtt>=1.6.1
 
+# Environment variables from .env file
+python-dotenv>=1.0.0
+
 # No additional dependencies required
 # FFmpeg is installed via apt-get in Dockerfile
