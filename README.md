@@ -2,8 +2,11 @@
 
 **Revolutionary Smart Home System - 100% Containerized**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+![GitHub stars](https://img.shields.io/github/stars/eduard256/IoT2mqtt)
+![GitHub forks](https://img.shields.io/github/forks/eduard256/IoT2mqtt)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/eduard256/IoT2mqtt?include_prereleases)
+[![License: MIT](https://img.shields.io/github/license/eduard256/IoT2mqtt)](https://opensource.org/licenses/MIT)
+![Docker](https://img.shields.io/badge/Docker-required-blue)
 [![MQTT](https://img.shields.io/badge/MQTT-Protocol-purple)](https://mqtt.org/)
 
 IoT2MQTT is a revolutionary smart home integration system that runs entirely in Docker containers. Zero host dependencies - just Docker. The system uses Docker-in-Docker architecture where the main web container orchestrates all connector containers.
