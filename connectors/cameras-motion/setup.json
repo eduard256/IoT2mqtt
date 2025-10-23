@@ -111,7 +111,6 @@
             "update_interval": 2,
             "ha_discovery_enabled": true,
             "config": {
-              "parasite_targets": [],
               "sensitivity": "{{ form.motion_settings.sensitivity }}",
               "check_interval": "{{ form.motion_settings.check_interval }}"
             },

@@ -157,10 +157,46 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
                 if key not in instance_config:
                     instance_config[key] = value
 
+        # Auto-detect and configure parasitic connector
+        # If devices have mqtt_path, this is a parasitic connector
+        if request.devices and any('mqtt_path' in d for d in request.devices):
+            parasite_targets = []
+            for device in request.devices:
+                if 'mqtt_path' in device and 'device_id' in device:
+                    # Build parasite target from device
+                    target = {
+                        'mqtt_path': device['mqtt_path'],
+                        'device_id': device['device_id'],
+                        'instance_id': device.get('instance_id'),
+                    }
+                    # Include any extracted_data if present
+                    if 'extracted_data' in device:
+                        target['extracted_data'] = device['extracted_data']
+                    # Include other device fields as extracted_data fallback
+                    elif any(k in device for k in ['ip', 'name', 'brand', 'model']):
+                        target['extracted_data'] = {
+                            k: v for k, v in device.items()
+                            if k not in ['mqtt_path', 'device_id', 'instance_id', 'enabled']
+                        }
+
+                    parasite_targets.append(target)
+
+            # Add to config
+            if parasite_targets:
+                if 'config' not in instance_config or instance_config['config'] is None:
+                    instance_config['config'] = {}
+                instance_config['config']['parasite_targets'] = parasite_targets
+                logger.info(f"Auto-configured parasitic connector with {len(parasite_targets)} target(s)")
+
         # Validate parasitic configuration if present
-        if 'parasite_targets' in request.config:
+        parasite_targets = None
+        if instance_config.get('config') and 'parasite_targets' in instance_config['config']:
+            parasite_targets = instance_config['config']['parasite_targets']
+        elif 'parasite_targets' in request.config:
             parasite_targets = request.config['parasite_targets']
-            logger.info(f"Instance {instance_id} configured as parasite with {len(parasite_targets)} target(s)")
+
+        if parasite_targets:
+            logger.info(f"Validating parasitic configuration with {len(parasite_targets)} target(s)")
 
             # Validate structure
             for idx, target in enumerate(parasite_targets):
@@ -185,13 +221,14 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
                     )
 
             # Optional: Verify parent devices exist (non-blocking)
-            from web.backend.main import mqtt_service
-            if mqtt_service and mqtt_service.connected:
+            from api import mqtt_discovery
+            mqtt_svc = mqtt_discovery.mqtt_service
+            if mqtt_svc and mqtt_svc.connected:
                 for target in parasite_targets:
                     mqtt_path = target.get('mqtt_path')
                     if mqtt_path:
                         state_topic = f"{mqtt_path}/state"
-                        if state_topic not in mqtt_service.topic_cache:
+                        if state_topic not in mqtt_svc.topic_cache:
                             logger.warning(
                                 f"Parasite target not found in MQTT cache: {mqtt_path}. "
                                 f"Parent device may be offline or will come online later."

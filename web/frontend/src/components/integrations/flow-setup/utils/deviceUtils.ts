@@ -33,17 +33,30 @@ export function buildCurrentDevice(flowState: any): any | null {
         // Found mqtt_device_picker data
         const extracted = fieldValue.extracted_data
 
-        return {
+        // Build device object with fallbacks for missing fields
+        const device: any = {
           device_id: fieldValue.device_id,
           mqtt_path: fieldValue.mqtt_path,
           instance_id: fieldValue.instance_id,
-          ip: extracted.ip,
-          port: extracted.port || 554,
-          name: extracted.name || fieldValue.device_id,
-          enabled: true,
-          // Include all extracted fields for parasitic connectors
-          ...extracted
+          enabled: true
         }
+
+        // Add extracted fields with proper fallbacks
+        if (extracted.ip) device.ip = extracted.ip
+        if (extracted.port) device.port = extracted.port
+        if (extracted.name) device.name = extracted.name
+
+        // If no name but have device_id, use device_id as fallback
+        if (!device.name) device.name = fieldValue.device_id
+
+        // Include all other extracted fields
+        Object.keys(extracted).forEach(key => {
+          if (!device[key]) {
+            device[key] = extracted[key]
+          }
+        })
+
+        return device
       }
     }
   }
