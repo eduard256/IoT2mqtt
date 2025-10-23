@@ -215,6 +215,12 @@ Key benefits:
 - **Container Management** - Start/stop/restart containers
 - **Logs Viewer** - Real-time colored logs from all containers
 - **Settings** - Configure MQTT, access keys, and more
+- **🔗 Parasitic Connectors** - Extend existing devices with new capabilities
+  - Add motion detection, AI recognition, or notifications to any device
+  - Independent lifecycle and control plane
+  - Zero modification to parent connectors
+  - Stack multiple extensions on same device
+  - See [Parasitic Connectors Guide](docs/parasitic-connectors.md)
 
 ## 📦 Supported Integrations
 

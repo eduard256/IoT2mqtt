@@ -157,6 +157,46 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
                 if key not in instance_config:
                     instance_config[key] = value
 
+        # Validate parasitic configuration if present
+        if 'parasite_targets' in request.config:
+            parasite_targets = request.config['parasite_targets']
+            logger.info(f"Instance {instance_id} configured as parasite with {len(parasite_targets)} target(s)")
+
+            # Validate structure
+            for idx, target in enumerate(parasite_targets):
+                if not isinstance(target, dict):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Parasite target {idx} must be a dictionary"
+                    )
+
+                if 'mqtt_path' not in target or 'device_id' not in target:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Parasite target {idx} missing required fields (mqtt_path, device_id)"
+                    )
+
+                # Verify device_id matches configured devices
+                device_ids = [d['device_id'] for d in request.devices]
+                if target['device_id'] not in device_ids:
+                    logger.warning(
+                        f"Parasite target device_id '{target['device_id']}' not found in connector devices. "
+                        f"Expected one of: {device_ids}. Device ID inheritance required for proper field association."
+                    )
+
+            # Optional: Verify parent devices exist (non-blocking)
+            from web.backend.main import mqtt_service
+            if mqtt_service and mqtt_service.connected:
+                for target in parasite_targets:
+                    mqtt_path = target.get('mqtt_path')
+                    if mqtt_path:
+                        state_topic = f"{mqtt_path}/state"
+                        if state_topic not in mqtt_service.topic_cache:
+                            logger.warning(
+                                f"Parasite target not found in MQTT cache: {mqtt_path}. "
+                                f"Parent device may be offline or will come online later."
+                            )
+
         # Save configuration with separated secrets
         docker_secrets = config_service.save_instance_with_secrets(
             request.connector_type,

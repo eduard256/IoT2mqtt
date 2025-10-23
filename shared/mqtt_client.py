@@ -456,25 +456,86 @@ class MQTTClient:
     def wait_for_response(self, cmd_id: str, timeout: float = 5.0) -> Optional[Dict]:
         """
         Wait for command response (blocking)
-        
+
         Args:
             cmd_id: Command ID to wait for
             timeout: Maximum wait time in seconds
-            
+
         Returns:
             Response payload or None if timeout
         """
         response_queue = Queue()
-        
+
         def response_callback(payload):
             response_queue.put(payload)
-        
+
         # Update callback for this command
         if cmd_id in self.pending_commands:
             self.pending_commands[cmd_id].callback = response_callback
-        
+
         try:
             return response_queue.get(timeout=timeout)
         except Empty:
             logger.warning(f"Timeout waiting for response to command {cmd_id}")
             return None
+
+    def subscribe_external_topic(self, full_topic: str, callback: Callable):
+        """
+        Subscribe to MQTT topic outside this instance's namespace.
+        Used by parasitic connectors to subscribe to parent device states.
+
+        Args:
+            full_topic: Complete MQTT topic path (not relative to instance)
+            callback: Handler function(topic, payload)
+
+        Example:
+            mqtt.subscribe_external_topic(
+                "iot2mqtt/v1/instances/cameras_abc/devices/camera_1/state",
+                self._on_parent_state_update
+            )
+        """
+        self.subscriptions[full_topic] = callback
+
+        if self.connected:
+            self.client.subscribe(full_topic, qos=self.qos)
+            logger.debug(f"Subscribed to external topic: {full_topic}")
+
+    def publish_to_external_topic(self, full_topic: str, payload: Any,
+                                   retain: bool = True, qos: int = None):
+        """
+        Publish to arbitrary MQTT topic outside instance namespace.
+        Used by parasitic connectors to publish fields to parent devices.
+
+        Args:
+            full_topic: Complete MQTT topic path
+            payload: Data to publish
+            retain: MQTT retain flag (default True for state persistence)
+            qos: Quality of Service (uses instance default if not specified)
+
+        Example:
+            mqtt.publish_to_external_topic(
+                "iot2mqtt/v1/instances/cameras_abc/devices/camera_1/state/motion",
+                True,
+                retain=True
+            )
+        """
+        if not self.connected:
+            logger.warning(f"Not connected, cannot publish to external topic {full_topic}")
+            return
+
+        # Convert to JSON if needed
+        if isinstance(payload, (dict, list)):
+            payload = json.dumps(payload)
+        elif not isinstance(payload, (str, bytes)):
+            payload = str(payload)
+
+        # Use specified QoS or instance default
+        qos_level = qos if qos is not None else self.qos
+
+        # Publish
+        result = self.client.publish(full_topic, payload, qos=qos_level, retain=retain)
+
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            logger.error(f"Failed to publish to external topic {full_topic}: {result.rc}")
+        else:
+            logger.debug(f"Published to external topic {full_topic}")

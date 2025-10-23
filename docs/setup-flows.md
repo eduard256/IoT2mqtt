@@ -204,6 +204,208 @@ Where `random6` is 6 random lowercase alphanumeric characters (a-z, 0-9).
 Simply omit `instance_id` from your `setup.json` instance step. The system handles
 generation automatically. No connector-specific code required.
 
+## Parasitic Connector Setup Pattern
+
+Parasitic connectors extend existing device functionality by publishing additional state fields to parent device MQTT topics while maintaining independent lifecycle and control. The `mqtt_device_picker` field type automatically provides all information needed to configure parasitic attachment.
+
+### Concept
+
+Instead of creating new devices, parasitic connectors:
+1. Select existing parent devices via `mqtt_device_picker`
+2. Inherit parent device IDs
+3. Publish extension fields to parent MQTT topics
+4. Maintain independent control through own CMD topics
+
+### Basic Setup Flow Example
+
+Motion detection parasitic connector for cameras:
+
+```json
+{
+  "flows": [{
+    "id": "main",
+    "name": "Add Motion Detection",
+    "steps": [
+      {
+        "id": "select_camera",
+        "type": "form",
+        "title": "Select Camera",
+        "description": "Choose camera to add motion detection",
+        "schema": {
+          "fields": [{
+            "type": "mqtt_device_picker",
+            "name": "camera_device",
+            "label": "Camera to Monitor",
+            "required": true,
+            "config": {
+              "connector_type": "cameras",
+              "extract_fields": ["ip", "stream_urls.rtsp", "name"],
+              "save_mode": "extracted_fields"
+            }
+          }]
+        }
+      },
+      {
+        "id": "motion_settings",
+        "type": "form",
+        "title": "Motion Detection Settings",
+        "schema": {
+          "fields": [
+            {
+              "type": "number",
+              "name": "sensitivity",
+              "label": "Sensitivity (0.1 - 1.0)",
+              "default": 0.7,
+              "min": 0.1,
+              "max": 1.0,
+              "step": 0.1
+            },
+            {
+              "type": "select",
+              "name": "method",
+              "label": "Detection Method",
+              "options": [
+                {"value": "ffmpeg", "label": "FFmpeg (fast)"},
+                {"value": "opencv", "label": "OpenCV (accurate)"}
+              ],
+              "default": "ffmpeg"
+            }
+          ]
+        }
+      },
+      {
+        "id": "create_instance",
+        "type": "instance",
+        "instance": {
+          "connector_type": "cameras-motion",
+          "friendly_name": "Motion Detection",
+          "config": {
+            "parasite_targets": [{
+              "mqtt_path": "{{ form.select_camera.camera_device.mqtt_path }}",
+              "device_id": "{{ form.select_camera.camera_device.device_id }}",
+              "instance_id": "{{ form.select_camera.camera_device.instance_id }}",
+              "extracted_data": "{{ form.select_camera.camera_device.extracted_data }}"
+            }],
+            "sensitivity": "{{ form.motion_settings.sensitivity }}",
+            "method": "{{ form.motion_settings.method }}"
+          },
+          "devices": [{
+            "device_id": "{{ form.select_camera.camera_device.device_id }}",
+            "name": "Motion: {{ form.select_camera.camera_device.extracted_data.name }}"
+          }]
+        }
+      }
+    ]
+  }]
+}
+```
+
+### Key Configuration Elements
+
+**parasite_targets Array:**
+```json
+"config": {
+  "parasite_targets": [{
+    "mqtt_path": "{{ form.select_camera.camera_device.mqtt_path }}",
+    "device_id": "{{ form.select_camera.camera_device.device_id }}",
+    "instance_id": "{{ form.select_camera.camera_device.instance_id }}",
+    "extracted_data": "{{ form.select_camera.camera_device.extracted_data }}"
+  }]
+}
+```
+
+**Device ID Inheritance:**
+```json
+"devices": [{
+  "device_id": "{{ form.select_camera.camera_device.device_id }}"
+}]
+```
+
+Device ID MUST match parent device for proper field association.
+
+### Multi-Device Parasitic Connector
+
+Extend multiple parent devices from single parasitic instance:
+
+```json
+{
+  "flows": [{
+    "id": "multi_device",
+    "name": "Add Motion Detection (Multiple Cameras)",
+    "steps": [
+      {
+        "id": "select_cameras",
+        "type": "form",
+        "title": "Select Cameras",
+        "description": "Choose multiple cameras to monitor",
+        "schema": {
+          "fields": [{
+            "type": "mqtt_device_picker",
+            "name": "cameras",
+            "label": "Cameras to Monitor",
+            "required": true,
+            "multiple": true,
+            "config": {
+              "connector_type": "cameras",
+              "extract_fields": ["ip", "stream_urls.rtsp", "name"]
+            }
+          }]
+        }
+      },
+      {
+        "id": "create_instance",
+        "type": "instance",
+        "instance": {
+          "connector_type": "cameras-motion",
+          "config": {
+            "parasite_targets": "{{ form.select_cameras.cameras }}",
+            "sensitivity": 0.7
+          },
+          "devices": "{{ form.select_cameras.cameras | map_field('device_id', 'name') }}"
+        }
+      }
+    ]
+  }]
+}
+```
+
+Note: The `map_field` template filter extracts device_id and name from picker results.
+
+### MQTT Topic Results
+
+After setup, parasitic connector publishes to dual namespaces:
+
+**Own Instance (Control & Status):**
+```
+iot2mqtt/v1/instances/cameras_motion_abc123/devices/camera_1/state
+→ {"online": true, "fps": 30, "status": "detecting"}
+
+iot2mqtt/v1/instances/cameras_motion_abc123/devices/camera_1/cmd
+→ Accepts: {"sensitivity": 0.9, "enabled": false}
+
+iot2mqtt/v1/instances/cameras_motion_abc123/devices/camera_1/parasite
+→ ["iot2mqtt/v1/instances/cameras_xyz/devices/camera_1"]
+```
+
+**Parent Instance (Extended Fields):**
+```
+iot2mqtt/v1/instances/cameras_xyz/devices/camera_1/state/motion → true
+iot2mqtt/v1/instances/cameras_xyz/devices/camera_1/state/motion_confidence → 0.92
+iot2mqtt/v1/instances/cameras_xyz/devices/camera_1/state/motion_last_detected → "..."
+```
+
+### Connector Implementation Requirements
+
+Parasitic connectors must:
+
+1. Inherit from `BaseConnector` (provides automatic parasite handling)
+2. Use `self.publish_parasite_fields()` to extend parent devices
+3. Use `self.get_parent_state()` to access parent device data
+4. Implement `get_device_state()` returning own operational status
+5. Implement `set_device_state()` handling own CMD topics
+
+See [Parasitic Connectors Guide](parasitic-connectors.md) for implementation details.
+
 ## Backend Validation
 
 `FlowSetupSchema` validates incoming JSON when `/api/integrations/{name}/meta`

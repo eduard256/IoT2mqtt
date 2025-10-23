@@ -121,6 +121,173 @@ If Level Two coordination complexity becomes unwieldy, evaluate whether existing
 
 If Level Three upstream project lacks required functionality, consider Level Two custom implementation instead.
 
+### Level Four: Parasitic Extension Connectors
+
+Parasitic connectors extend existing device functionality by publishing additional state fields to parent device MQTT topics while maintaining completely independent control plane and lifecycle through their own instance namespace. This non-invasive extension pattern enables modular capability addition without modifying original connector implementations.
+
+**When to choose Level Four:**
+- Need to add functionality to existing devices without modifying original connector code
+- Want modular, optional features that can be enabled or disabled independently per device
+- Require different update intervals or processing logic than parent device polling cycle
+- Building value-added services layered on top of existing device integrations
+- Multiple teams developing extensions for same devices without coordination
+
+**Typical examples include:**
+- Motion detection overlays analyzing camera streams without modifying camera connector
+- AI object recognition services extending camera capabilities with YOLO/TensorFlow processing
+- Notification systems attaching to any device type based on state change patterns
+- Data transformation and aggregation layers computing derived metrics from raw sensor data
+- Recording triggers that capture events based on motion detection or AI analysis results
+
+**Advantages of Level Four:**
+- Zero modification to parent connectors—completely non-invasive extension mechanism
+- Independent lifecycle management—restart parasitic connector without affecting parent device
+- Separate control plane—each connector maintains own configuration interface via CMD topics
+- Modular deployment—enable features only where needed rather than globally
+- Multiple parasites can extend same parent device simultaneously without conflicts
+- Clean separation of concerns—each connector handles single responsibility
+- Reduced complexity—no need to fork or modify upstream connector code
+
+**Limitations of Level Four:**
+- Requires parent device to be online and actively publishing state for data access
+- Device ID must match parent exactly for proper field association in MQTT namespace
+- No ability to intercept or modify parent device command processing
+- Slightly increased MQTT broker load from dual publishing pattern
+- Parent device unaware of parasitic extensions—cannot coordinate state changes
+- Debugging requires monitoring both instance namespaces
+
+### Parasitic Mode Configuration Contract
+
+Connectors declare parasitic behavior through `parasite_targets` array in instance configuration. BaseConnector automatically handles subscription to parent device states and provides helper methods for publishing extension fields.
+
+**Configuration Structure:**
+
+```json
+{
+  "instance_id": "motion_detector_abc",
+  "connector_type": "cameras-motion",
+  "config": {
+    "parasite_targets": [
+      {
+        "mqtt_path": "iot2mqtt/v1/instances/cameras_xyz/devices/camera_1",
+        "device_id": "camera_1",
+        "instance_id": "cameras_xyz",
+        "extracted_data": {
+          "rtsp": "rtsp://10.0.20.111:554/stream",
+          "ip": "10.0.20.111",
+          "name": "Front Door Camera"
+        }
+      }
+    ],
+    "sensitivity": 0.7,
+    "check_interval": 1
+  },
+  "devices": [
+    {
+      "device_id": "camera_1",
+      "name": "Motion Detector: Front Door Camera"
+    }
+  ]
+}
+```
+
+**Required Fields in parasite_targets:**
+
+- `mqtt_path` - Complete MQTT path to parent device without /state suffix. BaseConnector uses this for both subscribing to parent state updates and publishing extension fields. Must be full path including base_topic, instance_id, and device_id.
+
+- `device_id` - Parent device identifier. MUST match exactly between parasitic connector's devices array and parent device for proper field association. This enables UI systems to correlate parasitic extensions with their parent devices.
+
+- `instance_id` - Parent instance identifier. Used primarily for logging, debugging, and relationship tracking in monitoring systems.
+
+**Optional Fields:**
+
+- `extracted_data` - Dictionary containing parent device information needed by parasitic connector. Typically populated automatically by mqtt_device_picker during setup flow. Common fields include IP addresses, stream URLs, authentication credentials, or device-specific configuration.
+
+**Device ID Inheritance Requirement:**
+
+Parasitic connectors MUST use identical device_id values as their parent devices in their own devices array. This strict matching requirement ensures proper field association when multiple devices exist and enables downstream systems to group related data.
+
+**Incorrect:**
+```json
+{
+  "parasite_targets": [{"device_id": "camera_1"}],
+  "devices": [{"device_id": "motion_1"}]  // ❌ Mismatch breaks field association
+}
+```
+
+**Correct:**
+```json
+{
+  "parasite_targets": [{"device_id": "camera_1"}],
+  "devices": [{"device_id": "camera_1"}]  // ✅ Matches for proper association
+}
+```
+
+### MQTT Topic Structure for Parasitic Connectors
+
+Parasitic connectors implement dual-topic publishing strategy maintaining separation between connector control and device extension.
+
+**Own Instance Namespace (Standard BaseConnector):**
+
+```
+iot2mqtt/v1/instances/{parasite_instance}/devices/{device_id}/state
+iot2mqtt/v1/instances/{parasite_instance}/devices/{device_id}/cmd       ← Parasite controlled here
+iot2mqtt/v1/instances/{parasite_instance}/devices/{device_id}/parasite
+```
+
+**Parent Instance Namespace (Extended Fields Only):**
+
+```
+iot2mqtt/v1/instances/{parent_instance}/devices/{device_id}/state/{field}  ← Published by parasite
+```
+
+**Complete Example for Motion Detection Parasite:**
+
+Own operational state and control interface:
+```
+iot2mqtt/v1/instances/motion_abc/devices/camera_1/state
+→ {"online": true, "fps": 30, "status": "detecting", "last_analysis": "2025-10-23T15:00:00Z"}
+
+iot2mqtt/v1/instances/motion_abc/devices/camera_1/cmd
+→ Accepts: {"sensitivity": 0.8, "enabled": true, "detection_zone": {...}}
+
+iot2mqtt/v1/instances/motion_abc/devices/camera_1/parasite
+→ ["iot2mqtt/v1/instances/cameras_xyz/devices/camera_1"]
+```
+
+Parent camera extended with motion fields:
+```
+iot2mqtt/v1/instances/cameras_xyz/devices/camera_1/state/motion → true
+iot2mqtt/v1/instances/cameras_xyz/devices/camera_1/state/motion_confidence → 0.92
+iot2mqtt/v1/instances/cameras_xyz/devices/camera_1/state/motion_last_detected → "2025-10-23T15:00:00Z"
+```
+
+**Critical: Independent Control Planes**
+
+Parent and parasitic connectors maintain completely separate command interfaces. Commands sent to parent device CMD topic do not affect parasitic connector, and vice versa. This separation enables independent configuration management and prevents control surface conflicts.
+
+Control parent camera (brightness, zoom, pan):
+```bash
+mosquitto_pub -t 'iot2mqtt/v1/instances/cameras_xyz/devices/camera_1/cmd' \
+  -m '{"zoom": 2.0, "brightness": 60}'
+```
+
+Control motion detector parasite (sensitivity, detection zones):
+```bash
+mosquitto_pub -t 'iot2mqtt/v1/instances/motion_abc/devices/camera_1/cmd' \
+  -m '{"sensitivity": 0.9, "enabled": true}'
+```
+
+### Decision Tree Extension for Parasitic Connectors
+
+**Add to existing decision tree:**
+
+Do you need to extend existing device functionality without modifying the original connector? Choose Level Four parasitic pattern using BaseConnector with parasite_targets configuration.
+
+Do you have multiple devices from the same connector that need different extensions? Deploy multiple Level Four parasitic connector instances, each configured with different parent device targets.
+
+Does your extension need access to parent device data (IPs, URLs, credentials)? Use mqtt_device_picker in setup flow to automatically populate parasite_targets with extracted_data from parent devices.
+
 ## Mandatory Contract Elements
 
 Every connector, regardless of internal implementation, must satisfy these contract requirements to function properly within the IoT2MQTT ecosystem.

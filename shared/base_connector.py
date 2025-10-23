@@ -94,6 +94,14 @@ class BaseConnector(ABC):
         self.devices = {}
         self.update_interval = self.config.get('update_interval', 10)
 
+        # Parasitic connector support
+        self.parasite_targets = self._load_parasite_targets()
+        self.parent_states = {}  # Cache of parent device states {mqtt_path: state_data}
+        self.is_parasite_mode = len(self.parasite_targets) > 0
+
+        if self.is_parasite_mode:
+            logger.info(f"Parasite mode enabled with {len(self.parasite_targets)} target(s)")
+
         # Setup logging
         self._setup_logging()
     
@@ -196,7 +204,50 @@ class BaseConnector(ABC):
                 logger.warning(f"Error loading secrets from {instance_secret}: {e}")
         else:
             logger.debug(f"No Docker secrets file found at {instance_secret} (this is optional)")
-    
+
+    def _load_parasite_targets(self) -> List[Dict[str, Any]]:
+        """
+        Load parasite target configuration from instance config.
+
+        Parasitic connectors extend parent devices by publishing additional fields
+        to their MQTT topics while maintaining independent lifecycle and control.
+
+        Returns:
+            List of parent device targets. Each target contains:
+            - mqtt_path: Full MQTT path to parent device (without /state suffix)
+            - device_id: Parent device identifier
+            - instance_id: Parent instance identifier
+            - extracted_data: Optional parent device data (IPs, URLs, etc.)
+        """
+        targets = self.config.get('config', {}).get('parasite_targets', [])
+
+        if not targets:
+            return []
+
+        if not isinstance(targets, list):
+            logger.error("parasite_targets must be an array, ignoring")
+            return []
+
+        # Validate each target has required fields
+        validated = []
+        for idx, target in enumerate(targets):
+            if not isinstance(target, dict):
+                logger.warning(f"Parasite target {idx} is not a dictionary, skipping")
+                continue
+
+            if 'mqtt_path' not in target:
+                logger.warning(f"Parasite target {idx} missing 'mqtt_path' field, skipping")
+                continue
+
+            if 'device_id' not in target:
+                logger.warning(f"Parasite target {idx} missing 'device_id' field, skipping")
+                continue
+
+            validated.append(target)
+            logger.debug(f"Loaded parasite target: {target['mqtt_path']}")
+
+        return validated
+
     def _setup_logging(self):
         """Setup logging for connector"""
         log_level = os.getenv('LOG_LEVEL', 'INFO')
@@ -224,8 +275,14 @@ class BaseConnector(ABC):
 
         logger.info("MQTT connection established successfully")
 
-        # Subscribe to command topics
+        # Subscribe to command topics (for OWN devices)
         self._setup_subscriptions()
+
+        # Setup parasitic subscriptions if in parasite mode
+        if self.is_parasite_mode:
+            logger.info("Setting up parasitic subscriptions...")
+            self._setup_parasite_subscriptions()
+            logger.info(f"Parasitic mode initialized for {len(self.parasite_targets)} target(s)")
 
         # Initialize connection to devices
         logger.info("Initializing connector-specific connections...")
@@ -242,6 +299,14 @@ class BaseConnector(ABC):
         except Exception as e:
             logger.error(f"Error publishing Home Assistant Discovery: {e}", exc_info=True)
             # Don't fail startup if discovery fails
+
+        # Publish parasite registry if in parasite mode
+        if self.is_parasite_mode:
+            try:
+                self._publish_parasite_registry()
+            except Exception as e:
+                logger.error(f"Error publishing parasite registry: {e}", exc_info=True)
+                # Don't fail startup if registry publish fails
 
         # Start main loop
         self.running = True
@@ -671,12 +736,134 @@ class BaseConnector(ABC):
     def discover_devices(self) -> List[Dict[str, Any]]:
         """
         Discover new devices (optional, override if supported)
-        
+
         Returns:
             List of discovered devices
         """
         return []
-    
+
+    def _setup_parasite_subscriptions(self):
+        """
+        Subscribe to parent device state topics to cache their data.
+
+        Called during start() after MQTT connection is established.
+        Parasitic connectors use this cached data to access parent device
+        information (IPs, stream URLs, etc.) for processing.
+        """
+        for target in self.parasite_targets:
+            mqtt_path = target['mqtt_path']
+            state_topic = f"{mqtt_path}/state"
+
+            logger.info(f"Subscribing to parent device: {state_topic}")
+
+            # Create callback with mqtt_path bound to this iteration
+            def make_callback(mp):
+                return lambda topic, payload: self._on_parent_state_update(mp, topic, payload)
+
+            # Subscribe to parent device state
+            self.mqtt.subscribe_external_topic(state_topic, make_callback(mqtt_path))
+
+    def _on_parent_state_update(self, mqtt_path: str, topic: str, payload: Dict[str, Any]):
+        """
+        Callback when parent device publishes state update.
+
+        Caches parent state for use by child connector logic via get_parent_state().
+
+        Args:
+            mqtt_path: Base MQTT path of parent device
+            topic: Full MQTT topic of the message
+            payload: Message payload containing state data
+        """
+        try:
+            # Extract state from payload (format: {timestamp, device_id, state: {...}})
+            if isinstance(payload, dict) and 'state' in payload:
+                self.parent_states[mqtt_path] = payload['state']
+                logger.debug(f"Updated parent state cache for {mqtt_path}")
+            else:
+                logger.warning(f"Unexpected payload format from parent {mqtt_path}: {type(payload)}")
+        except Exception as e:
+            logger.error(f"Error caching parent state for {mqtt_path}: {e}")
+
+    def _publish_parasite_registry(self):
+        """
+        Publish /parasite topic for each device listing which parents it extends.
+
+        Enables discovery and debugging of parasitic relationships.
+        Format: List of parent MQTT paths this device extends.
+        """
+        for device_config in self.config.get('devices', []):
+            device_id = device_config['device_id']
+
+            # Find all parent mqtt_paths for this device_id
+            parent_paths = [
+                t['mqtt_path']
+                for t in self.parasite_targets
+                if t['device_id'] == device_id
+            ]
+
+            if parent_paths:
+                registry_topic = (
+                    f"{self.mqtt.base_topic}/v1/instances/{self.instance_id}"
+                    f"/devices/{device_id}/parasite"
+                )
+                self.mqtt.publish(registry_topic, parent_paths, retain=True)
+                logger.info(f"Published parasite registry for {device_id}: {len(parent_paths)} parent(s)")
+
+    def publish_parasite_fields(self, target_mqtt_path: str, fields: Dict[str, Any]):
+        """
+        Publish additional fields to parent device's state topic.
+
+        This is the primary method parasitic connectors use to extend parent devices.
+        Fields are published as individual MQTT topics under parent's state namespace.
+
+        Args:
+            target_mqtt_path: Base MQTT path of parent device (without /state suffix)
+            fields: Dictionary of field names and values to publish
+
+        Example:
+            self.publish_parasite_fields(
+                "iot2mqtt/v1/instances/cameras_abc/devices/camera_1",
+                {
+                    "motion": True,
+                    "motion_confidence": 0.92,
+                    "motion_last_detected": "2025-10-23T16:00:00Z"
+                }
+            )
+
+            This publishes to:
+                .../cameras_abc/devices/camera_1/state/motion → true
+                .../cameras_abc/devices/camera_1/state/motion_confidence → 0.92
+                .../cameras_abc/devices/camera_1/state/motion_last_detected → "2025-10-23..."
+        """
+        for field_name, field_value in fields.items():
+            field_topic = f"{target_mqtt_path}/state/{field_name}"
+            self.mqtt.publish_to_external_topic(field_topic, field_value, retain=True)
+
+        logger.debug(f"Published {len(fields)} parasite field(s) to {target_mqtt_path}")
+
+    def get_parent_state(self, target_mqtt_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve cached state of parent device.
+
+        Parasitic connectors can use this to access parent device data
+        (IPs, stream URLs, configuration, etc.) for their processing logic.
+
+        Args:
+            target_mqtt_path: Base MQTT path of parent device
+
+        Returns:
+            Parent device state dictionary or None if not available
+
+        Example:
+            parent_state = self.get_parent_state(
+                "iot2mqtt/v1/instances/cameras_abc/devices/camera_1"
+            )
+            if parent_state:
+                stream_url = parent_state.get('stream_urls', {}).get('rtsp')
+                ip_address = parent_state.get('ip')
+        """
+        return self.parent_states.get(target_mqtt_path)
+
     def run_forever(self):
         """Run connector until interrupted"""
         try:
