@@ -72,59 +72,172 @@ class Connector(BaseConnector):
             device_id = target['device_id']
             self.camera_info[device_id] = target
 
+        # Track which cameras have been added to motion detector
+        self.cameras_added = set()  # device_ids that have been successfully added
+
     def initialize_connection(self):
         """
         Initialize motion detection for all parent cameras.
 
-        Called after MQTT connection is established and parent state subscriptions are set up.
+        Note: Cameras may not be added immediately if parent state is not yet available.
+        They will be added automatically when parent state updates arrive via MQTT.
         """
         logger.info("🔧 Initializing camera motion detection...")
 
         # Start motion detector
         self.motion_detector.start()
 
-        # Add each camera stream to motion detector
-        cameras_added = 0
-        cameras_failed = 0
-
+        # Try to add cameras from extracted_data or cached parent state
+        # Don't fail if cameras aren't added - they'll be added on parent state update
         for target in self.parasite_targets:
             device_id = target['device_id']
-            mqtt_path = target['mqtt_path']
+            self._try_add_camera(device_id, target)
 
-            try:
-                # Try to get RTSP URL from extracted_data (from mqtt_device_picker)
-                extracted_data = target.get('extracted_data', {})
-                rtsp_url = extracted_data.get('rtsp')
-                camera_name = extracted_data.get('name', device_id)
+        cameras_count = len(self.cameras_added)
+        logger.info(f"🎬 Motion detection initialized: {cameras_count} camera(s) added immediately")
 
-                # Fallback: try to get from parent state cache
-                if not rtsp_url:
-                    logger.debug(f"No RTSP URL in extracted_data for {device_id}, checking parent state...")
-                    parent_state = self.get_parent_state(mqtt_path)
+        if cameras_count == 0:
+            logger.info("⏳ No cameras added yet - waiting for parent state updates from MQTT...")
 
-                    if parent_state:
-                        stream_urls = parent_state.get('stream_urls', {})
-                        rtsp_url = stream_urls.get('rtsp')
-                        if not camera_name:
-                            camera_name = parent_state.get('name', device_id)
+    def _select_best_stream(self, stream_urls: Dict[str, str],
+                           stream_validation: Dict[str, Any]) -> Optional[tuple]:
+        """
+        Select the best working stream from available options.
 
-                if rtsp_url:
-                    # Add stream to motion detector
-                    self.motion_detector.add_stream(device_id, rtsp_url, camera_name)
-                    cameras_added += 1
-                    logger.info(f"✅ Added camera to motion detection: {camera_name} ({device_id})")
-                else:
-                    cameras_failed += 1
-                    logger.error(f"❌ Cannot start motion detection for {device_id}: No RTSP URL available")
+        Priority order (best to worst):
+        1. mp4/m3u8/flv/ts - Good for FFmpeg, well-supported
+        2. rtsp - If working
+        3. mjpeg - If working
+        4. jpeg - Fallback (snapshot mode, less ideal)
 
-            except Exception as e:
-                cameras_failed += 1
-                logger.error(f"❌ Error initializing motion detection for {device_id}: {e}", exc_info=True)
+        Args:
+            stream_urls: Dictionary of stream URLs {format: url}
+            stream_validation: Dictionary of validation results {format: {status, error, ...}}
 
-        logger.info(f"🎬 Motion detection initialized: {cameras_added} camera(s) active, {cameras_failed} failed")
+        Returns:
+            Tuple of (stream_url, format_name) or None if no working stream found
+        """
+        # Priority order for stream formats
+        stream_priority = ['mp4', 'm3u8', 'flv', 'ts', 'rtsp', 'mjpeg', 'jpeg']
 
-        if cameras_added == 0:
-            logger.warning("⚠️  No cameras successfully added to motion detection!")
+        for format_name in stream_priority:
+            if format_name not in stream_urls:
+                continue
+
+            stream_url = stream_urls[format_name]
+            validation = stream_validation.get(format_name, {})
+            status = validation.get('status', 'unknown')
+
+            # Check if stream is validated as working
+            if status == 'ok':
+                logger.debug(f"Selected {format_name} stream (validated: ok)")
+                return (stream_url, format_name)
+
+        # Fallback: if no validated streams, try any available stream in priority order
+        logger.warning("No validated streams found, trying first available stream")
+        for format_name in stream_priority:
+            if format_name in stream_urls:
+                logger.debug(f"Using unvalidated {format_name} stream as fallback")
+                return (stream_urls[format_name], format_name)
+
+        return None
+
+    def _try_add_camera(self, device_id: str, target: Dict[str, Any]) -> bool:
+        """
+        Try to add camera to motion detector using best available stream.
+
+        Args:
+            device_id: Device identifier
+            target: Parasite target configuration
+
+        Returns:
+            True if camera was added successfully
+        """
+        # Skip if already added
+        if device_id in self.cameras_added:
+            logger.debug(f"Camera {device_id} already added to motion detection")
+            return True
+
+        mqtt_path = target['mqtt_path']
+        extracted_data = target.get('extracted_data', {})
+
+        # Try to get camera info from extracted_data or parent state
+        camera_name = extracted_data.get('name')
+        stream_urls = {}
+        stream_validation = {}
+
+        # First, try parent state (most up-to-date)
+        parent_state = self.get_parent_state(mqtt_path)
+        if parent_state:
+            stream_urls = parent_state.get('stream_urls', {})
+            stream_validation = parent_state.get('stream_validation', {})
+            if not camera_name:
+                camera_name = parent_state.get('name', device_id)
+
+        # Fallback: check extracted_data for individual stream URLs
+        if not stream_urls and extracted_data:
+            # extracted_data might have individual fields like 'rtsp', 'mp4', etc.
+            # Build stream_urls dict from extracted_data
+            for key, value in extracted_data.items():
+                if key in ['rtsp', 'mp4', 'm3u8', 'flv', 'ts', 'mjpeg', 'jpeg'] and value:
+                    stream_urls[key] = value
+
+        if not stream_urls:
+            logger.debug(f"No stream URLs available for {device_id} yet, will try again on parent state update")
+            return False
+
+        # Select best working stream
+        result = self._select_best_stream(stream_urls, stream_validation)
+        if not result:
+            logger.warning(f"No suitable stream found for {device_id}")
+            return False
+
+        stream_url, format_name = result
+
+        try:
+            # Add stream to motion detector
+            self.motion_detector.add_stream(device_id, stream_url, camera_name or device_id)
+            self.cameras_added.add(device_id)
+            logger.info(f"✅ Added camera to motion detection: {camera_name or device_id} ({device_id}) using {format_name} stream")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error adding camera {device_id} to motion detection: {e}", exc_info=True)
+            return False
+
+    def _on_parent_state_update(self, mqtt_path: str, topic: str, payload: Dict[str, Any]):
+        """
+        Override parent state update handler to automatically add cameras when state arrives.
+
+        This solves the timing issue where initialize_connection() runs before parent state
+        is received via MQTT.
+
+        Args:
+            mqtt_path: Base MQTT path of parent device
+            topic: Full MQTT topic
+            payload: State payload from parent device
+        """
+        # Call parent implementation to update cache
+        super()._on_parent_state_update(mqtt_path, topic, payload)
+
+        # Find which device_id this mqtt_path belongs to
+        device_id = None
+        target = None
+        for dev_id, cam_info in self.camera_info.items():
+            if cam_info['mqtt_path'] == mqtt_path:
+                device_id = dev_id
+                target = cam_info
+                break
+
+        if not device_id or not target:
+            logger.debug(f"Received parent state update for unknown mqtt_path: {mqtt_path}")
+            return
+
+        # Try to add camera if not already added
+        if device_id not in self.cameras_added:
+            logger.debug(f"Received parent state update for {device_id}, attempting to add camera...")
+            if self._try_add_camera(device_id, target):
+                logger.info(f"🎥 Camera {device_id} automatically added after receiving parent state")
 
     def cleanup_connection(self):
         """
