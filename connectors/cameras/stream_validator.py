@@ -245,6 +245,7 @@ class StreamValidator:
 
         with self.lock:
             devices_to_remove = []
+            total_streams_removed = 0
 
             for device_id, streams in self.validation_cache.items():
                 streams_to_remove = []
@@ -262,6 +263,8 @@ class StreamValidator:
                 for stream_type in streams_to_remove:
                     del streams[stream_type]
 
+                total_streams_removed += len(streams_to_remove)
+
                 # If no streams left, mark device for removal
                 if not streams:
                     devices_to_remove.append(device_id)
@@ -270,5 +273,5 @@ class StreamValidator:
             for device_id in devices_to_remove:
                 del self.validation_cache[device_id]
 
-            if devices_to_remove or streams_to_remove:
-                logger.debug(f"Cleaned cache: {len(devices_to_remove)} device(s), {len(streams_to_remove)} stream(s)")
+            if devices_to_remove or total_streams_removed:
+                logger.debug(f"Cleaned cache: {len(devices_to_remove)} device(s), {total_streams_removed} stream(s)")
