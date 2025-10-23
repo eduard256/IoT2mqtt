@@ -179,18 +179,32 @@ export function InstanceStep({
 
   // Multi-device support
   const multiDevice = schema?.multi_device
+  console.log('[InstanceStep] Multi-device config:', multiDevice)
+  console.log('[InstanceStep] Collected devices:', collectedDevices)
+  console.log('[InstanceStep] FlowState:', flowState)
+
   const currentDevice = buildCurrentDevice(flowState)
+  console.log('[InstanceStep] Current device from buildCurrentDevice:', currentDevice)
 
   // All devices for display
   const allDevices = [...collectedDevices]
+  console.log('[InstanceStep] allDevices (before current):', allDevices)
+
   const hasCurrentDevice = currentDevice && !isDuplicateDevice(currentDevice, allDevices)
+  console.log('[InstanceStep] hasCurrentDevice:', hasCurrentDevice)
+  console.log('[InstanceStep] currentDevice is duplicate?', currentDevice && isDuplicateDevice(currentDevice, allDevices))
+
   if (hasCurrentDevice) {
     allDevices.push(currentDevice)
+    console.log('[InstanceStep] ✅ Added current device to allDevices')
   }
 
   const maxDevices = multiDevice?.max_devices ?? 100
   const canAddMore = multiDevice?.enabled === true && allDevices.length < maxDevices
   const totalDeviceCount = allDevices.length
+
+  console.log('[InstanceStep] Final allDevices:', allDevices)
+  console.log('[InstanceStep] Total device count:', totalDeviceCount)
 
   return (
     <Card>

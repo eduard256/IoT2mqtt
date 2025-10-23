@@ -14,14 +14,19 @@ export function generateInstanceId(integrationName: string): string {
 }
 
 export function buildCurrentDevice(flowState: any): any | null {
+  console.log('[buildCurrentDevice] Starting device build...')
+  console.log('[buildCurrentDevice] flowState.form:', JSON.stringify(flowState.form, null, 2))
+
   // Try mqtt_device_picker pattern (parasitic connectors like cameras-motion)
   // Check all possible step IDs that might contain mqtt_device_picker field
   for (const stepId of Object.keys(flowState.form)) {
     const stepData = flowState.form[stepId]
+    console.log(`[buildCurrentDevice] Checking stepId: ${stepId}`, stepData)
 
     // Look for any field that has the mqtt_device_picker structure
     for (const fieldName of Object.keys(stepData || {})) {
       const fieldValue = stepData[fieldName]
+      console.log(`[buildCurrentDevice] Checking field: ${fieldName}`, fieldValue)
 
       if (
         fieldValue &&
@@ -30,8 +35,12 @@ export function buildCurrentDevice(flowState: any): any | null {
         fieldValue.device_id &&
         fieldValue.extracted_data
       ) {
+        console.log('[buildCurrentDevice] ✅ Found mqtt_device_picker data!')
+        console.log('[buildCurrentDevice] fieldValue:', fieldValue)
+
         // Found mqtt_device_picker data
         const extracted = fieldValue.extracted_data
+        console.log('[buildCurrentDevice] extracted_data:', extracted)
 
         // Build device object with fallbacks for missing fields
         const device: any = {
@@ -56,10 +65,13 @@ export function buildCurrentDevice(flowState: any): any | null {
           }
         })
 
+        console.log('[buildCurrentDevice] ✅ Built device:', device)
         return device
       }
     }
   }
+
+  console.log('[buildCurrentDevice] No mqtt_device_picker found, trying standard pattern...')
 
   // Try standard pattern (Yeelight, etc)
   const ipForm = flowState.form.ip_form || flowState.form.connection_form
@@ -69,6 +81,7 @@ export function buildCurrentDevice(flowState: any): any | null {
     const deviceName = deviceConfig.friendly_name || deviceConfig.name
     const deviceIp = ipForm.ip || ipForm.host
 
+    console.log('[buildCurrentDevice] ✅ Built device from standard pattern')
     return {
       device_id: normalizeDeviceId(deviceName),
       ip: deviceIp,
@@ -124,6 +137,7 @@ export function buildCurrentDevice(flowState: any): any | null {
     }
   }
 
+  console.log('[buildCurrentDevice] ❌ No device pattern matched, returning null')
   return null
 }
 
