@@ -187,8 +187,9 @@ class Go2RTCConfigGenerator:
         Test if JPEG URL is accessible using curl + ffmpeg
 
         Strategy:
-        1. Fast check with curl (HTTP GET) - timeout 3s
-        2. If curl succeeds, verify with ffmpeg - timeout 3s
+        1. Try HTTP HEAD request first (faster, less bandwidth)
+        2. If HEAD fails, try HTTP GET request (some cameras don't support HEAD)
+        3. If either curl method succeeds, verify with ffmpeg
 
         Args:
             url: Full JPEG URL to test
@@ -198,15 +199,24 @@ class Go2RTCConfigGenerator:
             True if URL is accessible and valid, False otherwise
         """
         try:
-            # Step 1: Quick HTTP check with curl
-            curl_result = subprocess.run(
+            # Step 1a: Quick HTTP HEAD check with curl
+            curl_head_result = subprocess.run(
                 ['curl', '-s', '-f', '-m', str(timeout), '--output', '/dev/null', '--head', url],
                 capture_output=True,
                 timeout=timeout + 1
             )
 
-            if curl_result.returncode != 0:
-                return False
+            # Step 1b: If HEAD failed, try GET request
+            if curl_head_result.returncode != 0:
+                curl_get_result = subprocess.run(
+                    ['curl', '-s', '-f', '-m', str(timeout), '--output', '/dev/null', url],
+                    capture_output=True,
+                    timeout=timeout + 1
+                )
+
+                # If both HEAD and GET failed, URL is not accessible
+                if curl_get_result.returncode != 0:
+                    return False
 
             # Step 2: Verify with ffmpeg (can actually read the image)
             ffmpeg_result = subprocess.run(
