@@ -2,7 +2,7 @@
 # Minimal dependencies for FFmpeg-based motion detection
 
 # MQTT client (inherited from shared/)
-# paho-mqtt==1.6.1  # Provided by base image
+paho-mqtt>=1.6.1
 
 # No additional dependencies required
 # FFmpeg is installed via apt-get in Dockerfile
