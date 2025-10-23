@@ -279,6 +279,7 @@ class MotionDetector:
         ]
 
         logger.info(f"Starting FFmpeg for {device_id} with sensitivity={sensitivity}")
+        logger.info(f"FFmpeg command: {' '.join(cmd[:5])}... (stream URL hidden)")
 
         try:
             proc = subprocess.Popen(
@@ -291,15 +292,23 @@ class MotionDetector:
             with self.lock:
                 self.processes[device_id] = proc
 
+            logger.info(f"FFmpeg process started for {device_id}, PID={proc.pid}")
+
             # Read stderr for motion detection output
             last_motion_time = None
             motion_timeout = 5.0  # Consider motion stopped after 5s without detection
+            line_count = 0
+            last_log_time = time.time()
 
             while self.running and device_id in self.enabled_streams:
                 try:
                     # Check if process is still running
                     if proc.poll() is not None:
-                        logger.warning(f"FFmpeg process died for {device_id}, restarting...")
+                        returncode = proc.returncode
+                        stderr_output = proc.stderr.read() if proc.stderr else ""
+                        logger.error(f"FFmpeg process died for {device_id}, exit code={returncode}")
+                        if stderr_output:
+                            logger.error(f"FFmpeg stderr: {stderr_output[:500]}")
                         with self.lock:
                             self.motion_states[device_id]['error_count'] += 1
                         time.sleep(5)  # Wait before restart
@@ -311,6 +320,18 @@ class MotionDetector:
                     if not line:
                         time.sleep(0.1)
                         continue
+
+                    line_count += 1
+
+                    # Log FFmpeg activity every 30 seconds to show it's working
+                    current_time = time.time()
+                    if current_time - last_log_time > 30:
+                        logger.info(f"FFmpeg for {device_id} is running: {line_count} lines processed, motion={'DETECTED' if self.motion_states[device_id]['detected'] else 'none'}")
+                        last_log_time = current_time
+
+                    # Log all FFmpeg output for debugging (can be noisy)
+                    if 'error' in line.lower() or 'warning' in line.lower():
+                        logger.warning(f"FFmpeg {device_id}: {line.strip()}")
 
                     # Parse FFmpeg output for scene changes
                     if 'scene:' in line.lower() or 'pts_time:' in line.lower():
@@ -324,18 +345,21 @@ class MotionDetector:
                             self.motion_states[device_id]['last_detected'] = now.isoformat() + 'Z'
                             self.motion_states[device_id]['frame_count'] += 1
 
-                        logger.debug(f"Motion detected: {device_id}")
+                        logger.info(f"🎯 Motion detected: {device_id} (frame #{self.motion_states[device_id]['frame_count']})")
 
                     # Check if motion should timeout
                     if last_motion_time:
                         time_since_motion = (datetime.now() - last_motion_time).total_seconds()
                         if time_since_motion > motion_timeout:
                             with self.lock:
+                                was_detected = self.motion_states[device_id]['detected']
                                 self.motion_states[device_id]['detected'] = False
                                 self.motion_states[device_id]['confidence'] = 0.0
+                            if was_detected:
+                                logger.info(f"Motion stopped for {device_id} (timeout after {motion_timeout}s)")
 
                 except Exception as e:
-                    logger.error(f"Error processing FFmpeg output for {device_id}: {e}")
+                    logger.error(f"Error processing FFmpeg output for {device_id}: {e}", exc_info=True)
                     with self.lock:
                         self.motion_states[device_id]['error_count'] += 1
                     time.sleep(1)

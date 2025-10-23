@@ -286,7 +286,11 @@ class Connector(BaseConnector):
                 # Publish to parent device
                 self.publish_parasite_fields(mqtt_path, motion_fields)
 
-                logger.debug(f"Published motion fields to parent {mqtt_path}: motion={motion_fields['motion']}")
+                # Log when motion state changes or periodically
+                if motion_fields['motion']:
+                    logger.info(f"📢 Publishing MOTION DETECTED to {mqtt_path}: confidence={motion_fields['motion_confidence']:.2f}")
+                else:
+                    logger.debug(f"Published motion fields to parent {mqtt_path}: motion={motion_fields['motion']}")
 
             return own_state
 
