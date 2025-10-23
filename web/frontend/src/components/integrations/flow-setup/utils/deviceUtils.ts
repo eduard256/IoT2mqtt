@@ -14,6 +14,40 @@ export function generateInstanceId(integrationName: string): string {
 }
 
 export function buildCurrentDevice(flowState: any): any | null {
+  // Try mqtt_device_picker pattern (parasitic connectors like cameras-motion)
+  // Check all possible step IDs that might contain mqtt_device_picker field
+  for (const stepId of Object.keys(flowState.form)) {
+    const stepData = flowState.form[stepId]
+
+    // Look for any field that has the mqtt_device_picker structure
+    for (const fieldName of Object.keys(stepData || {})) {
+      const fieldValue = stepData[fieldName]
+
+      if (
+        fieldValue &&
+        typeof fieldValue === 'object' &&
+        fieldValue.mqtt_path &&
+        fieldValue.device_id &&
+        fieldValue.extracted_data
+      ) {
+        // Found mqtt_device_picker data
+        const extracted = fieldValue.extracted_data
+
+        return {
+          device_id: fieldValue.device_id,
+          mqtt_path: fieldValue.mqtt_path,
+          instance_id: fieldValue.instance_id,
+          ip: extracted.ip,
+          port: extracted.port || 554,
+          name: extracted.name || fieldValue.device_id,
+          enabled: true,
+          // Include all extracted fields for parasitic connectors
+          ...extracted
+        }
+      }
+    }
+  }
+
   // Try standard pattern (Yeelight, etc)
   const ipForm = flowState.form.ip_form || flowState.form.connection_form
   const deviceConfig = flowState.form.device_config || flowState.form.device_form
