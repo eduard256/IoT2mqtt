@@ -153,5 +153,5 @@ function parseIpFromAddress(address: string): string {
 }
 
 export function isDuplicateDevice(device: any, devices: any[]): boolean {
-  return devices.some(d => d.ip === device.ip || d.device_id === device.device_id)
+  return devices.some(d => d.device_id === device.device_id)
 }
