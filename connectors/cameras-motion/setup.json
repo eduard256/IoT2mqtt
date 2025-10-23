@@ -1,0 +1,167 @@
+{
+  "version": "1.0.0",
+  "display_name": "Camera Motion Detection",
+  "description": "Add FFmpeg-based motion detection to your cameras. Parasitic connector that extends camera devices without modification.",
+  "author": "IoT2MQTT",
+  "branding": {
+    "icon": "🎬",
+    "color": "#FF6B6B",
+    "category": "security"
+  },
+  "multi_device": {
+    "enabled": true,
+    "max_devices": 100,
+    "device_label": "Camera",
+    "add_button_label": "Add Another Camera",
+    "loop_from_step": "select_camera",
+    "loop_to_step": "select_camera"
+  },
+  "requirements": {
+    "network": "host",
+    "python": "3.11",
+    "libraries": ["ffmpeg"]
+  },
+  "flows": [
+    {
+      "id": "main",
+      "name": "Add Motion Detection",
+      "description": "Select cameras to monitor for motion",
+      "default": true,
+      "steps": [
+        {
+          "id": "intro",
+          "type": "message",
+          "title": "Camera Motion Detection",
+          "message": "This parasitic connector adds motion detection to your cameras using FFmpeg.\n\n**Features:**\n- Fast, CPU-efficient motion detection\n- Real-time sensitivity adjustment\n- Independent control per camera\n- Supports up to 100 cameras\n\n**How it works:**\n1. Select cameras to monitor\n2. Configure motion detection settings\n3. Motion events are published to parent camera MQTT topics\n\nClick **Next** to begin."
+        },
+        {
+          "id": "select_camera",
+          "type": "form",
+          "title": "Select Camera",
+          "description": "Choose a camera to add motion detection",
+          "schema": {
+            "fields": [
+              {
+                "type": "mqtt_device_picker",
+                "name": "camera_device",
+                "label": "Camera",
+                "description": "Search by camera name, IP address, or brand",
+                "required": true,
+                "config": {
+                  "connector_type": "cameras",
+                  "extract_fields": [
+                    "ip",
+                    "stream_urls.rtsp",
+                    "name",
+                    "brand",
+                    "model"
+                  ],
+                  "save_mode": "extracted_fields",
+                  "show_preview": true,
+                  "preview_field": "stream_urls.jpeg",
+                  "card_title_field": "name",
+                  "card_subtitle_field": "brand",
+                  "online_field": "online",
+                  "items_per_page": 12,
+                  "grid_columns": 4,
+                  "searchable_fields": [
+                    "name",
+                    "device_id",
+                    "ip",
+                    "brand",
+                    "model"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "motion_settings",
+          "type": "form",
+          "title": "Motion Detection Settings",
+          "description": "Configure motion detection parameters for {{ form.select_camera.camera_device.extracted_data.name }}",
+          "schema": {
+            "fields": [
+              {
+                "type": "number",
+                "name": "sensitivity",
+                "label": "Sensitivity",
+                "description": "Motion detection sensitivity (0.1 = very sensitive, 1.0 = less sensitive). Lower values detect smaller movements.",
+                "default": 0.7,
+                "min": 0.1,
+                "max": 1.0,
+                "step": 0.1,
+                "required": true
+              },
+              {
+                "type": "number",
+                "name": "check_interval",
+                "label": "Check Interval (seconds)",
+                "description": "How often to analyze frames for motion. Lower = more responsive, higher = less CPU usage.",
+                "default": 1.0,
+                "min": 0.5,
+                "max": 5.0,
+                "step": 0.5,
+                "advanced": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "general_settings",
+          "type": "form",
+          "title": "General Settings",
+          "description": "Configure instance settings (applies to all cameras)",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "friendly_name",
+                "label": "Instance Name",
+                "description": "Friendly name for this motion detection instance",
+                "placeholder": "Camera Motion Detection",
+                "default": "Camera Motion Detection",
+                "required": true
+              },
+              {
+                "type": "number",
+                "name": "update_interval",
+                "label": "Update Interval (seconds)",
+                "description": "How often to publish motion state to MQTT",
+                "default": 2,
+                "min": 1,
+                "max": 30,
+                "advanced": true
+              },
+              {
+                "type": "checkbox",
+                "name": "ha_discovery_enabled",
+                "label": "Enable Home Assistant Discovery",
+                "description": "Automatically publish device information to Home Assistant via MQTT Discovery",
+                "default": true,
+                "advanced": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "create_instance",
+          "type": "instance",
+          "instance": {
+            "friendly_name": "{{ form.general_settings.friendly_name }}",
+            "connector_type": "cameras-motion",
+            "update_interval": "{{ form.general_settings.update_interval }}",
+            "ha_discovery_enabled": "{{ form.general_settings.ha_discovery_enabled }}",
+            "config": {
+              "parasite_targets": [],
+              "sensitivity": "{{ form.motion_settings.sensitivity }}",
+              "check_interval": "{{ form.motion_settings.check_interval }}"
+            },
+            "devices": []
+          }
+        }
+      ]
+    }
+  ]
+}
