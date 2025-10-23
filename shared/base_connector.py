@@ -752,6 +752,14 @@ class BaseConnector(ABC):
         """
         for target in self.parasite_targets:
             mqtt_path = target['mqtt_path']
+
+            # Normalize mqtt_path: remove /state suffix if present (mqtt_device_picker includes it)
+            # mqtt_path should be base path without /state for consistency
+            if mqtt_path.endswith('/state'):
+                mqtt_path = mqtt_path[:-6]  # Remove '/state'
+                # Update target for consistency
+                target['mqtt_path'] = mqtt_path
+
             state_topic = f"{mqtt_path}/state"
 
             logger.info(f"Subscribing to parent device: {state_topic}")
