@@ -11,6 +11,36 @@ from typing import Any, Dict
 from urllib.parse import urlparse
 
 
+def parse_frame_rate(rate_str: str) -> float:
+    """
+    Безопасный парсинг r_frame_rate из ffprobe
+
+    Форматы: "30/1", "25/1", "30000/1001"
+    Возвращает: 30.0, 25.0, 29.97
+    """
+    try:
+        if not rate_str or not isinstance(rate_str, str):
+            return 0.0
+
+        # Если нет дроби, пробуем прямую конвертацию
+        if "/" not in rate_str:
+            return float(rate_str)
+
+        # Парсим дробь
+        parts = rate_str.split("/", 1)  # Только первый разделитель
+        numerator = int(parts[0])
+        denominator = int(parts[1])
+
+        if denominator == 0:
+            return 0.0
+
+        return round(numerator / denominator, 2)
+
+    except (ValueError, IndexError, AttributeError):
+        # Любая ошибка парсинга - возвращаем 0
+        return 0.0
+
+
 def load_payload() -> Dict[str, Any]:
     """Load input payload from stdin"""
     raw = sys.stdin.read().strip() or "{}"
@@ -95,7 +125,7 @@ def validate_rtsp_stream(url: str, timeout: int = 10) -> Dict[str, Any]:
                 "stream_type": "RTSP",
                 "video_codec": video_stream.get("codec_name", "unknown"),
                 "resolution": f"{video_stream.get('width', 0)}x{video_stream.get('height', 0)}",
-                "fps": eval(video_stream.get("r_frame_rate", "0/1").split("/")[0]) if "/" in video_stream.get("r_frame_rate", "") else 0,
+                "fps": parse_frame_rate(video_stream.get("r_frame_rate", "0/1")),
                 "has_audio": len(audio_streams) > 0,
                 "audio_codec": audio_streams[0].get("codec_name") if audio_streams else None,
                 "duration": stream_info.get("format", {}).get("duration"),
