@@ -16,14 +16,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from models.schemas import ContainerInfo, ContainerLogs
 from services.docker_service import DockerService
+from services.jwt_config import get_jwt_secret, ALGORITHM
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Docker"])
 
 # JWT Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
+SECRET_KEY = get_jwt_secret()
 
 # Services
 docker_service = DockerService()

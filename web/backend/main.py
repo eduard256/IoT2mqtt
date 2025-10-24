@@ -29,6 +29,7 @@ from services.docker_service import DockerService
 from services.mqtt_service import MQTTService
 from api import auth, mqtt, connectors, instances, devices, docker, discovery, integrations, tools, oauth, cameras, mqtt_discovery
 from services.secrets_manager import SecretsManager
+from services.jwt_config import get_jwt_secret, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 import logging
 logging.basicConfig(
@@ -40,9 +41,7 @@ logging.getLogger().setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # JWT Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+SECRET_KEY = get_jwt_secret()
 
 # Services
 config_service = ConfigService()

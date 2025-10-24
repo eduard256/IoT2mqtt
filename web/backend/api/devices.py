@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from services.config_service import ConfigService
 from services.docker_service import DockerService
+from services.jwt_config import get_jwt_secret, ALGORITHM
 
 router = APIRouter(prefix="/api/devices", tags=["Devices"])
 
@@ -25,9 +26,8 @@ docker_service = DockerService()
 logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
-# JWT Configuration (keep in sync with main)
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
+# JWT Configuration
+SECRET_KEY = get_jwt_secret()
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):

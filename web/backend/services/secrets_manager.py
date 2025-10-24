@@ -17,17 +17,18 @@ logger = logging.getLogger(__name__)
 
 class SecretsManager:
     """Manages encryption and storage of sensitive credentials"""
-    
+
     def __init__(self, secrets_path: Optional[str] = None):
         raw_path = secrets_path or os.getenv("IOT2MQTT_SECRETS_PATH") or "/app/secrets"
         self.secrets_path = Path(raw_path)
         self.instances_path = self.secrets_path / "instances"
         self.master_key_path = self.secrets_path / ".master.key"
-        
+        self.jwt_secret_path = self.secrets_path / ".jwt_secret"
+
         # Create directories if they don't exist
         self.secrets_path.mkdir(parents=True, exist_ok=True)
         self.instances_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize encryption
         self.cipher = self._initialize_cipher()
     
@@ -264,7 +265,45 @@ class SecretsManager:
             
             logger.info("Successfully rotated master encryption key")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to rotate master key: {e}")
             return False
+
+    def get_or_create_jwt_secret(self) -> str:
+        """
+        Get or create JWT secret key for authentication
+
+        Returns:
+            Cryptographically secure JWT secret key
+        """
+        if self.jwt_secret_path.exists():
+            # Load existing JWT secret
+            try:
+                with open(self.jwt_secret_path, 'r') as f:
+                    secret = f.read().strip()
+                logger.debug("Loaded existing JWT secret")
+                return secret
+            except Exception as e:
+                logger.error(f"Failed to load JWT secret: {e}")
+                raise
+
+        # Generate new cryptographically secure secret
+        # 32 bytes = 256 bits of entropy
+        secret_bytes = os.urandom(32)
+        secret = base64.urlsafe_b64encode(secret_bytes).decode('utf-8')
+
+        try:
+            # Save to file
+            with open(self.jwt_secret_path, 'w') as f:
+                f.write(secret)
+
+            # Set restrictive permissions (read-only for owner)
+            os.chmod(self.jwt_secret_path, 0o400)
+
+            logger.info("Generated new JWT secret key")
+            return secret
+
+        except Exception as e:
+            logger.error(f"Failed to save JWT secret: {e}")
+            raise
