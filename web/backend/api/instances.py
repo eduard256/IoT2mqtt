@@ -16,7 +16,7 @@ from services.port_manager import PortManager
 # from services.mqtt_service import MQTTService  # Will be used in future
 from models.schemas import InstanceConfig
 
-logger = logging.getLogger(__name__)  
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Instances"])
 
@@ -27,6 +27,48 @@ port_manager = PortManager(config_service.instances_path)
 
 # WebSocket connections for logs
 log_connections: Dict[str, List[WebSocket]] = {}
+
+# Default healthcheck values
+HEALTHCHECK_DEFAULTS = {
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3,
+    "start_period": 10
+}
+
+
+def build_healthcheck_config(setup: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Build docker-compose healthcheck configuration from setup.json
+
+    Args:
+        setup: Connector setup.json content
+
+    Returns:
+        Docker-compose healthcheck dict or None if no healthcheck defined
+    """
+    if not setup or "healthcheck" not in setup:
+        return None
+
+    healthcheck = setup["healthcheck"]
+
+    # Apply defaults for missing values
+    healthcheck_config = {
+        "interval": healthcheck.get("interval", HEALTHCHECK_DEFAULTS["interval"]),
+        "timeout": healthcheck.get("timeout", HEALTHCHECK_DEFAULTS["timeout"]),
+        "retries": healthcheck.get("retries", HEALTHCHECK_DEFAULTS["retries"]),
+        "start_period": healthcheck.get("start_period", HEALTHCHECK_DEFAULTS["start_period"])
+    }
+
+    # Build test command - always use universal healthcheck.py script
+    healthcheck_config["test"] = ["CMD", "python3", "/app/shared/healthcheck.py"]
+
+    # Convert numeric values to strings with time units for docker-compose
+    healthcheck_config["interval"] = f"{healthcheck_config['interval']}s"
+    healthcheck_config["timeout"] = f"{healthcheck_config['timeout']}s"
+    healthcheck_config["start_period"] = f"{healthcheck_config['start_period']}s"
+
+    return healthcheck_config
 
 
 class CreateInstanceRequest(BaseModel):
@@ -286,7 +328,14 @@ async def create_instance(request: CreateInstanceRequest, background_tasks: Back
             compose_data["services"][service_name]["network_mode"] = "host"
             # Remove networks if using host mode
             compose_data["services"][service_name].pop("networks", None)
-        
+
+        # Add healthcheck configuration from setup.json
+        if setup:
+            healthcheck_config = build_healthcheck_config(setup)
+            if healthcheck_config:
+                compose_data["services"][service_name]["healthcheck"] = healthcheck_config
+                logger.info(f"Added healthcheck configuration for {service_name}")
+
         # Save docker-compose
         config_service.save_docker_compose(compose_data)
         

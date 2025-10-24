@@ -27,6 +27,15 @@
     "go2rtc_webrtc",
     "go2rtc_homekit"
   ],
+  "healthcheck": {
+    "type": "http",
+    "port_variable": "go2rtc_api",
+    "path": "/api",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3,
+    "start_period": 10
+  },
   "tools": {
     "validate_stream": {
       "entry": "actions/validate_stream.py",

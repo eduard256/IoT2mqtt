@@ -35,6 +35,13 @@
             "yeelight"
         ]
     },
+    "healthcheck": {
+        "type": "python",
+        "interval": 30,
+        "timeout": 3,
+        "retries": 3,
+        "start_period": 5
+    },
     "tools": {
         "discover_devices": {
             "entry": "actions/discover.py",

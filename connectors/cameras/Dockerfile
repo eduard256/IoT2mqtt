@@ -106,9 +106,8 @@ ENV LOG_LEVEL=INFO
 # Docker networking isolates each container instance.
 EXPOSE 1984 8554 8555
 
-# Health check - verify go2rtc and connector are running
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:1984/api || exit 1
+# HEALTHCHECK is configured dynamically via docker-compose.yml based on setup.json
+# This allows for flexible port configuration and connector-specific health checks
 
 # ENTRYPOINT: Generate config → Start supervisord
 # 1. generate_go2rtc_config.py creates /app/go2rtc.yaml from instance config
