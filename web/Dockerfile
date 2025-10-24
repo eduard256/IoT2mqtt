@@ -84,7 +84,8 @@ RUN set -e; \
         if apt-get update && apt-get install -y \
             gcc \
             curl \
-            ffmpeg; then \
+            ffmpeg \
+            xz-utils; then \
             break; \
         fi; \
         if [ $i -eq $RETRIES ]; then \
