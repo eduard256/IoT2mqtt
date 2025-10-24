@@ -1,0 +1,2 @@
+aiohomekit==3.2.20
+zeroconf>=0.132.0
