@@ -123,21 +123,39 @@ RUN set -e; \
         if [ "$ARCH" = "x86_64" ]; then ARCH="x64"; fi; \
         if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi; \
         \
-        NODE_URLS=( \
-            "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" \
-            "https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" \
-            "https://npmmirror.com/mirrors/node/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" \
-        ); \
+        # Try nodejs.org
+        echo "Trying: https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz"; \
+        if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT \
+            -o /tmp/node.tar.xz \
+            "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" 2>/dev/null; then \
+            tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1; \
+            rm -f /tmp/node.tar.xz; \
+            INSTALLED=true; \
+        fi; \
         \
-        for url in "${NODE_URLS[@]}"; do \
-            echo "Trying: $url"; \
-            if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT -o /tmp/node.tar.xz "$url" 2>/dev/null; then \
+        # Try tuna mirror
+        if [ "$INSTALLED" = "false" ]; then \
+            echo "Trying: https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz"; \
+            if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT \
+                -o /tmp/node.tar.xz \
+                "https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" 2>/dev/null; then \
                 tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1; \
                 rm -f /tmp/node.tar.xz; \
                 INSTALLED=true; \
-                break; \
             fi; \
-        done; \
+        fi; \
+        \
+        # Try npmmirror
+        if [ "$INSTALLED" = "false" ]; then \
+            echo "Trying: https://npmmirror.com/mirrors/node/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz"; \
+            if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT \
+                -o /tmp/node.tar.xz \
+                "https://npmmirror.com/mirrors/node/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" 2>/dev/null; then \
+                tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1; \
+                rm -f /tmp/node.tar.xz; \
+                INSTALLED=true; \
+            fi; \
+        fi; \
     fi; \
     \
     # Verify installation

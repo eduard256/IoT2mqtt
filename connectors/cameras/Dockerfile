@@ -30,22 +30,41 @@ RUN set -e; \
 # Download go2rtc binary with fallback sources
 RUN set -e; \
     TIMEOUT=60; \
-    GO2RTC_URLS=( \
-        "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" \
-        "https://ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" \
-        "https://mirror.ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" \
-    ); \
-    \
     DOWNLOADED=false; \
-    for url in "${GO2RTC_URLS[@]}"; do \
-        echo "Trying to download go2rtc from: $url"; \
-        if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT -o /usr/local/bin/go2rtc "$url" 2>/dev/null || \
-           wget --timeout=$TIMEOUT -O /usr/local/bin/go2rtc "$url" 2>/dev/null; then \
+    \
+    # Try GitHub directly
+    echo "Trying to download go2rtc from: https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64"; \
+    if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT \
+        -o /usr/local/bin/go2rtc \
+        "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" 2>/dev/null || \
+       wget --timeout=$TIMEOUT -O /usr/local/bin/go2rtc \
+        "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" 2>/dev/null; then \
+        DOWNLOADED=true; \
+    fi; \
+    \
+    # Try ghproxy mirror
+    if [ "$DOWNLOADED" = "false" ]; then \
+        echo "Failed. Trying: https://ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64"; \
+        if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT \
+            -o /usr/local/bin/go2rtc \
+            "https://ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" 2>/dev/null || \
+           wget --timeout=$TIMEOUT -O /usr/local/bin/go2rtc \
+            "https://ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" 2>/dev/null; then \
             DOWNLOADED=true; \
-            break; \
         fi; \
-        echo "Failed to download from: $url"; \
-    done; \
+    fi; \
+    \
+    # Try mirror.ghproxy
+    if [ "$DOWNLOADED" = "false" ]; then \
+        echo "Failed. Trying: https://mirror.ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64"; \
+        if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT \
+            -o /usr/local/bin/go2rtc \
+            "https://mirror.ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" 2>/dev/null || \
+           wget --timeout=$TIMEOUT -O /usr/local/bin/go2rtc \
+            "https://mirror.ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" 2>/dev/null; then \
+            DOWNLOADED=true; \
+        fi; \
+    fi; \
     \
     if [ "$DOWNLOADED" = "false" ]; then \
         echo "ERROR: Failed to download go2rtc from all sources"; \
