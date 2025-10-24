@@ -7,23 +7,69 @@ ARG GO2RTC_VERSION=1.9.4
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    wget \
-    supervisor \
-    curl \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies with retry
+RUN set -e; \
+    RETRIES=3; \
+    for i in $(seq 1 $RETRIES); do \
+        echo "apt-get attempt $i/$RETRIES"; \
+        if apt-get update && apt-get install -y \
+            wget \
+            supervisor \
+            curl \
+            ffmpeg; then \
+            break; \
+        fi; \
+        if [ $i -eq $RETRIES ]; then \
+            echo "ERROR: apt-get failed after $RETRIES attempts"; \
+            exit 1; \
+        fi; \
+        sleep 5; \
+    done && \
+    rm -rf /var/lib/apt/lists/*
 
-# Download go2rtc binary (specific version for deterministic builds)
-RUN wget -O /usr/local/bin/go2rtc \
-    https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64 \
-    && chmod +x /usr/local/bin/go2rtc \
-    && /usr/local/bin/go2rtc --version || echo "go2rtc version check skipped"
+# Download go2rtc binary with fallback sources
+RUN set -e; \
+    TIMEOUT=60; \
+    GO2RTC_URLS=( \
+        "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" \
+        "https://ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" \
+        "https://mirror.ghproxy.com/https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_amd64" \
+    ); \
+    \
+    DOWNLOADED=false; \
+    for url in "${GO2RTC_URLS[@]}"; do \
+        echo "Trying to download go2rtc from: $url"; \
+        if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT -o /usr/local/bin/go2rtc "$url" 2>/dev/null || \
+           wget --timeout=$TIMEOUT -O /usr/local/bin/go2rtc "$url" 2>/dev/null; then \
+            DOWNLOADED=true; \
+            break; \
+        fi; \
+        echo "Failed to download from: $url"; \
+    done; \
+    \
+    if [ "$DOWNLOADED" = "false" ]; then \
+        echo "ERROR: Failed to download go2rtc from all sources"; \
+        exit 1; \
+    fi; \
+    \
+    chmod +x /usr/local/bin/go2rtc && \
+    /usr/local/bin/go2rtc --version || echo "go2rtc version check skipped"
 
-# Copy requirements and install Python dependencies
+# Copy requirements and install Python dependencies with retry
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN set -e; \
+    RETRIES=3; \
+    for i in $(seq 1 $RETRIES); do \
+        echo "pip install attempt $i/$RETRIES"; \
+        if pip install --no-cache-dir -r requirements.txt; then \
+            break; \
+        fi; \
+        if [ $i -eq $RETRIES ]; then \
+            echo "ERROR: pip install failed after $RETRIES attempts"; \
+            exit 1; \
+        fi; \
+        sleep 5; \
+    done
 
 # Copy connector code
 COPY generate_go2rtc_config.py connector.py stream_validator.py supervisord.conf ./

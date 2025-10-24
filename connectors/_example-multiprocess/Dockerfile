@@ -6,12 +6,24 @@ FROM python:3.11-slim
 # - supervisor: Process manager for coordinating multiple services
 # - curl: For health checks and testing
 # - nodejs/npm: For the HTTP poller service
-RUN apt-get update && apt-get install -y \
-    supervisor \
-    curl \
-    nodejs \
-    npm \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -e; \
+    RETRIES=3; \
+    for i in $(seq 1 $RETRIES); do \
+        echo "apt-get attempt $i/$RETRIES"; \
+        if apt-get update && apt-get install -y \
+            supervisor \
+            curl \
+            nodejs \
+            npm; then \
+            break; \
+        fi; \
+        if [ $i -eq $RETRIES ]; then \
+            echo "ERROR: apt-get failed after $RETRIES attempts"; \
+            exit 1; \
+        fi; \
+        sleep 5; \
+    done && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -21,10 +33,22 @@ COPY requirements.txt /app/
 COPY services/serial-handler/requirements.txt /app/services/serial-handler/
 COPY services/state-aggregator/requirements.txt /app/services/state-aggregator/
 
-# Install all Python packages in one layer
-RUN pip install --no-cache-dir -r /app/requirements.txt && \
-    pip install --no-cache-dir -r /app/services/serial-handler/requirements.txt && \
-    pip install --no-cache-dir -r /app/services/state-aggregator/requirements.txt
+# Install all Python packages in one layer with retry
+RUN set -e; \
+    RETRIES=3; \
+    for i in $(seq 1 $RETRIES); do \
+        echo "pip install attempt $i/$RETRIES"; \
+        if pip install --no-cache-dir -r /app/requirements.txt && \
+           pip install --no-cache-dir -r /app/services/serial-handler/requirements.txt && \
+           pip install --no-cache-dir -r /app/services/state-aggregator/requirements.txt; then \
+            break; \
+        fi; \
+        if [ $i -eq $RETRIES ]; then \
+            echo "ERROR: pip install failed after $RETRIES attempts"; \
+            exit 1; \
+        fi; \
+        sleep 5; \
+    done
 
 # Install Node.js dependencies
 # Copy package files first for better caching

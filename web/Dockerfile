@@ -76,21 +76,94 @@ FROM python:3.11-slim AS backend
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    curl \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Node.js for serving static files (optional)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
+# Install system dependencies with retry
+RUN set -e; \
+    RETRIES=3; \
+    for i in $(seq 1 $RETRIES); do \
+        echo "apt-get attempt $i/$RETRIES"; \
+        if apt-get update && apt-get install -y \
+            gcc \
+            curl \
+            ffmpeg; then \
+            break; \
+        fi; \
+        if [ $i -eq $RETRIES ]; then \
+            echo "ERROR: apt-get failed after $RETRIES attempts"; \
+            exit 1; \
+        fi; \
+        sleep 5; \
+    done && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy backend requirements and install
+# Install Node.js with fallback sources
+RUN set -e; \
+    TIMEOUT=60; \
+    INSTALLED=false; \
+    \
+    # Method 1: NodeSource repository (preferred)
+    echo "Trying NodeSource repository..."; \
+    if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT https://deb.nodesource.com/setup_20.x 2>/dev/null | bash - && \
+       apt-get install -y nodejs 2>/dev/null; then \
+        INSTALLED=true; \
+    fi; \
+    \
+    # Method 2: Debian default repository
+    if [ "$INSTALLED" = "false" ]; then \
+        echo "NodeSource failed, trying Debian repository..."; \
+        if apt-get update && apt-get install -y nodejs npm 2>/dev/null; then \
+            INSTALLED=true; \
+        fi; \
+    fi; \
+    \
+    # Method 3: Direct binary download from nodejs.org
+    if [ "$INSTALLED" = "false" ]; then \
+        echo "Debian repository failed, trying direct download..."; \
+        NODE_VERSION="20.19.0"; \
+        ARCH=$(uname -m); \
+        if [ "$ARCH" = "x86_64" ]; then ARCH="x64"; fi; \
+        if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi; \
+        \
+        NODE_URLS=( \
+            "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" \
+            "https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" \
+            "https://npmmirror.com/mirrors/node/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" \
+        ); \
+        \
+        for url in "${NODE_URLS[@]}"; do \
+            echo "Trying: $url"; \
+            if curl -fsSL --connect-timeout $TIMEOUT --max-time $TIMEOUT -o /tmp/node.tar.xz "$url" 2>/dev/null; then \
+                tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1; \
+                rm -f /tmp/node.tar.xz; \
+                INSTALLED=true; \
+                break; \
+            fi; \
+        done; \
+    fi; \
+    \
+    # Verify installation
+    if [ "$INSTALLED" = "false" ]; then \
+        echo "ERROR: All Node.js installation methods failed"; \
+        exit 1; \
+    fi; \
+    \
+    node --version && npm --version; \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy backend requirements and install with retry
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN set -e; \
+    RETRIES=3; \
+    for i in $(seq 1 $RETRIES); do \
+        echo "pip install attempt $i/$RETRIES"; \
+        if pip install --no-cache-dir -r requirements.txt; then \
+            break; \
+        fi; \
+        if [ $i -eq $RETRIES ]; then \
+            echo "ERROR: pip install failed after $RETRIES attempts"; \
+            exit 1; \
+        fi; \
+        sleep 5; \
+    done
 
 # Copy backend code
 COPY backend/ ./backend/

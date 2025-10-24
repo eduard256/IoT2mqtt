@@ -132,6 +132,70 @@ get_lan_ip() {
 }
 
 # ============================================================================
+# Download with Retry & Fallback
+# ============================================================================
+
+download_with_retry() {
+  local desc="$1"
+  shift
+  local urls=("$@")
+  local timeout=60
+
+  for url in "${urls[@]}"; do
+    log "Trying: $url"
+    if curl -fsSL --connect-timeout "$timeout" --max-time "$timeout" "$url" 2>>"$LOG_FILE"; then
+      return 0
+    fi
+    warning "Failed to download from: $url"
+  done
+
+  error "All download attempts failed for: $desc"
+  return 1
+}
+
+download_file_with_retry() {
+  local desc="$1"
+  local output="$2"
+  shift 2
+  local urls=("$@")
+  local timeout=60
+
+  for url in "${urls[@]}"; do
+    log "Trying: $url"
+    if curl -fsSL --connect-timeout "$timeout" --max-time "$timeout" -o "$output" "$url" 2>>"$LOG_FILE"; then
+      success "Downloaded successfully"
+      return 0
+    fi
+    warning "Failed to download from: $url"
+    rm -f "$output" 2>/dev/null || true
+  done
+
+  error "All download attempts failed for: $desc"
+  return 1
+}
+
+git_clone_with_retry() {
+  local desc="$1"
+  local branch="$2"
+  local dest="$3"
+  shift 3
+  local repos=("$@")
+
+  for repo in "${repos[@]}"; do
+    log "Trying to clone from: $repo"
+    if $SUDO git clone --depth 1 --branch "$branch" "$repo" "$dest" >>"$LOG_FILE" 2>&1; then
+      success "Repository cloned successfully"
+      return 0
+    fi
+    warning "Failed to clone from: $repo"
+    $SUDO rm -rf "$dest" 2>/dev/null || true
+  done
+
+  error "All git clone attempts failed for: $desc"
+  return 1
+}
+
+# ============================================================================
 # Sudo Setup
 # ============================================================================
 
@@ -210,11 +274,64 @@ main() {
 
   if ! command -v docker >/dev/null 2>&1; then
     log "Installing Docker..."
-    if curl -fsSL https://get.docker.com 2>>"$LOG_FILE" | $SUDO sh >>"$LOG_FILE" 2>&1; then
+
+    # Try multiple Docker installation sources
+    DOCKER_URLS=(
+      "https://get.docker.com"
+      "https://download.docker.com/linux/static/stable/x86_64/docker-latest.tgz"
+      "https://mirrors.aliyun.com/docker-ce/linux/static/stable/x86_64/docker-latest.tgz"
+    )
+
+    # Try get.docker.com script first (preferred method)
+    if download_with_retry "Docker install script" "${DOCKER_URLS[0]}" | $SUDO sh >>"$LOG_FILE" 2>&1; then
       success "Docker installed"
     else
-      error "Failed to install Docker"
-      exit 1
+      # Fallback to manual installation from binary
+      log "Trying fallback Docker installation methods..."
+      INSTALLED=false
+
+      for i in 1 2; do
+        TEMP_DIR=$(mktemp -d)
+        if download_file_with_retry "Docker binary" "$TEMP_DIR/docker.tgz" "${DOCKER_URLS[$i]}"; then
+          cd "$TEMP_DIR"
+          tar xzf docker.tgz
+          $SUDO cp docker/* /usr/bin/
+          cd -
+          rm -rf "$TEMP_DIR"
+
+          # Create systemd service
+          $SUDO mkdir -p /etc/systemd/system
+          $SUDO tee /etc/systemd/system/docker.service >/dev/null <<'DOCKERSERVICE'
+[Unit]
+Description=Docker Application Container Engine
+Documentation=https://docs.docker.com
+After=network-online.target docker.socket
+Wants=network-online.target
+Requires=docker.socket
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/dockerd -H fd://
+ExecReload=/bin/kill -s HUP $MAINPID
+TimeoutSec=0
+RestartSec=2
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+DOCKERSERVICE
+
+          $SUDO systemctl daemon-reload
+          INSTALLED=true
+          success "Docker installed from binary"
+          break
+        fi
+      done
+
+      if [ "$INSTALLED" = false ]; then
+        error "Failed to install Docker from all sources"
+        exit 1
+      fi
     fi
   else
     success "Docker already installed"
@@ -250,7 +367,29 @@ main() {
     success "Docker Compose (standalone) already installed"
   else
     log "Installing Docker Compose plugin..."
-    COMPOSE_VERSION=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest 2>>"$LOG_FILE" | grep -Po '"tag_name": "\K[^"]*' || echo "v2.24.0")
+
+    # Try to get latest version from multiple sources
+    COMPOSE_VERSION=""
+    API_URLS=(
+      "https://api.github.com/repos/docker/compose/releases/latest"
+      "https://gitee.com/api/v5/repos/docker/compose/releases/latest"
+      "v2.24.0"
+    )
+
+    for api_url in "${API_URLS[@]}"; do
+      if [[ "$api_url" == v* ]]; then
+        COMPOSE_VERSION="$api_url"
+        break
+      fi
+      COMPOSE_VERSION=$(curl -fsSL --connect-timeout 30 --max-time 30 "$api_url" 2>>"$LOG_FILE" | grep -Po '"tag_name": "\K[^"]*' || echo "")
+      if [ -n "$COMPOSE_VERSION" ]; then
+        break
+      fi
+    done
+
+    [ -z "$COMPOSE_VERSION" ] && COMPOSE_VERSION="v2.24.0"
+    log "Docker Compose version: $COMPOSE_VERSION"
+
     ARCH=$(uname -m)
     case "$ARCH" in
       x86_64) ARCH="x86_64" ;;
@@ -258,14 +397,20 @@ main() {
       armv7l) ARCH="armv7" ;;
     esac
 
-    COMPOSE_URL="https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${ARCH}"
+    # Multiple download sources
+    COMPOSE_URLS=(
+      "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${ARCH}"
+      "https://download.docker.com/linux/static/stable/${ARCH}/docker-compose-linux-${ARCH}"
+      "https://mirrors.aliyun.com/docker-toolbox/linux/compose/${COMPOSE_VERSION}/docker-compose-linux-${ARCH}"
+    )
+
     $SUDO mkdir -p /usr/local/lib/docker/cli-plugins
 
-    if $SUDO curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose "$COMPOSE_URL" >>"$LOG_FILE" 2>&1; then
+    if download_file_with_retry "Docker Compose" "/usr/local/lib/docker/cli-plugins/docker-compose" "${COMPOSE_URLS[@]}"; then
       $SUDO chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
       success "Docker Compose installed"
     else
-      error "Failed to install Docker Compose"
+      error "Failed to install Docker Compose from all sources"
       exit 1
     fi
   fi
@@ -303,8 +448,19 @@ main() {
 
     success "Repository updated (user data preserved)"
   else
-    run_cmd "Cloning repository" $SUDO git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
-    $SUDO chown -R "$(id -u):$(id -g)" "$INSTALL_DIR" 2>/dev/null || true
+    # Multiple git repository mirrors
+    GIT_REPOS=(
+      "https://github.com/eduard256/IoT2mqtt.git"
+      "https://gitee.com/eduard256/IoT2mqtt.git"
+      "https://gitlab.com/eduard256/IoT2mqtt.git"
+    )
+
+    if git_clone_with_retry "IoT2MQTT repository" "$BRANCH" "$INSTALL_DIR" "${GIT_REPOS[@]}"; then
+      $SUDO chown -R "$(id -u):$(id -g)" "$INSTALL_DIR" 2>/dev/null || true
+    else
+      error "Failed to clone repository from all sources"
+      exit 1
+    fi
   fi
 
   # Step 5: Configure

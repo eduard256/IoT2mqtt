@@ -9,20 +9,44 @@ FROM python:3.11-slim
 # - nodejs/npm: Runtime for Node.js services
 # - curl: Health checks and HTTP requests
 # - build-essential: Compilation tools for native Python/Node modules
-RUN apt-get update && apt-get install -y \
-    supervisor \
-    curl \
-    nodejs \
-    npm \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -e; \
+    RETRIES=3; \
+    for i in $(seq 1 $RETRIES); do \
+        echo "apt-get attempt $i/$RETRIES"; \
+        if apt-get update && apt-get install -y \
+            supervisor \
+            curl \
+            nodejs \
+            npm \
+            build-essential; then \
+            break; \
+        fi; \
+        if [ $i -eq $RETRIES ]; then \
+            echo "ERROR: apt-get failed after $RETRIES attempts"; \
+            exit 1; \
+        fi; \
+        sleep 5; \
+    done && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install Python dependencies
 # Copy requirements first to leverage Docker layer caching
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN set -e; \
+    RETRIES=3; \
+    for i in $(seq 1 $RETRIES); do \
+        echo "pip install attempt $i/$RETRIES"; \
+        if pip install --no-cache-dir -r requirements.txt; then \
+            break; \
+        fi; \
+        if [ $i -eq $RETRIES ]; then \
+            echo "ERROR: pip install failed after $RETRIES attempts"; \
+            exit 1; \
+        fi; \
+        sleep 5; \
+    done
 
 # Install Node.js service dependencies
 # Each service has its own package.json in its subdirectory
