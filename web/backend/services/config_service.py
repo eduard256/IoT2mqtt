@@ -237,13 +237,60 @@ class ConfigService:
     def get_connector_setup(self, connector_name: str) -> Optional[Dict[str, Any]]:
         """Get connector setup schema"""
         setup_file = self.connectors_path / connector_name / "setup.json"
-        
+
         if not setup_file.exists():
             return None
 
         with self.locked_file(setup_file, 'r') as f:
             return json.load(f)
-    
+
+    def get_healthcheck_for_sdk(self, connector_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get healthcheck configuration in Docker Python SDK format
+
+        Converts setup.json healthcheck config to Docker SDK format with:
+        - Capitalized keys (Test, Interval, Timeout, Retries, StartPeriod)
+        - Time values in nanoseconds instead of seconds
+
+        Args:
+            connector_name: Name of the connector
+
+        Returns:
+            Healthcheck dict for Docker SDK or None if no healthcheck defined
+        """
+        # Default healthcheck values
+        HEALTHCHECK_DEFAULTS = {
+            "interval": 30,
+            "timeout": 10,
+            "retries": 3,
+            "start_period": 10
+        }
+
+        # Get setup.json
+        setup = self.get_connector_setup(connector_name)
+        if not setup or "healthcheck" not in setup:
+            return None
+
+        healthcheck = setup["healthcheck"]
+
+        # Apply defaults for missing values
+        interval = healthcheck.get("interval", HEALTHCHECK_DEFAULTS["interval"])
+        timeout = healthcheck.get("timeout", HEALTHCHECK_DEFAULTS["timeout"])
+        retries = healthcheck.get("retries", HEALTHCHECK_DEFAULTS["retries"])
+        start_period = healthcheck.get("start_period", HEALTHCHECK_DEFAULTS["start_period"])
+
+        # Convert to Docker SDK format
+        # SDK uses nanoseconds (seconds * 10^9) and capitalized keys
+        sdk_healthcheck = {
+            "Test": ["CMD", "python3", "/app/shared/healthcheck.py"],
+            "Interval": interval * 1000000000,      # seconds to nanoseconds
+            "Timeout": timeout * 1000000000,        # seconds to nanoseconds
+            "Retries": retries,                     # integer
+            "StartPeriod": start_period * 1000000000  # seconds to nanoseconds
+        }
+
+        return sdk_healthcheck
+
     def list_instances(self, connector_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """List instances for a connector or all connectors"""
         instances = []

@@ -13,6 +13,19 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# Import ConfigService for healthcheck configuration
+# Use late import to avoid circular dependency
+_config_service_instance = None
+
+
+def _get_config_service():
+    """Lazy initialization of ConfigService to avoid circular imports"""
+    global _config_service_instance
+    if _config_service_instance is None:
+        from .config_service import ConfigService
+        _config_service_instance = ConfigService()
+    return _config_service_instance
+
 
 class DockerService:
     """Service for managing Docker containers"""
@@ -356,7 +369,18 @@ class DockerService:
                 "bind": "/var/run/docker.sock",
                 "mode": "rw"
             }
-        
+
+        # Add healthcheck from setup.json if defined
+        try:
+            config_service = _get_config_service()
+            healthcheck_config = config_service.get_healthcheck_for_sdk(connector_name)
+            if healthcheck_config:
+                container_config["healthcheck"] = healthcheck_config
+                logger.info(f"Added healthcheck configuration for {container_name}")
+        except Exception as e:
+            logger.warning(f"Failed to add healthcheck for {container_name}: {e}")
+            # Continue without healthcheck - not critical
+
         try:
             # Create and start container
             container = self.client.containers.run(**container_config)
