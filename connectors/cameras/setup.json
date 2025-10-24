@@ -136,7 +136,9 @@
           "tool": "validate_stream",
           "input": {
             "stream_url": "{{ form.stream_scan.selected_stream.full_url }}",
-            "stream_type": "{{ form.stream_scan.selected_stream.type }}"
+            "stream_type": "{{ form.stream_scan.selected_stream.type }}",
+            "username": "{{ form.camera_form.username }}",
+            "password": "{{ form.camera_form.password }}"
           },
           "auto_advance": true
         },

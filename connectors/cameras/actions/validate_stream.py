@@ -288,6 +288,8 @@ def main() -> None:
 
     stream_url = payload.get("stream_url") or payload.get("full_url")
     stream_type = payload.get("stream_type", "FFMPEG")
+    username = payload.get("username", "")
+    password = payload.get("password", "")
 
     if not stream_url:
         print(json.dumps({
@@ -306,6 +308,21 @@ def main() -> None:
         protocol = parsed.scheme.lower()
     except:
         protocol = "unknown"
+
+    # For ONVIF streams: inject credentials if URL doesn't have them
+    if stream_type == "ONVIF" and protocol == "rtsp":
+        # Check if URL already has credentials
+        if not parsed.username and not parsed.password:
+            # URL has no credentials, but we have username/password - inject them
+            if username and password:
+                # Rebuild URL with credentials
+                if parsed.port:
+                    netloc_with_auth = f"{username}:{password}@{parsed.hostname}:{parsed.port}"
+                else:
+                    netloc_with_auth = f"{username}:{password}@{parsed.hostname}"
+
+                parsed = parsed._replace(netloc=netloc_with_auth)
+                stream_url = parsed.geturl()
 
     # Validate based on protocol
     if protocol == "rtsp" or stream_type == "FFMPEG":
