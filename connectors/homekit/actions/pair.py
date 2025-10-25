@@ -13,6 +13,11 @@ from typing import Dict, Any
 
 try:
     from aiohomekit import Controller
+    from aiohomekit.controller.ip.discovery import IpDiscovery
+    from aiohomekit.zeroconf import HomeKitService
+    from aiohomekit.model.categories import Categories
+    from aiohomekit.model.feature_flags import FeatureFlags
+    from aiohomekit.model.status_flags import StatusFlags
     from aiohomekit.exceptions import (
         AccessoryNotFoundError,
         AuthenticationError,
@@ -118,27 +123,29 @@ async def pair_device(ip: str, port: int, pin_code: str, device_id: str = None) 
         # Normalize PIN format (remove dashes)
         pin_clean = pin_code.replace('-', '')
 
-        # Initialize and start controller
+        # Initialize controller
         controller = Controller()
-        await controller.async_start()
 
-        # Find device at specific IP
-        # Create a synthetic device ID from IP address for discovery
-        synthetic_device_id = f"{ip}:{port}"
+        # Create a minimal HomeKitService descriptor for manual IP entry
+        # This bypasses the need for zeroconf discovery
+        service = HomeKitService(
+            name=f"HomeKit Device at {ip}",
+            id=device_id or f"manual-{ip.replace('.', '-')}",
+            model="Unknown",
+            feature_flags=FeatureFlags(),
+            status_flags=StatusFlags(),
+            config_num=1,
+            state_num=1,
+            category=Categories.OTHER,
+            protocol_version="1.1",
+            type="_hap._tcp.local.",
+            address=ip,
+            addresses=[ip],
+            port=port
+        )
 
-        # Try to discover the device
-        discovery = await controller.async_find(synthetic_device_id, timeout=10)
-
-        if not discovery:
-            return {
-                "ok": False,
-                "error": {
-                    "code": "device_not_found",
-                    "message": f"HomeKit device not found at {ip}:{port}. "
-                              f"Please check IP address and ensure device is powered on.",
-                    "retriable": True
-                }
-            }
+        # Create IpDiscovery object directly without using async_find
+        discovery = IpDiscovery(controller, service)
 
         # Start pairing process
         # This performs SRP-6a key exchange (part 1)
@@ -286,14 +293,6 @@ async def pair_device(ip: str, port: int, pin_code: str, device_id: str = None) 
                 "retriable": True
             }
         }
-
-    finally:
-        # Clean up controller resources
-        if controller:
-            try:
-                await controller.async_stop()
-            except Exception:
-                pass  # Ignore cleanup errors
 
 
 def main():
