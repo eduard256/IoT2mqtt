@@ -19,7 +19,7 @@
     },
     "pair": {
       "entry": "actions/pair.py",
-      "timeout": 30,
+      "timeout": 60,
       "network": "local"
     },
     "validate": {
