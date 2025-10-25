@@ -101,6 +101,7 @@ async def pair_device(ip: str, port: int, pin_code: str, device_id: str = None) 
     Returns:
         Pairing result with credentials
     """
+    controller = None
     try:
         # Validate PIN code
         is_valid, error_msg = validate_pin_code(pin_code)
@@ -117,22 +118,41 @@ async def pair_device(ip: str, port: int, pin_code: str, device_id: str = None) 
         # Normalize PIN format (remove dashes)
         pin_clean = pin_code.replace('-', '')
 
-        # Initialize controller
+        # Initialize and start controller
         controller = Controller()
+        await controller.async_start()
 
-        # Discover device at specific IP
-        # aiohomekit will use IP transport by default
-        device_address = f"{ip}:{port}"
+        # Find device at specific IP
+        # Create a synthetic device ID from IP address for discovery
+        synthetic_device_id = f"{ip}:{port}"
 
-        # Start pairing
+        # Try to discover the device
+        discovery = await controller.async_find(synthetic_device_id, timeout=10)
+
+        if not discovery:
+            return {
+                "ok": False,
+                "error": {
+                    "code": "device_not_found",
+                    "message": f"HomeKit device not found at {ip}:{port}. "
+                              f"Please check IP address and ensure device is powered on.",
+                    "retriable": True
+                }
+            }
+
+        # Start pairing process
+        # This performs SRP-6a key exchange (part 1)
+        finish_pairing = await discovery.async_start_pairing()
+
+        # Complete pairing with PIN code
         # This performs:
-        # 1. SRP-6a key exchange
+        # 1. SRP-6a key exchange (part 2)
         # 2. Ed25519 keypair generation
         # 3. Authentication
         # 4. Exchange of long-term keys
-        pairing_result = await controller.pair(device_address, pin_clean)
+        pairing = await finish_pairing(pin_clean)
 
-        if not pairing_result:
+        if not pairing:
             return {
                 "ok": False,
                 "error": {
@@ -142,20 +162,26 @@ async def pair_device(ip: str, port: int, pin_code: str, device_id: str = None) 
                 }
             }
 
-        # Extract pairing data
-        # aiohomekit stores pairing in format:
-        # {
-        #   "AccessoryPairingID": "XX:XX:XX:XX:XX:XX",
-        #   "AccessoryLTPK": "base64_public_key",
-        #   "iOSDevicePairingID": "YY:YY:YY:YY:YY:YY",
-        #   "iOSDeviceLTPK": "base64_public_key",
-        #   "iOSDeviceLTSK": "base64_secret_key",
-        #   "AccessoryIP": "192.168.1.100",
-        #   "AccessoryPort": 55443,
-        #   "Connection": "IP"
-        # }
+        # Get pairing data from the pairing object
+        # In aiohomekit, pairing data is stored in controller.pairings
+        pairing_data = None
+        for alias, p in controller.pairings.items():
+            if p == pairing:
+                pairing_data = p.pairing_data
+                break
 
-        pairing_id = pairing_result.get("AccessoryPairingID")
+        if not pairing_data:
+            return {
+                "ok": False,
+                "error": {
+                    "code": "missing_pairing_data",
+                    "message": "Pairing succeeded but no pairing data available",
+                    "retriable": False
+                }
+            }
+
+        # Extract pairing ID
+        pairing_id = pairing_data.get("AccessoryPairingID")
         if not pairing_id:
             return {
                 "ok": False,
@@ -172,10 +198,10 @@ async def pair_device(ip: str, port: int, pin_code: str, device_id: str = None) 
             "device_id": device_id or pairing_id.replace(':', '_'),
             "pairing_data": {
                 "AccessoryPairingID": pairing_id,
-                "AccessoryLTPK": pairing_result.get("AccessoryLTPK"),
-                "iOSDevicePairingID": pairing_result.get("iOSDevicePairingID"),
-                "iOSDeviceLTPK": pairing_result.get("iOSDeviceLTPK"),
-                "iOSDeviceLTSK": pairing_result.get("iOSDeviceLTSK"),  # SECRET!
+                "AccessoryLTPK": pairing_data.get("AccessoryLTPK"),
+                "iOSDevicePairingID": pairing_data.get("iOSDevicePairingID"),
+                "iOSDeviceLTPK": pairing_data.get("iOSDeviceLTPK"),
+                "iOSDeviceLTSK": pairing_data.get("iOSDeviceLTSK"),  # SECRET!
                 "AccessoryIP": ip,
                 "AccessoryPort": port,
                 "Connection": "IP"
@@ -260,6 +286,14 @@ async def pair_device(ip: str, port: int, pin_code: str, device_id: str = None) 
                 "retriable": True
             }
         }
+
+    finally:
+        # Clean up controller resources
+        if controller:
+            try:
+                await controller.async_stop()
+            except Exception:
+                pass  # Ignore cleanup errors
 
 
 def main():
