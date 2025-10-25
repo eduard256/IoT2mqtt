@@ -1,30 +1,40 @@
+# HomeKit Connector Dockerfile
+# Multi-process architecture: BaseConnector (MQTT) + AsyncIO HAP Service
 FROM python:3.11-slim
 
-WORKDIR /app
-
-# Install system dependencies for networking and zeroconf
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    libavahi-compat-libdnssd-dev \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libffi-dev \
+    libssl-dev \
     avahi-utils \
+    libavahi-compat-libdnssd-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy connector files
-COPY connector.py homekit_manager.py main.py ./
+# Copy connector code
+COPY . .
 
-# Copy shared libraries from parent
-# Note: shared/ directory is mounted at runtime by docker-compose
+# Copy shared libraries
+COPY ../../shared /app/shared
 
-# Make main.py executable
-RUN chmod +x main.py
+# Expose HAP service port (internal communication)
+EXPOSE 8765
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV MODE=production
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 --start-period=10s \
-    CMD python3 /app/shared/healthcheck.py
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8765/health', timeout=5)" || exit 1
 
-# Run connector
-CMD ["python3", "main.py"]
+# Entry point
+CMD ["python", "main.py"]

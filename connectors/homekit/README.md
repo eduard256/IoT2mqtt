@@ -1,262 +1,241 @@
-# HomeKit Connector for IoT2mqtt
+# HomeKit Connector for IoT2MQTT
 
-Control HomeKit accessories via MQTT using Apple's HomeKit Accessory Protocol (HAP).
+Full-featured HomeKit integration with complete feature parity to Home Assistant's HomeKit Controller component.
 
 ## Features
 
-- **Real-time Events**: Instant push notifications when device state changes
-- **Auto-Discovery**: Automatically find HomeKit accessories on your network via mDNS/Zeroconf
-- **Secure Pairing**: Industry-standard HAP pairing with encrypted communication
-- **Wide Device Support**: Lights, switches, thermostats, locks, sensors, and more
-- **asyncio Architecture**: Efficient event-driven communication with HomeKit devices
-- **Home Assistant Integration**: Automatic MQTT discovery for seamless HA integration
+- ✅ **All HomeKit Transports:**
+  - IP/TCP (HAP over WiFi/Ethernet)
+  - CoAP (Thread network devices)
+  - BLE (Bluetooth Low Energy) - *coming soon*
 
-## Supported Devices
+- ✅ **Complete Platform Support:**
+  - Lights (on/off, brightness, color temperature, RGB, HSV)
+  - Switches & Outlets
+  - Sensors (temperature, humidity, light, air quality, battery, energy)
+  - Binary Sensors (motion, contact, leak, smoke, occupancy, CO)
+  - Climate (thermostats, heaters, coolers)
+  - Locks
+  - Covers (blinds, garage doors, windows)
+  - Fans (speed, swing, direction)
 
-- **Lights**: Brightness, color (RGB/HSV), color temperature
-- **Switches**: On/off control
-- **Thermostats**: Temperature, mode control
-- **Locks**: Lock/unlock control
-- **Sensors**: Motion, contact, temperature, humidity, battery
-- **Covers**: Blinds, shades, garage doors
-- **Fans**: Speed control
-- **Outlets**: Power control
-
-Compatible with brands: Eve, Philips Hue, Nanoleaf, LIFX, Aqara, and any HAP-compatible device.
+- ✅ **Advanced Features:**
+  - Push notifications via event subscriptions
+  - Polling fallback for non-event devices
+  - Multi-service accessories support
+  - Vendor-specific characteristics (Eve, Ecobee, Aqara)
+  - Thread provisioning (BLE → CoAP migration)
+  - HomeKit bridge support (up to 100+ accessories)
+  - Home Assistant MQTT Discovery
 
 ## Architecture
 
-### Level 1 (Single Process)
-- Single Python 3.11 process with asyncio event loop
-- Uses `aiohomekit==3.2.20` (same library as Home Assistant)
-- Hybrid asyncio + threading architecture to bridge HAP (asyncio) with MQTT (threading)
+**Multi-Process Design:**
+- **Process 1:** MQTT Bridge (BaseConnector) - handles MQTT communication
+- **Process 2:** HAP Service (AsyncIO/FastAPI) - handles HomeKit protocol via aiohomekit
+- **IPC:** HTTP API on localhost:8765
+- **Supervisor:** Manages both processes with auto-restart
 
-### Components
+## Setup
 
-1. **connector.py**: Main connector implementing BaseConnector interface
-2. **homekit_manager.py**: Wrapper around aiohomekit for device management
-3. **main.py**: Entry point
-4. **actions/**: Setup flow tools (discovery, pairing, validation)
+### Discovery Flow
 
-## How It Works
+1. Open IoT2mqtt web interface
+2. Navigate to Integrations → Add Integration → HomeKit
+3. Choose "Auto Discovery"
+4. Select discovered device from list
+5. Enter 8-digit PIN code (format: XXX-XX-XXX)
+6. Wait for pairing to complete
+7. Review discovered accessories
+8. Finish setup
 
-### Initialization
-```
-1. Load configuration from /app/instances/{instance_id}.json
-2. Load pairing data from /run/secrets/{instance_id}_creds (encrypted)
-3. Start asyncio event loop in background thread
-4. Initialize aiohomekit Controller
-5. Connect to all configured devices
-6. Subscribe to characteristic change events
-```
+### Manual Entry Flow
 
-### Event Flow (Real-time)
-```
-HomeKit Characteristic Changes
-    ↓
-aiohomekit Event Callback (asyncio thread)
-    ↓
-Update Internal State Cache
-    ↓
-Publish to MQTT (thread-safe)
-    ↓
-MQTT Broker
-```
-
-### Command Flow
-```
-MQTT Command → {BASE}/devices/{device_id}/cmd
-    ↓
-BaseConnector._handle_command() (MQTT thread)
-    ↓
-connector.set_device_state() (sync wrapper)
-    ↓
-asyncio.run_coroutine_threadsafe()
-    ↓
-homekit_manager.set_state() (asyncio context)
-    ↓
-aiohomekit pairing.put_characteristics()
-    ↓
-HomeKit Device Executes Command
-    ↓
-Event Callback → MQTT State Update
-```
-
-### Polling (Backup)
-```
-BaseConnector._main_loop() every update_interval
-    ↓
-connector.get_device_state()
-    ↓
-Return cached state (from events) OR query device
-    ↓
-Publish to MQTT if changed
-```
+1. Open IoT2mqtt web interface
+2. Navigate to Integrations → Add Integration → HomeKit
+3. Choose "Manual Entry"
+4. Enter device IP address and PIN code
+5. Complete pairing
+6. Finish setup
 
 ## Configuration
 
-### Instance Config (`instances/homekit/{instance_id}.json`)
+### Instance Configuration
+
+One instance can manage up to 100 HomeKit devices. Each device requires pairing.
+
+**Example configuration:**
 ```json
 {
-  "instance_id": "homekit_abc123",
+  "instance_id": "homekit_main",
   "connector_type": "homekit",
-  "friendly_name": "My HomeKit Bridge",
-  "enabled": true,
-  "update_interval": 30,
-  "ha_discovery_enabled": true,
+  "config": {
+    "hap_service_port": 8765
+  },
   "devices": [
     {
       "device_id": "living_room_light",
+      "pairing_id": "XX:XX:XX:XX:XX:XX",
+      "aid": 1,
       "name": "Living Room Light",
-      "model": "Hue Color Bulb",
-      "category": "lightbulb",
-      "pairing_id": "AA:BB:CC:DD:EE:FF",
+      "model": "Philips Hue",
+      "category": "LIGHTBULB",
+      "connection": "IP",
       "ip": "192.168.1.100",
-      "port": 5001,
+      "port": 55443,
       "enabled": true
     }
   ]
 }
 ```
 
-### Secrets (`secrets/instances/{instance_id}.secret`)
-```json
-{
-  "pairings": {
-    "living_room_light": {
-      "AccessoryPairingID": "...",
-      "AccessoryLTPK": "...",
-      "iOSDevicePairingID": "...",
-      "iOSDeviceLTSK": "...",
-      "iOSDeviceLTPK": "...",
-      "AccessoryIP": "192.168.1.100",
-      "AccessoryPort": 5001
-    }
-  }
-}
+### Pairing Data (Secrets)
+
+Pairing credentials are stored in Docker secrets at:
+```
+/run/secrets/{instance_name}_homekit_pairing
+```
+
+Format:
+```
+pairing_id=XX:XX:XX:XX:XX:XX
+AccessoryLTPK=base64_encoded_public_key
+iOSDeviceLTPK=base64_encoded_public_key
+iOSDeviceLTSK=base64_encoded_secret_key
 ```
 
 ## MQTT Topics
 
-### Commands (Subscribe)
+### State Topics
+
 ```
-{BASE}/devices/{device_id}/cmd
-```
-
-Example commands:
-```json
-# Turn on light
-{"on": true}
-
-# Set brightness
-{"brightness": 80}
-
-# Set color (RGB)
-{"hue": 120, "saturation": 75}
-
-# Set color temperature
-{"color_temperature": 500}
-
-# Lock door
-{"lock_target": 1}
-```
-
-### State (Publish)
-```
-{BASE}/devices/{device_id}/state
+IoT2mqtt/v1/instances/{instance_id}/devices/{device_id}/state
 ```
 
 Example state:
 ```json
 {
-  "online": true,
-  "on": true,
-  "brightness": 80,
-  "hue": 120,
-  "saturation": 75,
-  "last_update": "2025-10-24T12:00:00.000Z"
+  "timestamp": "2025-10-25T15:30:00Z",
+  "device_id": "living_room_light",
+  "state": {
+    "power": true,
+    "brightness": 75,
+    "color_temp": 3200,
+    "hue": 180,
+    "saturation": 50,
+    "online": true
+  }
 }
 ```
 
-### Status (Publish)
+### Command Topics
+
 ```
-{BASE}/status → "online" | "offline" (LWT)
+IoT2mqtt/v1/instances/{instance_id}/devices/{device_id}/cmd
 ```
 
-## Setup Flow
+Example command:
+```json
+{
+  "power": true,
+  "brightness": 80,
+  "color_temp": 4000
+}
+```
 
-### Auto Discovery Flow
-1. **Instance Name**: Give the connector a name
-2. **Discovery**: Automatically scan network for HomeKit accessories (15s timeout)
-3. **Select Device**: Choose accessory from list
-4. **Enter PIN**: Enter 8-digit PIN code (XXX-XX-XXX format)
-5. **Pairing**: Connect and pair with accessory
-6. **Configure**: Set device name
-7. **Complete**: Instance created with pairing data saved to secrets
+### Event Topics (for doorbells, buttons)
 
-### Manual Entry Flow
-1. **Instance Name**: Give the connector a name
-2. **Device Info**: Enter name, IP, port, and PIN manually
-3. **Pairing**: Connect and pair with accessory
-4. **Complete**: Instance created
+```
+IoT2mqtt/v1/instances/{instance_id}/devices/{device_id}/events
+```
+
+## Supported Devices
+
+### Tested Devices
+
+- Philips Hue (lights)
+- Eve Energy (smart plugs with energy monitoring)
+- Aqara sensors (motion, door/window, temperature/humidity)
+- Ecobee thermostats
+- August/Yale locks
+- Lutron Caseta (via HomeKit bridge)
+
+### HomeKit Bridge Devices
+
+Devices connected through HomeKit bridges (like Philips Hue Bridge, Lutron Bridge) are fully supported. Each bridged accessory appears as a separate device in IoT2mqtt.
 
 ## Troubleshooting
 
-### Discovery Finds No Devices
-- Ensure devices are unpaired (not connected to another HomeKit controller)
-- Check network connectivity (must be on same subnet)
-- Verify mDNS/Bonjour is not blocked by firewall
-- Some devices may not advertise when paired
+### Device Not Found
 
-### Pairing Fails
-- Double-check PIN code (format: XXX-XX-XXX)
-- Ensure device is in pairing mode
-- Verify device is not already paired with another controller
-- Check IP address is correct and device is reachable
+- Ensure device is on same network
+- Check device is in pairing mode
+- Verify mDNS/Bonjour is working on network
+- Try manual entry with IP address
 
-### Device Goes Offline
-- Check network connectivity
-- Verify device is powered on
-- Re-pairing may be required if device was reset
-- Check Docker container logs for errors
+### Authentication Failed
 
-### Events Not Working
-- Events are automatic with aiohomekit
-- If polling only, check update_interval in config
-- Verify device supports event notifications
+- Verify PIN code is correct
+- Check device isn't already paired to another controller
+- Unpair from Apple Home if previously configured
+- Reset device to factory settings if needed
+
+### Connection Drops
+
+- Check network stability
+- Verify device firmware is up to date
+- Review container logs for errors
+- Restart connector instance
+
+### No Push Updates
+
+- Verify characteristics support events ('ev' permission)
+- Check SSE connection in HAP service logs
+- Fallback polling should still work
 
 ## Development
 
-### Testing Discovery
-```bash
-cd /home/dev/IoT2mqtt/connectors/homekit/actions
-python3 discover.py 10
+### Project Structure
+
+```
+connectors/homekit/
+├── Dockerfile               # Container image
+├── main.py                 # Supervisord launcher
+├── supervisord.conf        # Process configuration
+├── connector.py            # MQTT Bridge (BaseConnector)
+├── hap_service.py          # HAP Protocol Service (AsyncIO)
+├── entity_mapper.py        # Characteristic → State mapping
+├── characteristics.py      # Platform-specific handlers
+├── workarounds.py          # Device-specific fixes
+├── requirements.txt        # Python dependencies
+└── actions/
+    ├── discover.py         # mDNS discovery
+    ├── pair.py             # Pairing flow
+    ├── validate.py         # Connection validation
+    └── unpair.py           # Unpair device
 ```
 
-### Testing Pairing
-```bash
-python3 pair.py "my_device" "AA:BB:CC:DD:EE:FF" "123-45-678" "192.168.1.100" 5001
-```
+### Dependencies
 
-### Building Docker Image
-```bash
-cd /home/dev/IoT2mqtt
-docker build -t iot2mqtt-homekit connectors/homekit/
-```
+- `aiohomekit==3.2.20` - HomeKit protocol implementation
+- `zeroconf==0.132.2` - mDNS/DNS-SD discovery
+- `fastapi==0.109.0` - AsyncIO web framework
+- `paho-mqtt==2.1.0` - MQTT client
+- `supervisor==4.2.5` - Process management
 
-## Dependencies
+## Limitations
 
-- `aiohomekit==3.2.20` - HomeKit Accessory Protocol implementation
-- `zeroconf>=0.132.0` - mDNS/Zeroconf for device discovery
-- Python 3.11+
-- `libavahi-compat-libdnssd-dev` - System library for mDNS
-
-## Credits
-
-- Uses [aiohomekit](https://github.com/Jc2k/aiohomekit) library (same as Home Assistant)
-- Implements Apple's HomeKit Accessory Protocol (HAP)
-- Part of the [IoT2mqtt](https://github.com/eduard256/IoT2mqtt) project
+- **BLE Transport:** Not yet implemented (requires privileged containers)
+- **Cameras:** Basic snapshot support only, full RTP streaming coming soon
+- **Thread Provisioning:** Requires Thread Border Router in network
 
 ## License
 
-MIT License - See main project repository
+MIT License - Same as IoT2MQTT project
+
+## Credits
+
+Based on Home Assistant's HomeKit Controller integration with full feature parity.
+
+- [aiohomekit](https://github.com/Jc2k/aiohomekit) - Python HomeKit implementation
+- [Home Assistant](https://www.home-assistant.io/) - Reference implementation

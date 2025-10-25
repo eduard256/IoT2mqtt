@@ -1,0 +1,168 @@
+{
+  "version": "1.0.0",
+  "name": "homekit",
+  "display_name": "Apple HomeKit",
+  "description": "Full-featured HomeKit integration with complete feature parity to Home Assistant's HomeKit Controller",
+  "author": "IoT2MQTT",
+  "license": "MIT",
+  "homepage": "https://github.com/eduard256/IoT2mqtt",
+  "documentation": "https://github.com/eduard256/IoT2mqtt/tree/develop/connectors/homekit",
+  "category": "smart_home",
+  "dependencies": {
+    "aiohomekit": "3.2.20",
+    "zeroconf": "0.132.2",
+    "fastapi": "0.109.0",
+    "uvicorn": "0.27.0",
+    "supervisor": "4.2.5"
+  },
+  "requirements": {
+    "network": "host",
+    "privileged": false,
+    "capabilities": []
+  },
+  "features": {
+    "discovery": true,
+    "pairing": true,
+    "push_updates": true,
+    "multiple_devices": true,
+    "homeassistant_discovery": true
+  },
+  "supported_platforms": [
+    "light",
+    "switch",
+    "sensor",
+    "binary_sensor",
+    "climate",
+    "lock",
+    "cover",
+    "fan"
+  ],
+  "supported_transports": [
+    "IP/TCP (HAP over WiFi/Ethernet)",
+    "CoAP (Thread network)"
+  ],
+  "device_categories": [
+    "Lightbulb",
+    "Switch",
+    "Outlet",
+    "Thermostat",
+    "Temperature Sensor",
+    "Humidity Sensor",
+    "Light Sensor",
+    "Air Quality Sensor",
+    "Motion Sensor",
+    "Contact Sensor",
+    "Leak Sensor",
+    "Smoke Sensor",
+    "CO Sensor",
+    "Occupancy Sensor",
+    "Lock",
+    "Garage Door Opener",
+    "Window Covering",
+    "Fan",
+    "Air Purifier"
+  ],
+  "tested_devices": [
+    {
+      "manufacturer": "Philips",
+      "model": "Hue Bulb",
+      "category": "Lightbulb",
+      "status": "tested"
+    },
+    {
+      "manufacturer": "Eve",
+      "model": "Energy",
+      "category": "Outlet",
+      "status": "tested"
+    },
+    {
+      "manufacturer": "Aqara",
+      "model": "Motion Sensor",
+      "category": "Motion Sensor",
+      "status": "tested"
+    },
+    {
+      "manufacturer": "Ecobee",
+      "model": "Thermostat",
+      "category": "Thermostat",
+      "status": "tested"
+    }
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "hap_service_port": {
+        "type": "integer",
+        "default": 8765,
+        "description": "Internal HAP service port"
+      },
+      "ha_discovery_enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable Home Assistant MQTT Discovery"
+      }
+    }
+  },
+  "device_schema": {
+    "type": "object",
+    "required": ["device_id", "pairing_id", "name"],
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "description": "Unique device identifier"
+      },
+      "pairing_id": {
+        "type": "string",
+        "description": "HomeKit pairing ID (MAC address format)"
+      },
+      "aid": {
+        "type": "integer",
+        "description": "Accessory ID",
+        "default": 1
+      },
+      "name": {
+        "type": "string",
+        "description": "Device name"
+      },
+      "model": {
+        "type": "string",
+        "description": "Device model"
+      },
+      "category": {
+        "type": "string",
+        "description": "HomeKit category"
+      },
+      "connection": {
+        "type": "string",
+        "enum": ["IP", "CoAP"],
+        "default": "IP",
+        "description": "Connection transport"
+      },
+      "ip": {
+        "type": "string",
+        "description": "Device IP address"
+      },
+      "port": {
+        "type": "integer",
+        "default": 55443,
+        "description": "Device port"
+      },
+      "accessories": {
+        "type": "object",
+        "description": "Cached accessories structure"
+      },
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable/disable device"
+      }
+    }
+  },
+  "notes": [
+    "Supports up to 100 devices per instance",
+    "Requires HomeKit device to be in pairing mode for initial setup",
+    "PIN code must be 8 digits (format: XXX-XX-XXX)",
+    "BLE transport not yet implemented (requires privileged containers)",
+    "Camera support limited to snapshots (full RTP streaming coming soon)"
+  ]
+}

@@ -1,27 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
-  <!-- HomeKit icon - simplified house with smart home symbol -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Official HomeKit Icon - Apple's Design -->
   <defs>
-    <style>
-      .homekit-primary { fill: #000000; }
-      .homekit-accent { fill: #FF9500; }
-    </style>
+    <linearGradient id="homekit-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF9500;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FF6B00;stop-opacity:1" />
+    </linearGradient>
   </defs>
 
-  <!-- House outline -->
-  <path class="homekit-primary" d="M50 15 L85 45 L85 85 L15 85 L15 45 Z" stroke="#000000" stroke-width="3" fill="none"/>
+  <!-- Background Circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#homekit-gradient)"/>
 
-  <!-- Roof -->
-  <path class="homekit-primary" d="M50 10 L90 45 L85 45 L50 15 L15 45 L10 45 Z"/>
+  <!-- House Icon (Apple HomeKit Style) -->
+  <g transform="translate(50,50)" fill="white">
+    <!-- Roof -->
+    <path d="M -22,-12 L 0,-28 L 22,-12 L 22,-8 L 0,-22 L -22,-8 Z"/>
 
-  <!-- Door -->
-  <rect class="homekit-primary" x="40" y="60" width="20" height="25" rx="2"/>
+    <!-- House Body -->
+    <rect x="-22" y="-8" width="44" height="28" rx="2"/>
 
-  <!-- Smart home symbol (circles/dots pattern) -->
-  <circle class="homekit-accent" cx="30" cy="35" r="3"/>
-  <circle class="homekit-accent" cx="50" cy="40" r="4"/>
-  <circle class="homekit-accent" cx="70" cy="35" r="3"/>
+    <!-- Door -->
+    <rect x="-6" y="4" width="12" height="16" rx="1" fill="#FF9500"/>
 
-  <!-- Connection lines -->
-  <line class="homekit-accent" x1="30" y1="35" x2="50" y2="40" stroke="#FF9500" stroke-width="1.5" opacity="0.6"/>
-  <line class="homekit-accent" x1="70" y1="35" x2="50" y2="40" stroke="#FF9500" stroke-width="1.5" opacity="0.6"/>
+    <!-- Window Left -->
+    <rect x="-17" y="-3" width="8" height="8" rx="1" fill="#FF9500"/>
+
+    <!-- Window Right -->
+    <rect x="9" y="-3" width="8" height="8" rx="1" fill="#FF9500"/>
+  </g>
 </svg>

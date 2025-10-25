@@ -1,2 +1,29 @@
+# HomeKit Connector Requirements
+
+# MQTT
+paho-mqtt==2.1.0
+
+# HomeKit Protocol (HAP)
 aiohomekit==3.2.20
-zeroconf>=0.132.0
+
+# Discovery
+zeroconf==0.132.2
+
+# AsyncIO Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+httpx==0.26.0
+sseclient-py==1.8.0
+
+# Utilities
+python-dotenv==1.0.0
+
+# Supervisor for multi-process management
+supervisor==4.2.5
+
+# CLI and formatting (for actions)
+rich==13.7.0
+InquirerPy==0.3.4
+
+# JSON handling
+orjson==3.9.10

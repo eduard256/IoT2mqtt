@@ -11,6 +11,8 @@ paho-mqtt==2.1.0
 micloud>=0.5
 python-miio>=0.5.12
 
-# HomeKit integration
+# HomeKit integration dependencies
 aiohomekit==3.2.20
-zeroconf>=0.132.0
+zeroconf==0.132.2
+cryptography>=41.0.0
+

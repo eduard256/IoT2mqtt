@@ -1,373 +1,300 @@
 {
-    "version": "1.0.0",
-    "display_name": "HomeKit",
-    "description": "Control HomeKit accessories via MQTT using Apple's HomeKit Accessory Protocol (HAP).",
-    "author": "IoT2MQTT",
-    "domain": "homekit",
-    "documentation": "https://github.com/eduard256/IoT2mqtt/wiki/homekit",
-    "iot_class": "local_push",
-    "integration_type": "device",
-    "supported_brands": ["Apple", "HomeKit", "Eve", "Philips Hue", "Nanoleaf", "LIFX", "Aqara"],
-    "capabilities": [
-        "lights",
-        "switches",
-        "thermostats",
-        "locks",
-        "sensors",
-        "motion_detection",
-        "contact_sensors",
-        "temperature_sensors",
-        "covers",
-        "fans",
-        "outlets"
-    ],
-    "branding": {
-        "icon": "/assets/brands/homekit.svg",
-        "color": "#000000",
-        "category": "home_automation"
+  "version": "1.0.0",
+  "display_name": "HomeKit",
+  "description": "Apple HomeKit integration - control lights, locks, sensors, thermostats and more",
+  "author": "IoT2MQTT",
+  "requirements": {
+    "network": "host"
+  },
+  "branding": {
+    "icon": "icon.svg",
+    "color": "#FF9500",
+    "category": "smart_home"
+  },
+  "tools": {
+    "discover": {
+      "entry": "actions/discover.py",
+      "timeout": 15,
+      "network": "local",
+      "description": "Discover HomeKit devices on local network via mDNS"
     },
-    "multi_device": {
-        "enabled": true,
-        "max_devices": 50,
-        "device_label": "HomeKit Accessory",
-        "add_button_label": "Add Another Accessory",
-        "loop_from_step": "select_flow",
-        "loop_to_step": "device_paired"
+    "pair": {
+      "entry": "actions/pair.py",
+      "timeout": 30,
+      "network": "local",
+      "description": "Pair with HomeKit device using PIN code"
     },
-    "requirements": {
-        "network": "host",
-        "python": "3.11",
-        "libraries": [
-            "aiohomekit==3.2.20",
-            "zeroconf"
-        ]
+    "validate": {
+      "entry": "actions/validate.py",
+      "timeout": 10,
+      "network": "local",
+      "description": "Validate pairing and retrieve accessories"
     },
-    "healthcheck": {
-        "type": "python",
-        "interval": 30,
-        "timeout": 3,
-        "retries": 3,
-        "start_period": 10
-    },
-    "tools": {
-        "discover_devices": {
-            "entry": "actions/discover.py",
-            "timeout": 15,
-            "network": "local",
-            "description": "Discover HomeKit accessories on the network"
-        },
-        "pair_device": {
-            "entry": "actions/pair.py",
-            "timeout": 30,
-            "network": "local",
-            "description": "Pair with a HomeKit accessory"
-        },
-        "validate_pairing": {
-            "entry": "actions/validate.py",
-            "timeout": 10,
-            "network": "local",
-            "description": "Validate existing pairing"
-        }
-    },
-    "flows": [
+    "unpair": {
+      "entry": "actions/unpair.py",
+      "timeout": 10,
+      "network": "local",
+      "description": "Unpair from HomeKit device"
+    }
+  },
+  "flows": [
+    {
+      "id": "auto_discovery",
+      "name": "Auto Discovery",
+      "description": "Automatically discover HomeKit devices on your network",
+      "default": true,
+      "steps": [
         {
-            "id": "auto_discovery",
-            "name": "Auto Discovery",
-            "description": "Automatically discover HomeKit accessories on your network.",
-            "default": true,
-            "steps": [
-                {
-                    "id": "instance_name",
-                    "type": "form",
-                    "title": "Instance Name",
-                    "description": "Give this HomeKit connector a name.",
-                    "schema": {
-                        "fields": [
-                            {
-                                "type": "text",
-                                "name": "friendly_name",
-                                "label": "Instance name",
-                                "placeholder": "My HomeKit Bridge",
-                                "required": true
-                            },
-                            {
-                                "type": "number",
-                                "name": "update_interval",
-                                "label": "Update interval (seconds)",
-                                "description": "How often to poll device state (events are real-time)",
-                                "default": 30,
-                                "min": 10,
-                                "max": 300,
-                                "advanced": true
-                            },
-                            {
-                                "type": "checkbox",
-                                "name": "ha_discovery_enabled",
-                                "label": "Enable Home Assistant Discovery",
-                                "description": "Automatically publish device information to Home Assistant via MQTT Discovery",
-                                "default": true,
-                                "advanced": true
-                            }
-                        ]
-                    }
-                },
-                {
-                    "id": "discover",
-                    "type": "tool",
-                    "title": "Discovering HomeKit Accessories",
-                    "description": "Scanning your network for unpaired HomeKit accessories...",
-                    "tool": "discover_devices",
-                    "input": {},
-                    "auto_advance": false
-                },
-                {
-                    "id": "select_device",
-                    "type": "select",
-                    "title": "Select Accessory",
-                    "description": "Choose a HomeKit accessory to pair with.",
-                    "source": "tool.discover.result.devices",
-                    "display": {
-                        "title": "{{ item.name }}",
-                        "subtitle": "{{ item.model }} - {{ item.ip }}:{{ item.port }}",
-                        "description": "Category: {{ item.category }}"
-                    },
-                    "value": "{{ item }}"
-                },
-                {
-                    "id": "pin_form",
-                    "type": "form",
-                    "title": "Enter PIN Code",
-                    "description": "Enter the 8-digit PIN code from your HomeKit accessory. It's usually in the format XXX-XX-XXX and can be found on the device, in its manual, or in its app.",
-                    "schema": {
-                        "fields": [
-                            {
-                                "type": "password",
-                                "name": "pin",
-                                "label": "PIN Code",
-                                "placeholder": "123-45-678",
-                                "required": true,
-                                "pattern": "^\\d{3}-\\d{2}-\\d{3}$",
-                                "validation_message": "PIN must be in format XXX-XX-XXX"
-                            }
-                        ]
-                    }
-                },
-                {
-                    "id": "pair_device",
-                    "type": "tool",
-                    "title": "Pairing Accessory",
-                    "description": "Connecting to {{ select.select_device.name }}...",
-                    "tool": "pair_device",
-                    "input": {
-                        "device_id": "{{ select.select_device.device_id }}",
-                        "pairing_id": "{{ select.select_device.pairing_id }}",
-                        "pin": "{{ form.pin_form.pin }}",
-                        "ip": "{{ select.select_device.ip }}",
-                        "port": "{{ select.select_device.port }}"
-                    },
-                    "auto_advance": true
-                },
-                {
-                    "id": "device_config",
-                    "type": "form",
-                    "title": "Accessory Configuration",
-                    "description": "Configure your HomeKit accessory.",
-                    "schema": {
-                        "fields": [
-                            {
-                                "type": "text",
-                                "name": "device_name",
-                                "label": "Accessory name",
-                                "placeholder": "Living Room Light",
-                                "default": "{{ select.select_device.name }}",
-                                "required": true
-                            }
-                        ]
-                    }
-                },
-                {
-                    "id": "device_paired",
-                    "type": "summary",
-                    "title": "Accessory Paired",
-                    "sections": [
-                        {
-                            "label": "Accessory Name",
-                            "value": "{{ form.device_config.device_name }}"
-                        },
-                        {
-                            "label": "Model",
-                            "value": "{{ select.select_device.model }}"
-                        },
-                        {
-                            "label": "IP Address",
-                            "value": "{{ select.select_device.ip }}:{{ select.select_device.port }}"
-                        }
-                    ]
-                },
-                {
-                    "id": "create_instance",
-                    "type": "instance",
-                    "instance": {
-                        "friendly_name": "{{ form.instance_name.friendly_name }}",
-                        "connector_type": "homekit",
-                        "update_interval": "{{ form.instance_name.update_interval }}",
-                        "ha_discovery_enabled": "{{ form.instance_name.ha_discovery_enabled }}",
-                        "config": {},
-                        "devices": [
-                            {
-                                "device_id": "{{ select.select_device.device_id }}",
-                                "name": "{{ form.device_config.device_name }}",
-                                "model": "{{ select.select_device.model }}",
-                                "category": "{{ select.select_device.category }}",
-                                "pairing_id": "{{ select.select_device.pairing_id }}",
-                                "ip": "{{ select.select_device.ip }}",
-                                "port": "{{ select.select_device.port }}",
-                                "enabled": true
-                            }
-                        ],
-                        "secrets": {
-                            "pairings": {
-                                "{{ select.select_device.device_id }}": "{{ tool.pair_device.result.pairing_data }}"
-                            }
-                        }
-                    }
-                }
-            ]
+          "id": "discover_devices",
+          "type": "tool",
+          "title": "Discovering HomeKit Devices",
+          "description": "Scanning your network for HomeKit devices...",
+          "tool": "discover",
+          "output_key": "discovered_devices",
+          "auto_advance": true
         },
         {
-            "id": "manual_entry",
-            "name": "Manual",
-            "description": "Manually specify accessory IP address and PIN code.",
-            "default": false,
-            "steps": [
-                {
-                    "id": "instance_name",
-                    "type": "form",
-                    "title": "Instance Name",
-                    "description": "Give this HomeKit connector a name.",
-                    "schema": {
-                        "fields": [
-                            {
-                                "type": "text",
-                                "name": "friendly_name",
-                                "label": "Instance name",
-                                "placeholder": "My HomeKit Bridge",
-                                "required": true
-                            },
-                            {
-                                "type": "number",
-                                "name": "update_interval",
-                                "label": "Update interval (seconds)",
-                                "default": 30,
-                                "min": 10,
-                                "max": 300,
-                                "advanced": true
-                            },
-                            {
-                                "type": "checkbox",
-                                "name": "ha_discovery_enabled",
-                                "label": "Enable Home Assistant Discovery",
-                                "default": true,
-                                "advanced": true
-                            }
-                        ]
-                    }
-                },
-                {
-                    "id": "device_info",
-                    "type": "form",
-                    "title": "Accessory Connection",
-                    "description": "Enter the connection details for your HomeKit accessory.",
-                    "schema": {
-                        "fields": [
-                            {
-                                "type": "text",
-                                "name": "device_name",
-                                "label": "Accessory name",
-                                "placeholder": "Living Room Light",
-                                "required": true
-                            },
-                            {
-                                "type": "text",
-                                "name": "ip",
-                                "label": "IP address",
-                                "placeholder": "192.168.1.100",
-                                "required": true
-                            },
-                            {
-                                "type": "number",
-                                "name": "port",
-                                "label": "Port",
-                                "default": 5001,
-                                "advanced": true
-                            },
-                            {
-                                "type": "password",
-                                "name": "pin",
-                                "label": "PIN Code",
-                                "placeholder": "123-45-678",
-                                "required": true,
-                                "pattern": "^\\d{3}-\\d{2}-\\d{3}$"
-                            }
-                        ]
-                    }
-                },
-                {
-                    "id": "manual_pair",
-                    "type": "tool",
-                    "title": "Pairing Accessory",
-                    "description": "Connecting to accessory...",
-                    "tool": "pair_device",
-                    "input": {
-                        "device_id": "{{ form.device_info.device_name | slugify }}",
-                        "pairing_id": "{{ form.device_info.ip | replace('.', '_') }}",
-                        "pin": "{{ form.device_info.pin }}",
-                        "ip": "{{ form.device_info.ip }}",
-                        "port": "{{ form.device_info.port }}"
-                    },
-                    "auto_advance": true
-                },
-                {
-                    "id": "manual_summary",
-                    "type": "summary",
-                    "title": "Review Configuration",
-                    "sections": [
-                        {
-                            "label": "Accessory Name",
-                            "value": "{{ form.device_info.device_name }}"
-                        },
-                        {
-                            "label": "IP Address",
-                            "value": "{{ form.device_info.ip }}:{{ form.device_info.port }}"
-                        }
-                    ]
-                },
-                {
-                    "id": "manual_create",
-                    "type": "instance",
-                    "instance": {
-                        "friendly_name": "{{ form.instance_name.friendly_name }}",
-                        "connector_type": "homekit",
-                        "update_interval": "{{ form.instance_name.update_interval }}",
-                        "ha_discovery_enabled": "{{ form.instance_name.ha_discovery_enabled }}",
-                        "config": {},
-                        "devices": [
-                            {
-                                "device_id": "{{ form.device_info.device_name | slugify }}",
-                                "name": "{{ form.device_info.device_name }}",
-                                "ip": "{{ form.device_info.ip }}",
-                                "port": "{{ form.device_info.port }}",
-                                "enabled": true
-                            }
-                        ],
-                        "secrets": {
-                            "pairings": {
-                                "{{ form.device_info.device_name | slugify }}": "{{ tool.manual_pair.result.pairing_data }}"
-                            }
-                        }
-                    }
-                }
+          "id": "select_device",
+          "type": "select",
+          "title": "Select HomeKit Device",
+          "description": "Choose a device to add to IoT2MQTT",
+          "data_source": "{{ tools.discovered_devices.result.devices }}",
+          "item_title": "{{ item.name }}",
+          "item_description": "{{ item.model }} - {{ item.ip }} ({{ item.category }})",
+          "item_value": "{{ item }}",
+          "selection_key": "selected_device"
+        },
+        {
+          "id": "enter_pin",
+          "type": "form",
+          "title": "Enter PIN Code",
+          "description": "Enter the 8-digit PIN code found on your HomeKit device",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "pin_code",
+                "label": "PIN Code",
+                "placeholder": "XXX-XX-XXX",
+                "required": true,
+                "pattern": "^\\d{3}-\\d{2}-\\d{3}$",
+                "description": "Format: XXX-XX-XXX (e.g., 123-45-678)"
+              }
             ]
+          }
+        },
+        {
+          "id": "pair_device",
+          "type": "tool",
+          "title": "Pairing Device",
+          "description": "Establishing secure connection with HomeKit device...",
+          "tool": "pair",
+          "input": {
+            "ip": "{{ selection.selected_device.ip }}",
+            "port": "{{ selection.selected_device.port }}",
+            "pin_code": "{{ form.enter_pin.pin_code }}",
+            "device_id": "{{ selection.selected_device.device_id }}"
+          },
+          "output_key": "pairing_result",
+          "auto_advance": true
+        },
+        {
+          "id": "validate_pairing",
+          "type": "tool",
+          "title": "Validating Connection",
+          "description": "Retrieving device information...",
+          "tool": "validate",
+          "input": {
+            "pairing_data": "{{ tools.pairing_result.result.pairing_data }}",
+            "ip": "{{ selection.selected_device.ip }}",
+            "port": "{{ selection.selected_device.port }}"
+          },
+          "output_key": "validation_result",
+          "auto_advance": true
+        },
+        {
+          "id": "summary",
+          "type": "summary",
+          "title": "Setup Summary",
+          "description": "Review the HomeKit device configuration",
+          "items": [
+            {
+              "label": "Device Name",
+              "value": "{{ selection.selected_device.name }}"
+            },
+            {
+              "label": "Model",
+              "value": "{{ selection.selected_device.model }}"
+            },
+            {
+              "label": "IP Address",
+              "value": "{{ selection.selected_device.ip }}"
+            },
+            {
+              "label": "Category",
+              "value": "{{ selection.selected_device.category }}"
+            },
+            {
+              "label": "Accessories Found",
+              "value": "{{ tools.validation_result.result.accessories_count }}"
+            }
+          ]
+        },
+        {
+          "id": "create_instance",
+          "type": "instance",
+          "instance": {
+            "connector_type": "homekit",
+            "friendly_name": "{{ selection.selected_device.name }}",
+            "config": {
+              "hap_service_port": 8765
+            },
+            "devices": [
+              {
+                "device_id": "{{ selection.selected_device.device_id }}",
+                "pairing_id": "{{ tools.pairing_result.result.pairing_id }}",
+                "aid": 1,
+                "name": "{{ selection.selected_device.name }}",
+                "model": "{{ selection.selected_device.model }}",
+                "category": "{{ selection.selected_device.category }}",
+                "connection": "{{ selection.selected_device.transport }}",
+                "ip": "{{ selection.selected_device.ip }}",
+                "port": "{{ selection.selected_device.port }}",
+                "accessories": "{{ tools.validation_result.result.accessories }}",
+                "enabled": true
+              }
+            ],
+            "secrets": ["pairing_data"]
+          }
         }
-    ]
+      ]
+    },
+    {
+      "id": "manual_entry",
+      "name": "Manual Entry",
+      "description": "Manually enter HomeKit device IP address and PIN code",
+      "steps": [
+        {
+          "id": "device_details",
+          "type": "form",
+          "title": "Device Connection Details",
+          "description": "Enter the IP address and PIN code of your HomeKit device",
+          "schema": {
+            "fields": [
+              {
+                "type": "text",
+                "name": "friendly_name",
+                "label": "Device Name",
+                "placeholder": "Living Room Light",
+                "required": true
+              },
+              {
+                "type": "text",
+                "name": "ip",
+                "label": "IP Address",
+                "placeholder": "192.168.1.100",
+                "required": true,
+                "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$"
+              },
+              {
+                "type": "number",
+                "name": "port",
+                "label": "Port",
+                "default": 55443,
+                "advanced": true
+              },
+              {
+                "type": "text",
+                "name": "pin_code",
+                "label": "PIN Code",
+                "placeholder": "XXX-XX-XXX",
+                "required": true,
+                "pattern": "^\\d{3}-\\d{2}-\\d{3}$",
+                "description": "8-digit PIN code (format: XXX-XX-XXX)"
+              }
+            ]
+          }
+        },
+        {
+          "id": "pair_manual",
+          "type": "tool",
+          "title": "Pairing Device",
+          "description": "Establishing secure connection...",
+          "tool": "pair",
+          "input": {
+            "ip": "{{ form.device_details.ip }}",
+            "port": "{{ form.device_details.port }}",
+            "pin_code": "{{ form.device_details.pin_code }}"
+          },
+          "output_key": "pairing_result",
+          "auto_advance": true
+        },
+        {
+          "id": "validate_manual",
+          "type": "tool",
+          "title": "Validating Connection",
+          "description": "Retrieving device information...",
+          "tool": "validate",
+          "input": {
+            "pairing_data": "{{ tools.pairing_result.result.pairing_data }}",
+            "ip": "{{ form.device_details.ip }}",
+            "port": "{{ form.device_details.port }}"
+          },
+          "output_key": "validation_result",
+          "auto_advance": true
+        },
+        {
+          "id": "summary_manual",
+          "type": "summary",
+          "title": "Setup Summary",
+          "description": "Review the configuration",
+          "items": [
+            {
+              "label": "Device Name",
+              "value": "{{ form.device_details.friendly_name }}"
+            },
+            {
+              "label": "IP Address",
+              "value": "{{ form.device_details.ip }}"
+            },
+            {
+              "label": "Model",
+              "value": "{{ tools.validation_result.result.model }}"
+            },
+            {
+              "label": "Accessories Found",
+              "value": "{{ tools.validation_result.result.accessories_count }}"
+            }
+          ]
+        },
+        {
+          "id": "create_instance_manual",
+          "type": "instance",
+          "instance": {
+            "connector_type": "homekit",
+            "friendly_name": "{{ form.device_details.friendly_name }}",
+            "config": {
+              "hap_service_port": 8765
+            },
+            "devices": [
+              {
+                "device_id": "{{ tools.pairing_result.result.device_id }}",
+                "pairing_id": "{{ tools.pairing_result.result.pairing_id }}",
+                "aid": 1,
+                "name": "{{ form.device_details.friendly_name }}",
+                "model": "{{ tools.validation_result.result.model }}",
+                "category": "{{ tools.validation_result.result.category }}",
+                "connection": "IP",
+                "ip": "{{ form.device_details.ip }}",
+                "port": "{{ form.device_details.port }}",
+                "accessories": "{{ tools.validation_result.result.accessories }}",
+                "enabled": true
+              }
+            ],
+            "secrets": ["pairing_data"]
+          }
+        }
+      ]
+    }
+  ]
 }
