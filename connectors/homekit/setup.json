@@ -15,26 +15,22 @@
     "discover": {
       "entry": "actions/discover.py",
       "timeout": 15,
-      "network": "local",
-      "description": "Discover HomeKit devices on local network via mDNS"
+      "network": "local"
     },
     "pair": {
       "entry": "actions/pair.py",
       "timeout": 30,
-      "network": "local",
-      "description": "Pair with HomeKit device using PIN code"
+      "network": "local"
     },
     "validate": {
       "entry": "actions/validate.py",
       "timeout": 10,
-      "network": "local",
-      "description": "Validate pairing and retrieve accessories"
+      "network": "local"
     },
     "unpair": {
       "entry": "actions/unpair.py",
       "timeout": 10,
-      "network": "local",
-      "description": "Unpair from HomeKit device"
+      "network": "local"
     }
   },
   "flows": [
