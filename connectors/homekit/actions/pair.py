@@ -149,7 +149,9 @@ async def pair_device(ip: str, port: int, pin_code: str, device_id: str = None) 
 
         # Start pairing process
         # This performs SRP-6a key exchange (part 1)
-        finish_pairing = await discovery.async_start_pairing()
+        # Use the service ID as the pairing alias
+        alias = service.id
+        finish_pairing = await discovery.async_start_pairing(alias)
 
         # Complete pairing with PIN code
         # This performs:
