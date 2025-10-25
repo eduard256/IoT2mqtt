@@ -24,8 +24,7 @@
   "ports": [
     "go2rtc_api",
     "go2rtc_rtsp",
-    "go2rtc_webrtc",
-    "go2rtc_homekit"
+    "go2rtc_webrtc"
   ],
   "healthcheck": {
     "type": "http",

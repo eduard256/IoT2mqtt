@@ -86,7 +86,6 @@ class Connector(BaseConnector):
         self.go2rtc_api_port = str(instance_ports.get('go2rtc_api') or os.getenv('GO2RTC_API_PORT', '1984'))
         self.go2rtc_rtsp_port = str(instance_ports.get('go2rtc_rtsp') or os.getenv('GO2RTC_RTSP_PORT', '8554'))
         self.go2rtc_webrtc_port = str(instance_ports.get('go2rtc_webrtc') or os.getenv('GO2RTC_WEBRTC_PORT', '8555'))
-        self.go2rtc_homekit_port = str(instance_ports.get('go2rtc_homekit') or os.getenv('GO2RTC_HOMEKIT_PORT', '8443'))
 
         self.go2rtc_api = f"http://localhost:{self.go2rtc_api_port}/api"
 
